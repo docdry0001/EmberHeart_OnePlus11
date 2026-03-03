@@ -374,7 +374,11 @@ runs:
             ../vendor/qcom/opensource/mm-drivers/msm_ext_display
             ../vendor/qcom/opensource/securemsm-kernel
             ../vendor/qcom/opensource/display-drivers/msm
-            ../vendor/qcom/opensource/audio-kernel
+            ../vendor/qcom/opensource/audio-kernel/asoc
+            ../vendor/qcom/opensource/audio-kernel/dsp
+            ../vendor/qcom/opensource/audio-kernel/ipc
+            ../vendor/qcom/opensource/audio-kernel/oplus
+            ../vendor/qcom/opensource/audio-kernel/soc
         )
 
         cd "$MSM"
