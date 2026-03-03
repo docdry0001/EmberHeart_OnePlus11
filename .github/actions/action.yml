@@ -639,7 +639,7 @@ runs:
           --enable CONFIG_CAN_ESD_USB2 \
           --enable CONFIG_CAN_GS_USB \
           --enable CONFIG_CAN_KVASER_USB \
-          --enable CONFIG_CAN_PEAK_USB \
+          --enable CONFIG_CAN_PEAK_USB
 
         # CAN - Networking
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
@@ -670,8 +670,7 @@ runs:
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_IP_NF_TARGET_TTL \
           --enable CONFIG_IP6_NF_TARGET_HL \
-          --enable CONFIG_IP6_NF_MATCH_HL \
-        EOF
+          --enable CONFIG_IP6_NF_MATCH_HL
 
         echo "TTL support added ✅"
         echo "::endgroup::"
@@ -685,7 +684,7 @@ runs:
 
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_IP_SET \
-          --set-val CONFIG_IP_SET_MAX 65534
+          --set-val CONFIG_IP_SET_MAX 65534 \
           --enable CONFIG_IP_SET_BITMAP_IP \
           --enable CONFIG_IP_SET_BITMAP_IPMAC \
           --enable CONFIG_IP_SET_BITMAP_PORT \
