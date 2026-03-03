@@ -660,6 +660,19 @@ runs:
         echo "Nethunter configs applied ✅"
         echo "::endgroup::"
 
+    - name: Add Other configs
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Adding other configs..."
+        cd "$CONFIG/kernel_platform/common"
+
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_LRU_GEN_ENABLED
+
+        echo "Other configs added ✅"
+        echo "::endgroup::"
+
     - name: Add TTL Target Support
       shell: bash
       run: |
