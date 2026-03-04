@@ -375,6 +375,7 @@ runs:
             ../vendor/qcom/opensource/securemsm-kernel
             ../vendor/qcom/opensource/display-drivers/msm
             ../vendor/qcom/opensource/audio-kernel/
+            ../vendor/qcom/opensource/camera-kernel/
         )
 
         cd "$MSM"
