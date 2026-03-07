@@ -355,6 +355,9 @@ runs:
         make -j$(nproc --all) ARCH=arm64 LLVM=1 O=$OUT CC="ccache clang" modules
         make -j$(nproc --all) ARCH=arm64 LLVM=1 O=$OUT INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
 
+        cd "$MSM"
+        make ARCH=arm64 LLVM=1 O=out oldconfig && make ARCH=arm64 LLVM=1 O=out prepare
+
         cd "$KERNEL_PLATFORM"
 
         # OPLUS ext modules list
@@ -399,6 +402,9 @@ runs:
             ../vendor/qcom/opensource/wlan/qcacld-3.0
         )
 
+        cd "$MSM"
+        make ARCH=arm64 LLVM=1 O=out oldconfig && make ARCH=arm64 LLVM=1 O=out prepare
+
         cd "$KERNEL_PLATFORM"
 
         for module in "${ext_qcom[@]}"; do
@@ -407,7 +413,6 @@ runs:
         done
 
         cd "$MSM"
-
         make ARCH=arm64 LLVM=1 O=out oldconfig && make ARCH=arm64 LLVM=1 O=out prepare
 
         cd "$KERNEL_PLATFORM"
