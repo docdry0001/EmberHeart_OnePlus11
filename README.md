@@ -78,3 +78,11 @@
 
 > [!NOTE]
 > If you have contributed and are not here please remind me!
+
+<a href="https://www.star-history.com/?repos=nullptr-t-oss%2FEmberHeart_OnePlus11&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=nullptr-t-oss/EmberHeart_OnePlus11&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=nullptr-t-oss/EmberHeart_OnePlus11&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=nullptr-t-oss/EmberHeart_OnePlus11&type=date&legend=top-left" />
+ </picture>
+</a>
