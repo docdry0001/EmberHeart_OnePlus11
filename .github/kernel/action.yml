@@ -901,7 +901,10 @@ runs:
         OUT=out
         INSTALL_MOD_PATH="$COMMON/out"
         mkdir -p "$OUT"
-        make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+       make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+      # Disable LSE atomics for older clang
+      ./scripts/config --file "$OUT/.config" --disable CONFIG_ARM64_LSE_ATOMICS
+      make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
         if [ "${{ inputs.optimize_level }}" = "O3" ]; then
           KCFLAGS_EXTRA="-O3"
