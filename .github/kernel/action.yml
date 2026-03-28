@@ -884,6 +884,9 @@ runs:
           LLVM_IAS=1
           ARCH=arm64
           SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
           LD=ld.lld
           HOSTLD=ld.lld
           AR=llvm-ar
