@@ -1,4 +1,4 @@
-name: Build OP11R Kernel (Safe Mode)
+name: Build OP11R Kernel Safe
 
 on:
   workflow_dispatch:
@@ -6,19 +6,22 @@ on:
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Download boot image
+      - name: Download OP11R boot image from Google Drive
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p tools/OP11R
           python3 -m pip install --user gdown
           python3 -m gdown 1ym34EoBpoz_BNzBqdFHdCDt8OTWSC5GH -O tools/OP11R/boot.zip
-          ls -lh tools/OP11R/
+          ls -lh tools/OP11R/boot.zip
 
-      - name: Build kernel (NO SUSFS / NO MODULES)
+      - name: Build Kernel
         uses: ./.github/kernel
         with:
           op_config_json: '{"model":"OP11R","soc":"sm8475","branch":"oneplus/sm8475","manifest_oos16":"oneplus_11r_b.xml","manifest_oos16_modules":"oneplus_11r_b.xml","android_version":"android16","kernel_version":"5.10","hmbird":false}'
