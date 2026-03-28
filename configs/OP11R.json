@@ -4,6 +4,8 @@
   "branch": "oneplus/sm8475_b_16.0.0_oneplus_11r",
   "manifest_oos16": "oneplus/sm8475_b_16.0.0_oneplus_11r.xml",
   "manifest_oos16_modules": "oneplus/sm8475_b_16.0.0_oneplus_11r.xml",
+  "manifest_oos16_custom": "oneplus/sm8475_b_16.0.0_oneplus_11r.xml",
+  "manifest_oos16_custom_modules": "oneplus/sm8475_b_16.0.0_oneplus_11r.xml",
   "android_version": "android16",
   "kernel_version": "5.10",
   "hmbird": false
