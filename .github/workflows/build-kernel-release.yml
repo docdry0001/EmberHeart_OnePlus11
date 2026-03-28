@@ -52,7 +52,8 @@ on:
         type: choice
         options:
           - OP11
-        default: OP11
+          - OP11R
+        default: OP11R
 
 jobs:
   set-op-model:
@@ -77,12 +78,12 @@ jobs:
             model=$(basename "$file" .json)
             models+=("$model")
           done < <(find configs/ -name "*.json" -print0)
-        
+
           if [ ${#models[@]} -eq 0 ]; then
             echo "Error: No config files found in configs/ directory!"
             exit 1
           fi
-        
+
           echo "[" > matrix.json
           for i in "${!models[@]}"; do
             model="${models[$i]}"
@@ -124,6 +125,16 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Download OP11R boot image from Google Drive
+        if: ${{ matrix.model == 'OP11R' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools/OP11R
+          python3 -m pip install --user gdown
+          python3 -m gdown 1ym34EoBpoz_BNzBqdFHdCDt8OTWSC5GH -O tools/OP11R/boot.zip
+          ls -lh tools/OP11R/boot.zip
+
       - name: Build Kernel
         uses: ./.github/kernel
         with:
@@ -152,6 +163,16 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Download OP11R boot image from Google Drive
+        if: ${{ matrix.model == 'OP11R' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools/OP11R
+          python3 -m pip install --user gdown
+          python3 -m gdown 1ym34EoBpoz_BNzBqdFHdCDt8OTWSC5GH -O tools/OP11R/boot.zip
+          ls -lh tools/OP11R/boot.zip
+
       - name: Build Kernel Modules
         uses: ./.github/kernel_modules
         with:
@@ -175,10 +196,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download Wirless Firmware Module for Nethunter 
+      - name: Download Wirless Firmware Module for Nethunter
         id: download_external
         env:
-          SOURCE_REPO: nullptr-t-oss/Nethunter-Wireless-Firmware 
+          SOURCE_REPO: nullptr-t-oss/Nethunter-Wireless-Firmware
         run: |
           echo "--- Downloading Latest Release Asset from $SOURCE_REPO ---"
 
@@ -243,23 +264,22 @@ jobs:
           echo "=== Start building the release notes ==="
           cat << EOF > release_notes.md
           This release contains KernelSU Next and SUSFS v2.1.0
-          
-          Module: 
-          -> https://github.com/sidex15/ksu_module_susfs  
-          
+
+          Module:
+          -> https://github.com/sidex15/ksu_module_susfs
+
           Official Managers:
-          -> https://github.com/KernelSU-Next/KernelSU-Next  
-          
+          -> https://github.com/KernelSU-Next/KernelSU-Next
+
           Non-Official Managers:
           -> https://github.com/WildKernels/Wild_KSU
-          
+
           ### Built Devices
-          
+
           | Model | Kernel Version |
           |-------|----------------|
           EOF
-          
-          # Generate table rows
+
           find downloaded-artifacts -name "*.txt" -type f | sort | while read -r file; do
             if [ -n "$file" ]; then
               model=$(basename "$file" .txt)
@@ -267,10 +287,9 @@ jobs:
               printf "| %-12s | %-16s |\n" "$model" "$version" >> release_notes.md
             fi
           done
-          
-          # Add features and finalize
+
           cat << 'EOF' >> release_notes.md
-          
+
           ### Features
           - [+] KernelSU-Next / WildKSU Manager Support
           - [+] SUSFS v2.1.0
@@ -286,8 +305,7 @@ jobs:
           - [+] IP Set Support
 
           EOF
-          
-          # Output for debugging
+
           echo "--- Final Release Notes ---"
           cat release_notes.md
 
@@ -310,6 +328,7 @@ jobs:
 
       - name: Upload Release Assets Dynamically
         run: |
+          shopt -s nullglob
           for file in ./downloaded-artifacts/*/*.{zip,img}; do
             if [ -f "$file" ]; then
               echo "Uploading $file..."
