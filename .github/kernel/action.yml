@@ -345,161 +345,161 @@ runs:
         echo "KernelSU Next added (commit: ${KSUN_COMMIT_SHA:0:8}) ✅"
         echo "::endgroup::"
 
-    # - name: Apply SUSFS Patches
-    #   shell: bash
-    #   run: |
-    #     set -euo pipefail
-    #     echo "::group::Applying SUSFS patches..."
-    #     cd "$CONFIG/kernel_platform"
-    #     cp ../../susfs4ksu/kernel_patches/50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch ./common/
-    #     cp ../../susfs4ksu/kernel_patches/fs/* ./common/fs/
-    #     cp ../../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-    #     cd ./KernelSU-Next
-    #     susfs_version=$(grep '#define SUSFS_VERSION' ../common/include/linux/susfs.h | awk -F'"' '{print $2}')
-    #     echo "SUSVER=$susfs_version" >> $GITHUB_ENV
-    #     echo "SuSFS Version: $susfs_version"
-    #     cd ../
-    #     # Function to compare semantic versions
-    #     version_lte() {
-    #       [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$1" ]
-    #     }
+    - name: Apply SUSFS Patches
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Applying SUSFS patches..."
+        cd "$CONFIG/kernel_platform"
+        cp ../../susfs4ksu/kernel_patches/50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch ./common/
+        cp ../../susfs4ksu/kernel_patches/fs/* ./common/fs/
+        cp ../../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+        cd ./KernelSU-Next
+        susfs_version=$(grep '#define SUSFS_VERSION' ../common/include/linux/susfs.h | awk -F'"' '{print $2}')
+        echo "SUSVER=$susfs_version" >> $GITHUB_ENV
+        echo "SuSFS Version: $susfs_version"
+        cd ../
+        # Function to compare semantic versions
+        version_lte() {
+          [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$1" ]
+        }
 
-    #     if version_lte "${susfs_version:1}" "1.5.12"; then
-    #       echo "NEED_HOOKS=true" >> $GITHUB_ENV
-    #     else
-    #       echo "NEED_HOOKS=false" >> $GITHUB_ENV
-    #     fi
+        if version_lte "${susfs_version:1}" "1.5.12"; then
+          echo "NEED_HOOKS=true" >> $GITHUB_ENV
+        else
+          echo "NEED_HOOKS=false" >> $GITHUB_ENV
+        fi
 
-    #     case "$susfs_version" in
-    #       "v1.5.8")
-    #         cd ./KernelSU-Next
-    #         cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-    #         patch -p1 --forward --fuzz=3 < 10_enable_susfs_for_ksu.patch  || true
-    #         cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_apk_sign.c.patch" ./
-    #         patch -p1 --forward --fuzz=3 < fix_apk_sign.c.patch
-    #         cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_core_hook.c.patch" ./
-    #         patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
-    #         cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_selinux.c.patch" ./
-    #         patch -p1 --forward --fuzz=3 < fix_selinux.c.patch
-    #         cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_ksud.c.patch" ./
-    #         patch -p1 --forward --fuzz=3 < fix_ksud.c.patch
-    #         ;;
-    #       "v1.5.9"|"v1.5.10"|"v1.5.11"|"v1.5.12")
-    #         cd ./KernelSU-Next
-    #         cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-    #         patch -p1 --forward < 10_enable_susfs_for_ksu.patch  || true
-    #         for file in $(find ./kernel -maxdepth 2 -name "*.rej" -printf "%f\n" | cut -d'.' -f1); do
-    #           echo "Patching file: $file.c with fix_$file.c.patch"
-    #           patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch"
-    #         done
-    #         patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_kernel_compat.c.patch"
-    #         ;;
-    #       "v2.0.0")
-    #         cd ./KernelSU-Next
-    #         cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
+        case "$susfs_version" in
+          "v1.5.8")
+            cd ./KernelSU-Next
+            cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
+            patch -p1 --forward --fuzz=3 < 10_enable_susfs_for_ksu.patch  || true
+            cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_apk_sign.c.patch" ./
+            patch -p1 --forward --fuzz=3 < fix_apk_sign.c.patch
+            cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_core_hook.c.patch" ./
+            patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
+            cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_selinux.c.patch" ./
+            patch -p1 --forward --fuzz=3 < fix_selinux.c.patch
+            cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_ksud.c.patch" ./
+            patch -p1 --forward --fuzz=3 < fix_ksud.c.patch
+            ;;
+          "v1.5.9"|"v1.5.10"|"v1.5.11"|"v1.5.12")
+            cd ./KernelSU-Next
+            cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
+            patch -p1 --forward < 10_enable_susfs_for_ksu.patch  || true
+            for file in $(find ./kernel -maxdepth 2 -name "*.rej" -printf "%f\n" | cut -d'.' -f1); do
+              echo "Patching file: $file.c with fix_$file.c.patch"
+              patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch"
+            done
+            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_kernel_compat.c.patch"
+            ;;
+          "v2.0.0")
+            cd ./KernelSU-Next
+            cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
 
-    #         patch -p1 --forward < 10_enable_susfs_for_ksu.patch  || true
+            patch -p1 --forward < 10_enable_susfs_for_ksu.patch  || true
 
-    #         for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
-    #           echo "Patching file: $file with fix_$file.patch"
-    #           patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
-    #         done
-    #         echo "Patching Hook Mode!"
-    #         patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
-    #         echo "Patching KSU_TOOLKIT Support for SuSFS kernel!"
-    #         patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
-    #         ;;
-    #       "v2.1.0")
-    #         cd ./KernelSU-Next
-    #         patch -p1 --forward < "../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
-    #         for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
-    #           echo "Patching file: $file with fix_$file.patch"
-    #           patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
-    #         done
-    #         echo "Patching Hook Mode!"
-    #         patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
-    #         echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
-    #         patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
-    #         echo "Patching Multi-manager Support for SusFS kernel!"
-    #         patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
-    #         echo "Patching Multi-manager sepolicy Support for SusFS kernel!"
-    #         patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/multi_sepolicy_fix.patch"
-    #         ;;
-    #       *)
-    #         echo "::error::Unsupported SUSFS version: $susfs_version"
-    #         exit 1
-    #         ;;
-    #     esac
-    #     patch -p1 --forward < ksun_susfs_latest.patch || true
-    #     cd ../common
-    #     if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
-    #       if ! grep -qxF '#include <trace/hooks/fs.h>' ./fs/namespace.c; then
-    #         sed -i '/#include <trace\/hooks\/blk.h>/a #include <trace\/hooks\/fs.h>' ./fs/namespace.c
-    #       fi
-    #     fi
+            for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+              echo "Patching file: $file with fix_$file.patch"
+              patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
+            done
+            echo "Patching Hook Mode!"
+            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
+            echo "Patching KSU_TOOLKIT Support for SuSFS kernel!"
+            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
+            ;;
+          "v2.1.0")
+            cd ./KernelSU-Next
+            patch -p1 --forward < "../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+            for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+              echo "Patching file: $file with fix_$file.patch"
+              patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
+            done
+            echo "Patching Hook Mode!"
+            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
+            echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
+            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
+            echo "Patching Multi-manager Support for SusFS kernel!"
+            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
+            echo "Patching Multi-manager sepolicy Support for SusFS kernel!"
+            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/multi_sepolicy_fix.patch"
+            ;;
+          *)
+            echo "::error::Unsupported SUSFS version: $susfs_version"
+            exit 1
+            ;;
+        esac
+        patch -p1 --forward < ksun_susfs_latest.patch || true
+        cd ../common
+        if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
+          if ! grep -qxF '#include <trace/hooks/fs.h>' ./fs/namespace.c; then
+            sed -i '/#include <trace\/hooks\/blk.h>/a #include <trace\/hooks\/fs.h>' ./fs/namespace.c
+          fi
+        fi
 
-    #     # Fake kernel patch to fix failures
-    #     fake_patched=0
-    #     if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
-    #       if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
-    #         echo "nr_subpages Line not found. Fake Patching!"
-    #         sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
-    #         fake_patched=1
-    #       fi
-    #     fi
-    #     if [ "${{ env.ANDROID_VER }}" = "android12" ] && [ "${{ env.KERNEL_VER }}" = "5.10" ]; then
-    #       if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
-    #         echo "vma_pages Line not found. Fake Patching!"
-    #         fake_patched=1
-    #       fi
-    #     fi
-    #     if [ "${{ env.ANDROID_VER }}" = "android13" ] && [ "${{ env.KERNEL_VER }}" = "5.15" ]; then
-    #       if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
-    #         echo "vma_pages Line not found. Fake Patching!"
-    #         fake_patched=1
-    #       fi
-    #     fi
+        # Fake kernel patch to fix failures
+        fake_patched=0
+        if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
+          if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+            echo "nr_subpages Line not found. Fake Patching!"
+            sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
+            fake_patched=1
+          fi
+        fi
+        if [ "${{ env.ANDROID_VER }}" = "android12" ] && [ "${{ env.KERNEL_VER }}" = "5.10" ]; then
+          if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
+            echo "vma_pages Line not found. Fake Patching!"
+            fake_patched=1
+          fi
+        fi
+        if [ "${{ env.ANDROID_VER }}" = "android13" ] && [ "${{ env.KERNEL_VER }}" = "5.15" ]; then
+          if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
+            echo "vma_pages Line not found. Fake Patching!"
+            fake_patched=1
+          fi
+        fi
 
-    #     patch -p1 < 50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch
+        patch -p1 < 50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch
 
-    #     # Revert Fake kernel patch
-    #     if [ "$fake_patched" = 1 ]; then
-    #       if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
-    #         if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
-    #           echo "nr_subpages Line found. Revert Fake Patching!"
-    #           sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
-    #         fi
-    #       fi
-    #       if [ "${{ env.ANDROID_VER }}" = "android12" ] && [ "${{ env.KERNEL_VER }}" = "5.10" ]; then
-    #         if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
-    #           echo "vma_pages Line found. Revert Fake Patching!"
-    #           sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
-    #         fi
-    #       fi
-    #       if [ "${{ env.ANDROID_VER }}" = "android13" ] && [ "${{ env.KERNEL_VER }}" = "5.15" ]; then
-    #         if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
-    #           echo "vma_pages Line found. Revert Fake Patching!"
-    #           sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
-    #         fi
-    #       fi
-    #       if [ "${{ env.ANDROID_VER }}" = "android14" ] && [ "${{ env.KERNEL_VER }}" = "6.1" ]; then
-    #         if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
-    #           echo "vma_pages Line found. Revert Fake Patching!"
-    #           sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
-    #         fi
-    #       fi
-    #     fi
+        # Revert Fake kernel patch
+        if [ "$fake_patched" = 1 ]; then
+          if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
+            if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+              echo "nr_subpages Line found. Revert Fake Patching!"
+              sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
+            fi
+          fi
+          if [ "${{ env.ANDROID_VER }}" = "android12" ] && [ "${{ env.KERNEL_VER }}" = "5.10" ]; then
+            if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
+              echo "vma_pages Line found. Revert Fake Patching!"
+              sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
+            fi
+          fi
+          if [ "${{ env.ANDROID_VER }}" = "android13" ] && [ "${{ env.KERNEL_VER }}" = "5.15" ]; then
+            if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
+              echo "vma_pages Line found. Revert Fake Patching!"
+              sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
+            fi
+          fi
+          if [ "${{ env.ANDROID_VER }}" = "android14" ] && [ "${{ env.KERNEL_VER }}" = "6.1" ]; then
+            if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
+              echo "vma_pages Line found. Revert Fake Patching!"
+              sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
+            fi
+          fi
+        fi
 
-    #     KERNEL_VERSION="${{ env.KERNEL_VER }}"
-    #     MIN_VERSION="5.16"
-    #     if [ "$(printf '%s\n' "$KERNEL_VERSION" "$MIN_VERSION" | sort -V | head -n1)" = "$KERNEL_VERSION" ]; then
-    #       echo "Patching ptrace!"
-    #       patch -p1 -F 3 < "../../../kernel_patches/gki_ptrace.patch"
-    #     else
-    #       echo "Kernel >= $MIN_VERSION, skipping ptrace patch"
-    #     fi
-    #     echo "SuSFS added ✅"
-    #     echo "::endgroup::"
+        KERNEL_VERSION="${{ env.KERNEL_VER }}"
+        MIN_VERSION="5.16"
+        if [ "$(printf '%s\n' "$KERNEL_VERSION" "$MIN_VERSION" | sort -V | head -n1)" = "$KERNEL_VERSION" ]; then
+          echo "Patching ptrace!"
+          patch -p1 -F 3 < "../../../kernel_patches/gki_ptrace.patch"
+        else
+          echo "Kernel >= $MIN_VERSION, skipping ptrace patch"
+        fi
+        echo "SuSFS added ✅"
+        echo "::endgroup::"
 
     - name: Add BBG
       shell: bash
@@ -628,138 +628,89 @@ runs:
         echo "Other kernel patches applied 🔥"
         echo "::endgroup::"
 
-      - name: Add Nethunter inline configs
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "::group::Applying Nethunter configs..."
-          cd "$CONFIG/kernel_platform/common"
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_BT_HCIBTUSB \
-                --enable CONFIG_BT_HCIBTUSB_BCM \
-                --enable CONFIG_BT_HCIBTUSB_RTL \
-                --enable CONFIG_BT_HCIVHCI \
-                --enable CONFIG_BT_HCIBCM203X \
-                --enable CONFIG_BT_HCIBPA10X \
-                --enable CONFIG_BT_HCIBFUSB \
-                --enable CONFIG_BT_RFCOMM \
-                --enable CONFIG_BT_RFCOMM_TTY \
-                --enable CONFIG_BT_BNEP \
-                --enable CONFIG_BT_BNEP_MC_FILTER \
-                --enable CONFIG_BT_BNEP_PROTO_FILTER
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_USB_AIRSPY \
-                --enable CONFIG_USB_HACKRF \
-                --enable CONFIG_USB_MON \
-                --enable CONFIG_USB_OTG \
-                --enable CONFIG_USB_OTG_FSM
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_CAN \
-                --enable CONFIG_CAN_RAW \
-                --enable CONFIG_CAN_BCM \
-                --enable CONFIG_CAN_GW \
-                --enable CONFIG_CAN_DEV \
-                --enable CONFIG_CAN_CALC_BITTIMING \
-                --enable CONFIG_CAN_LEDS \
-                --enable CONFIG_CAN_VCAN \
-                --enable CONFIG_CAN_GRCAN \
-                --enable CONFIG_CAN_XILINXCAN \
-                --enable CONFIG_CAN_C_CAN \
-                --enable CONFIG_CAN_C_CAN_PLATFORM \
-                --enable CONFIG_CAN_C_CAN_PCI \
-                --enable CONFIG_CAN_CC770 \
-                --enable CONFIG_CAN_CC770_ISA \
-                --enable CONFIG_CAN_CC770_PLATFORM \
-                --enable CONFIG_CAN_M_CAN \
-                --enable CONFIG_CAN_M_CAN_PCI \
-                --enable CONFIG_CAN_M_CAN_PLATFORM \
-                --enable CONFIG_CAN_M_CAN_TCAN4X5X \
-                --enable CONFIG_CAN_HI311X \
-                --enable CONFIG_CAN_MCP251X \
-                --enable CONFIG_CAN_8DEV_USB \
-                --enable CONFIG_CAN_EMS_USB \
-                --enable CONFIG_CAN_ESD_USB2 \
-                --enable CONFIG_CAN_GS_USB \
-                --enable CONFIG_CAN_KVASER_USB \
-                --enable CONFIG_CAN_PEAK_USB
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_NETLINK_DIAG \
-                --enable CONFIG_PACKET_DIAG \
-                --enable CONFIG_UNIX_DIAG \
-                --enable CONFIG_INET_DIAG \
-                --enable CONFIG_INET_UDP_DIAG \
-                --enable CONFIG_INET_RAW_DIAG \
-                --enable CONFIG_INET_DIAG_DESTROY \
-                --enable CONFIG_VSOCKETS \
-                --enable CONFIG_NET_SCHED \
-                --enable CONFIG_NET_EMATCH_CANID
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_USB_SERIAL \
-                --enable CONFIG_USB_SERIAL_CONSOLE \
-                --enable CONFIG_USB_SERIAL_GENERIC \
-                --enable CONFIG_USB_SERIAL_CH341 \
-                --enable CONFIG_USB_SERIAL_FTDI_SIO \
-                --enable CONFIG_USB_SERIAL_PL2303 \
-                --enable CONFIG_USB_SERIAL_CP210X \
-                --enable CONFIG_USB_SERIAL_OPTION \
-                --enable CONFIG_USB_SERIAL_WWAN
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_IP_SET \
-                --set-val CONFIG_IP_SET_MAX 65534 \
-                --enable CONFIG_IP_SET_BITMAP_IP \
-                --enable CONFIG_IP_SET_BITMAP_IPMAC \
-                --enable CONFIG_IP_SET_BITMAP_PORT \
-                --enable CONFIG_IP_SET_HASH_IP \
-                --enable CONFIG_IP_SET_HASH_IPMARK \
-                --enable CONFIG_IP_SET_HASH_IPPORT \
-                --enable CONFIG_IP_SET_HASH_IPPORTIP \
-                --enable CONFIG_IP_SET_HASH_IPPORTNET \
-                --enable CONFIG_IP_SET_HASH_IPMAC \
-                --enable CONFIG_IP_SET_HASH_MAC \
-                --enable CONFIG_IP_SET_HASH_NET \
-                --enable CONFIG_IP_SET_HASH_NETNET \
-                --enable CONFIG_IP_SET_HASH_NETPORT \
-                --enable CONFIG_IP_SET_HASH_NETPORTNET \
-                --enable CONFIG_IP_SET_HASH_NETIFACE \
-                --enable CONFIG_IP_SET_LIST_SET
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_IP_NF_TARGET_TTL \
-                --enable CONFIG_IP6_NF_TARGET_HL \
-                --enable CONFIG_IP6_NF_MATCH_HL
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_WIREGUARD \
-                --enable CONFIG_WIREGUARD_DEBUG
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_UHID \
-                --enable CONFIG_HID_UHID \
-                --enable CONFIG_USB_CONFIGFS \
-                --enable CONFIG_USB_CONFIGFS_HID \
-                --enable CONFIG_USB_CONFIGFS_F_ACC \
-                --enable CONFIG_USB_CONFIGFS_F_FS \
-                --enable CONFIG_USB_F_HID \
-                --enable CONFIG_USB_F_FS \
-                --enable CONFIG_USB_F_ACC \
-                --enable CONFIG_USB_G_HID \
-                --enable CONFIG_USB_GADGET \
-                --enable CONFIG_USB_RAW_GADGET
-      
-           ./scripts/config --file arch/arm64/configs/gki_defconfig \
-                --enable CONFIG_CFG80211 \
-                --enable CONFIG_MAC80211 \
-                --enable CONFIG_RFKILL \
-                --enable CONFIG_RFKILL_INPUT
-      
-           echo "Nethunter configs applied ✅"
-           echo "::endgroup::"
+    - name: Add Nethunter inline configs
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Applying Nethunter configs..."
+        cd "$CONFIG/kernel_platform/common"
+
+        # Bluetooth configs
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_BT_HCIBTUSB \
+          --enable CONFIG_BT_HCIBTUSB_BCM \
+          --enable CONFIG_BT_HCIBTUSB_RTL \
+          --enable CONFIG_BT_HCIVHCI \
+          --enable CONFIG_BT_HCIBCM203X \
+          --enable CONFIG_BT_HCIBPA10X \
+          --enable CONFIG_BT_HCIBFUSB
+
+        # Airspy & HackRF
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_USB_AIRSPY \
+          --enable CONFIG_USB_HACKRF
+
+        # CAN
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN \
+          --enable CONFIG_CAN_DEV \
+          --enable CONFIG_CAN_CALC_BITTIMING \
+          --enable CONFIG_CAN_LEDS \
+          --enable CONFIG_CAN_VCAN \
+          --enable CONFIG_CAN_GRCAN \
+          --enable CONFIG_CAN_XILINXCAN
+
+        # Bosch C_CAN/D_CAN devices
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_C_CAN \
+          --enable CONFIG_CAN_C_CAN_PLATFORM \
+          --enable CONFIG_CAN_C_CAN_PCI
+
+        # Bosch CC770 and Intel AN82527 devices
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_CC770 \
+          --enable CONFIG_CAN_CC770_ISA \
+          --enable CONFIG_CAN_CC770_PLATFORM
+
+        # Bosch M_CAN devices
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_M_CAN \
+          --enable CONFIG_CAN_M_CAN_PCI \
+          --enable CONFIG_CAN_M_CAN_PLATFORM \
+          --enable CONFIG_CAN_M_CAN_TCAN4X5X
+
+        # CAN SPI interfaces
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_HI311X \
+          --enable CONFIG_CAN_MCP251X
+
+        # CAN USB interfaces
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_CAN_8DEV_USB \
+          --enable CONFIG_CAN_EMS_USB \
+          --enable CONFIG_CAN_ESD_USB2 \
+          --enable CONFIG_CAN_GS_USB \
+          --enable CONFIG_CAN_KVASER_USB \
+          --enable CONFIG_CAN_PEAK_USB
+
+        # CAN - Networking
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_NETLINK_DIAG \
+          --enable CONFIG_VSOCKETS \
+          --enable CONFIG_NET_SCHED \
+          --enable CONFIG_NET_EMATCH_CANID
+
+        # USB Serial Converter
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_USB_SERIAL \
+          --enable CONFIG_USB_SERIAL_CONSOLE \
+          --enable CONFIG_USB_SERIAL_GENERIC \
+          --enable CONFIG_USB_SERIAL_CH341 \
+          --enable CONFIG_USB_SERIAL_FTDI_SIO \
+          --enable CONFIG_USB_SERIAL_PL2303
+
+        echo "Nethunter configs applied ✅"
+        echo "::endgroup::"
 
     - name: Add Other configs
       shell: bash
@@ -859,7 +810,7 @@ runs:
         cd "$ARTIFACTS_DIR"
         echo "kernel_version=${{ env.KERNEL_FULL_VER }}" >> "$GITHUB_OUTPUT"
         echo "ksu_version=${KSUVER:-unknown}" >> "$GITHUB_OUTPUT"
-        echo "susfs_version=${SUSVER:-disabled}" >> "$GITHUB_OUTPUT"
+        echo "susfs_version=${SUSVER:-unknown}" >> "$GITHUB_OUTPUT"
 
         echo "Build metadata saved ✅"
         echo "::endgroup::"
@@ -933,9 +884,6 @@ runs:
           LLVM_IAS=1
           ARCH=arm64
           SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
           LD=ld.lld
           HOSTLD=ld.lld
           AR=llvm-ar
@@ -954,9 +902,6 @@ runs:
         INSTALL_MOD_PATH="$COMMON/out"
         mkdir -p "$OUT"
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-        # Disable LSE atomics for older clang
-        ./scripts/config --file "$OUT/.config" --disable CONFIG_ARM64_LSE_ATOMICS
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
         if [ "${{ inputs.optimize_level }}" = "O3" ]; then
           KCFLAGS_EXTRA="-O3"
@@ -1066,7 +1011,7 @@ runs:
         sed -i '7 c\kernel.string=EmberHeart Kernel by nullptr-t-oss' anykernel.sh
         curl https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/banner > banner
 
-        ZIP_NAME="AnyKernel3_${MODEL}_${{ env.KERNEL_FULL_VER }}_Next_${KSUVER}_SuSFS_${SUSVER:-disabled}.zip"
+        ZIP_NAME="AnyKernel3_${MODEL}_${{ env.KERNEL_FULL_VER }}_Next_${KSUVER}_SuSFS_${SUSVER}.zip"
         ARTIFACTS_DIR="$CONFIG_DIR/artifacts"
         mkdir -p "$ARTIFACTS_DIR"
 
@@ -1129,8 +1074,8 @@ runs:
           echo "Kernel Uname: ${{ env.KERNEL_UNAME }}"
           echo "KSUN Version: ${KSUVER:-unknown}"
           echo "KSUN commit SHA: ${{ env.KSUN_COMMIT_SHA }}"
-          echo "SUSFS Version: ${SUSVER:-disabled}"
-          echo "SUSFS commit SHA: ${SUSFS_COMMIT_SHA:-disabled}"
+          echo "SUSFS Version: ${SUSVER:-unknown}"
+          echo "SUSFS commit SHA: ${{ env.SUSFS_COMMIT_SHA }}"
           echo "Optimization: ${{ inputs.optimize_level }}"
           echo "Image SHA256: ${{ steps.collect_stats.outputs.image_sha256 }}"
           echo "Compiler: ${CLANG_VERSION:-unknown}"
@@ -1147,8 +1092,8 @@ runs:
           echo "- Kernel Uname: ${{ env.KERNEL_UNAME }}"
           echo "- KSUN Version: ${KSUVER:-unknown}"
           echo "- KSUN commit SHA: [${{ env.KSUN_COMMIT_SHA }}](https://github.com/KernelSU-Next/KernelSU-Next/commit/${{ env.KSUN_COMMIT_SHA }})"
-          echo "- SUSFS Version: ${SUSVER:-disabled}"
-          echo "- SUSFS commit SHA: ${SUSFS_COMMIT_SHA:-disabled}"
+          echo "- SUSFS Version: ${SUSVER:-unknown}"
+          echo "- SUSFS commit SHA: [${{ env.SUSFS_COMMIT_SHA }}](https://gitlab.com/simonpunk/susfs4ksu/-/commit/${{ env.SUSFS_COMMIT_SHA }})"
           echo "- Optimization: ${{ inputs.optimize_level }}"
           echo "- Image SHA256: ${{ steps.collect_stats.outputs.image_sha256 }}"
           echo ""
@@ -1169,4 +1114,3 @@ runs:
       with:
         name: kernel-${{ env.CONFIG }}
         path: ${{ env.CONFIG }}/artifacts/
-
