@@ -18,7 +18,7 @@ jobs:
           set -euo pipefail
           mkdir -p tools/OP11R
           python3 -m pip install --user gdown
-          python3 -m gdown 1ym34EoBpoz_BNzBqdFHdCDt8OTWSC5GH -O tools/OP11R/boot.zip
+          python3 -m gdown 1nQXGKQtNH2jbzlQuGyDadhCVm0mDW5hD -O tools/OP11R/boot.zip
           ls -lh tools/OP11R/boot.zip
 
       - name: Build Kernel
