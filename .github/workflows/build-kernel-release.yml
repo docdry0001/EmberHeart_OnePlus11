@@ -33,7 +33,7 @@ jobs:
 
   build-kernel-modules:
     name: Build ${{ matrix.model }} Kernel Modules
-    needs: set-op-model
+    needs: OP11R
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
