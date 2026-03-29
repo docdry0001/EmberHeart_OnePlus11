@@ -947,10 +947,10 @@ runs:
         cd "$COMMON"
         : > "$COMMON/.scmversion"
 
-        # Download and use Clang 18 (fixes LSE issues)
-        wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-aarch64-linux-gnu.tar.xz
-        tar -xf clang+llvm-18.1.8-aarch64-linux-gnu.tar.xz
-        export PATH="$PWD/clang+llvm-18.1.8-aarch64-linux-gnu/bin:$PATH"
+        # Download and use Clang 18 (x86_64)
+        wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+        tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+        export PATH="$PWD/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin:$PATH"
         export CC=clang
         export CXX=clang++
 
@@ -979,7 +979,7 @@ runs:
         INSTALL_MOD_PATH="$COMMON/out"
         mkdir -p "$OUT"
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-        # Disable LSE just in case
+        # Disable LSE atomics (optional but safe)
         ./scripts/config --file "$OUT/.config" --disable CONFIG_ARM64_LSE_ATOMICS
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
