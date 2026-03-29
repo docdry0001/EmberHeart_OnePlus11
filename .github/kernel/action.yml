@@ -858,83 +858,6 @@ runs:
         echo "Clang detected ✅"
         echo "::endgroup::"
 
-    # - name: Build Kernel
-    #   shell: bash
-    #   env:
-    #     PYTHONWARNINGS: "ignore:invalid escape sequence"
-    #   run: |
-    #     set -euo pipefail
-    #     echo "::group::Build kernel"
-    #     KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-    #     COMMON="$KERNEL_PLATFORM/common"
-    #     cd "$COMMON"
-    #     : > "$COMMON/.scmversion"
-
-    #     # Ensure Python warnings are suppressed for scripts invoked by make
-    #     export PYTHONWARNINGS="${PYTHONWARNINGS}"
-
-    #     if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-    #       export PATH="${CLANG_BIN_PATH}:$PATH"
-    #     fi
-
-    #     export PATH="/usr/lib/ccache:$PATH"
-
-    #     MAKE_FLAGS+=(
-    #       LLVM=1
-    #       LLVM_IAS=1
-    #       ARCH=arm64
-    #       SUBARCH=arm64
-    #       LD=ld.lld
-    #       HOSTLD=ld.lld
-    #       AR=llvm-ar
-    #       NM=llvm-nm
-    #       OBJCOPY=llvm-objcopy
-    #       OBJDUMP=llvm-objdump
-    #       DEPMOD=depmod
-    #       DTC=dtc
-    #       STRIP=llvm-strip
-    #       HOSTCC=clang
-    #       HOSTCXX=clang++
-    #       CC="ccache clang"
-    #     )
-
-    #     OUT=out
-    #     INSTALL_MOD_PATH="$COMMON/out"
-    #     mkdir -p "$OUT"
-    #     make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-
-    #     if [ "${{ inputs.optimize_level }}" = "O3" ]; then
-    #       KCFLAGS_EXTRA="-O3"
-    #     else
-    #       KCFLAGS_EXTRA="-O2"
-    #     fi
-
-    #     # LOCALVERSION branding
-    #     if [ -n "${CUSTOM_LOCALVERSION:-}" ]; then
-    #       ./scripts/config --file "$OUT/.config" \
-    #         --set-str LOCALVERSION "${CUSTOM_LOCALVERSION}" \
-    #         --disable LOCALVERSION_AUTO
-    #       sed -i 's/scm_version="$(scm_version --short)"/scm_version=""/' scripts/setlocalversion
-    #     fi
-
-    #     # Consistent flags; include -pipe and disable stack protector
-    #     KCFLAGS="-Wno-error -pipe -fno-stack-protector ${KCFLAGS_EXTRA}"
-    #     KCPPFLAGS="-DCONFIG_OPTIMIZE_INLINING"
-
-    #     echo "Starting build with $(nproc --all) threads..."
-    #     make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
-    #     make -j$(nproc --all) "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" O="$OUT" Image modules
-    #     make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-
-    #     IMG="$OUT/arch/arm64/boot/Image"
-    #     if [ ! -f "$IMG" ]; then
-    #       echo "Kernel Image missing"
-    #       exit 1
-    #     fi
-    #     sha256sum "$IMG" | tee "$OUT/Image.sha256"
-    #     echo "Kernel built 😆"
-    #     echo "::endgroup::"
-    
     - name: Build Kernel
       shell: bash
       env:
@@ -947,20 +870,23 @@ runs:
         cd "$COMMON"
         : > "$COMMON/.scmversion"
 
-        # Download and use Clang 18 (x86_64)
-        wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-        tar -xf clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
-        export PATH="$PWD/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04/bin:$PATH"
-        export CC=clang
-        export CXX=clang++
+        # Ensure Python warnings are suppressed for scripts invoked by make
+        export PYTHONWARNINGS="${PYTHONWARNINGS}"
+
+        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
+          export PATH="${CLANG_BIN_PATH}:$PATH"
+        fi
 
         export PATH="/usr/lib/ccache:$PATH"
-
+        
         MAKE_FLAGS+=(
           LLVM=1
           LLVM_IAS=1
           ARCH=arm64
           SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
           LD=ld.lld
           HOSTLD=ld.lld
           AR=llvm-ar
@@ -974,21 +900,18 @@ runs:
           HOSTCXX=clang++
           CC="ccache clang"
         )
-
         OUT=out
         INSTALL_MOD_PATH="$COMMON/out"
         mkdir -p "$OUT"
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-        # Disable LSE atomics (optional but safe)
-        ./scripts/config --file "$OUT/.config" --disable CONFIG_ARM64_LSE_ATOMICS
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
-        if [ "$OPTIMIZE_LEVEL" = "O3" ]; then
+        if [ "${{ inputs.optimize_level }}" = "O3" ]; then
           KCFLAGS_EXTRA="-O3"
         else
           KCFLAGS_EXTRA="-O2"
         fi
 
+        # LOCALVERSION branding
         if [ -n "${CUSTOM_LOCALVERSION:-}" ]; then
           ./scripts/config --file "$OUT/.config" \
             --set-str LOCALVERSION "${CUSTOM_LOCALVERSION}" \
@@ -996,6 +919,7 @@ runs:
           sed -i 's/scm_version="$(scm_version --short)"/scm_version=""/' scripts/setlocalversion
         fi
 
+        # Consistent flags; include -pipe and disable stack protector
         KCFLAGS="-Wno-error -pipe -fno-stack-protector ${KCFLAGS_EXTRA}"
         KCPPFLAGS="-DCONFIG_OPTIMIZE_INLINING"
 
