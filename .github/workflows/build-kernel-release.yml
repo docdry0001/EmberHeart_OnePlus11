@@ -206,28 +206,4 @@ jobs:
           echo "--- Final Release Notes ---"
           cat release_notes.md
 
-      - name: Create GitHub Pre-release
-        if: ${{ github.event.inputs.release_type == 'Pre-release' }}
-        run: |
-          gh release create "${{ env.NEW_TAG }}" \
-            --repo "${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}" \
-            --title "*Test-build*-${{ env.RELEASE_NAME }}-${{ env.OS_VERSION }}*Test Build*" \
-            --notes-file release_notes.md \
-            --prerelease
 
-      - name: Create GitHub Release
-        if: ${{ github.event.inputs.release_type == 'Release' }}
-        run: |
-          gh release create "${{ env.NEW_TAG }}" \
-            --repo "${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}" \
-            --title "${{ env.RELEASE_NAME }}-${{ env.OS_VERSION }}" \
-            --notes-file release_notes.md
-
-      - name: Upload Release Assets Dynamically
-        run: |
-          for file in ./downloaded-artifacts/*/*.{zip,img}; do
-            if [ -f "$file" ]; then
-              echo "Uploading $file..."
-              gh release upload "${{ env.NEW_TAG }}" "$file" --clobber
-            fi
-          done
