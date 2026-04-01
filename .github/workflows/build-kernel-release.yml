@@ -59,7 +59,7 @@ jobs:
         with:
           op_config_json: '{"model":"OP11R","soc":"taro","branch":"oneplus/sm8475","manifest_oos16":"oneplus_11r_b.xml","manifest_oos16_modules":"oneplus_11r_b.xml","android_version":"android12","kernel_version":"5.10","hmbird":false}'
           ksun_branch_or_hash: dev
-          susfs_commit_hash_or_branch: "v2.0.0"
+          susfs_commit_hash_or_branch: "v1.5.2+_R27"
           optimize_level: O2
           kernel_uname: EmberHeart
           manifest: OOS16
@@ -138,7 +138,7 @@ jobs:
 
       - name: Generate and Create New Tag
         run: |
-          BASE_TAG="v2.0.0+"
+          BASE_TAG="v1.5.0+"
           LATEST_TAG=$(gh api repos/$REPO_OWNER/$REPO_NAME/tags --jq '.[0].name')
           if [ -z "$LATEST_TAG" ]; then
             LATEST_TAG="$BASE_TAG"
