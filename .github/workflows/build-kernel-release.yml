@@ -59,7 +59,7 @@ jobs:
         with:
           op_config_json: '{"model":"OP11R","soc":"taro","branch":"oneplus/sm8475","manifest_oos16":"oneplus_11r_b.xml","manifest_oos16_modules":"oneplus_11r_b.xml","android_version":"android12","kernel_version":"5.10","hmbird":false}'
           ksun_branch_or_hash: dev
-          susfs_commit_hash_or_branch: "gki-android12-5.10"
+          #susfs_commit_hash_or_branch: "gki-android12-5.10"
           kernel_uname: EmberHeart
           manifest: OOS16
 
