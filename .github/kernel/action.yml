@@ -54,6 +54,14 @@ runs:
         echo "Parsed config:"
         jq '.' /tmp/config.json
 
+    - name: Download OP11R boot image from Google Drive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user gdown
+          python3 -m gdown 1DgD6wTSZ-r4zklYzA_x7GYcjwfA9WV0x -O to>
+          ls -lh tools/boot.zip
+          
     - name: Set Manifest
       shell: bash
       run: |
