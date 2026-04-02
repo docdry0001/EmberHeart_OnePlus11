@@ -577,7 +577,7 @@ runs:
         echo "::endgroup::"
 
     - name: Add my kernel patches to common kernel
-      if: env.SOC == 'taro'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
