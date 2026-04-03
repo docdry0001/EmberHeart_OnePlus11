@@ -13,10 +13,10 @@ inputs:
     required: true
     type: string
     default: ""
-  susfs_commit_hash_or_branch:
-    required: false
-    type: string
-    default: "dev"
+  # susfs_commit_hash_or_branch:
+  #   required: false
+  #   type: string
+  #   default: "dev"
   optimize_level:
     required: false
     type: string
