@@ -593,7 +593,7 @@ runs:
         echo "::endgroup::"
 
     - name: Add other kernel patches to common kernel
-      if: env.SOC == 'taro'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
@@ -617,7 +617,7 @@ runs:
         patch -p1 -F3 --forward < "../../../kernel_patches/common/adjust_cpu_scan_order.patch"
         patch -p1 -F3 --forward < "../../../kernel_patches/common/avoid_extra_s2idle_wake_attempts.patch"
         patch -p1 -F3 --forward < "../../../kernel_patches/common/disable_cache_hot_buddy.patch"
-        patch -p1 -F3 --forward < "../../../kernel_patches/common/f2fs_enlarge_min_fsync_blocks.patch"
+    #    patch -p1 -F3 --forward < "../../../kernel_patches/common/f2fs_enlarge_min_fsync_blocks.patch"
         patch -p1 -F3 --forward < "../../../kernel_patches/common/increase_ext4_default_commit_age.patch"
         patch -p1 -F3 --forward < "../../../kernel_patches/common/increase_sk_mem_packets.patch"
         patch -p1 -F3 --forward < "../../../kernel_patches/common/reduce_pci_pme_wakeups.patch"
