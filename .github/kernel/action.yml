@@ -863,6 +863,7 @@ runs:
         PYTHONWARNINGS: "ignore:invalid escape sequence"
       run: |
         set -euo pipefail
+        export SUSVER=0
         echo "::group::Build kernel"
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         COMMON="$KERNEL_PLATFORM/common"
@@ -992,7 +993,6 @@ runs:
 
         echo "Build stats collected ✅"
         echo "::endgroup::"
-        echo "SUSVER=disable"
     - name: Create Kernel ZIP
       id: create_zip
       shell: bash
