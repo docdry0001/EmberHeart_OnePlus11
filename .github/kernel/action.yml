@@ -998,6 +998,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        export SUSVER="${SUSVER:-0}"
         echo "::group::Creating AK3 zip..."
         CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
         IMAGE_PATH="$CONFIG_DIR/kernel_platform/common/out/arch/arm64/boot/Image"
