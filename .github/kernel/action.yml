@@ -1040,7 +1040,7 @@ runs:
         mkdir -p boot
         # Download stock boot image
         python3 -m pip install --user gdown
-        python3 -m gdown 1nQXGKQtNH2jbzlQuGyDadhCVm0mDW5h
+        python3 -m gdown 1DgD6wTSZ-r4zklYzA_x7GYcjwfA9WV0x
         unzip boot.zip
         # Download magiskboot binary
         wget https://github.com/magojohnji/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot
