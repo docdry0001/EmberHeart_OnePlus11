@@ -356,6 +356,14 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
 
+    - name: Revert broken vmscan patch for clean modules build
+      shell: bash
+      run: |
+        set -euo pipefail
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        cd "$MSM"
+        sed -i '/scan_adjusted/d' mm/vmscan.c
+
     - name: Build Kernel Modules
       shell: bash
       run: |
