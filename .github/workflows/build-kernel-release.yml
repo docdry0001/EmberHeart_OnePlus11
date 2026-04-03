@@ -42,10 +42,10 @@ on:
         description: 'Kernel uname'
         type: string
         default: 'EmberHeart'
-      # susfs_branch_or_commit:
-      #   description: 'Enter SusFS Branch or commit hash'
-      #   type: string
-      #   default: ''
+        susfs_branch_or_commit:
+        description: 'Enter SusFS Branch or commit hash'
+        type: string
+        default: ''
       model:
         description: 'Select device to be built'
         required: true
