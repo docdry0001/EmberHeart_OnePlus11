@@ -992,7 +992,7 @@ runs:
 
         echo "Build stats collected ✅"
         echo "::endgroup::"
-
+        echo "SUSVER=disable"
     - name: Create Kernel ZIP
       id: create_zip
       shell: bash
