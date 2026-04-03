@@ -366,12 +366,15 @@ runs:
 
         export PATH="${CLANG_BIN_PATH}:$PATH" 
         export PATH="/usr/lib/ccache:$PATH"
-
+        
         MAKE_FLAGS+=(
           LLVM=1
           LLVM_IAS=1
           ARCH=arm64
           SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
           LD=ld.lld
           HOSTLD=ld.lld
           AR=llvm-ar
@@ -383,7 +386,7 @@ runs:
           STRIP=llvm-strip
           HOSTCC=clang
           HOSTCXX=clang++
-          CC="ccache clang"
+          CC=clang
         )
 
         OUT=out
