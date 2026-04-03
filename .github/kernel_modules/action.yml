@@ -356,18 +356,28 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
 
-    - name: Build Kernel Modules 
+    - name: Build Kernel Modules
       shell: bash
       run: |
         set -euo pipefail
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
-
-        export PATH="${CLANG_BIN_PATH}:$PATH" 
+    
         export PATH="/usr/lib/ccache:$PATH"
-        
-        MAKE_FLAGS+=(
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+    
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export LLVM=1
+        export LLVM_IAS=1
+        export CLANG_TRIPLE=aarch64-linux-gnu-
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+    
+        "$CLANG_BIN_PATH/clang" --version | head -n1
+    
+        MAKE_FLAGS=(
           LLVM=1
           LLVM_IAS=1
           ARCH=arm64
@@ -384,81 +394,87 @@ runs:
           DEPMOD=depmod
           DTC=dtc
           STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC=clang
+          HOSTCC="$CLANG_BIN_PATH/clang"
+          HOSTCXX="$CLANG_BIN_PATH/clang++"
+          CC="$CLANG_BIN_PATH/clang"
         )
-
+    
         OUT=out
         INSTALL_MOD_PATH="$MSM/out"
         mkdir -p "$OUT"
+    
+        make "${MAKE_FLAGS[@]}" O="$OUT" mrproper
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-        
-        # Thin LTO
+    
         ./scripts/config --file "$OUT/.config" \
-            --enable CONFIG_LTO_CLANG_THIN \
-            --enable CONFIG_LTO_CLANG \
-            --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
-            --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
-
+          --enable CONFIG_LTO_CLANG_THIN \
+          --enable CONFIG_LTO_CLANG \
+          --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
+          --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+    
         echo "Building kernel modules..."
-        make "${MAKE_FLAGS[@]}" O=$OUT olddefconfig
-        make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" modules
-        make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-
+        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+    
         cd "$KERNEL_PLATFORM"
-
+    
         MAKE_FLAGS+=(
-          KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel"
+          KERNEL_SRC="$KERNEL_PLATFORM/msm-kernel"
         )
-        # OPLUS ext modules list
+    
         EXT_OPLUS=($(cat "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"))
-
-        OPLUS_FLAGS+=(
-            CHIPSET_COMPANY=QCOM
-            OPLUS_VND_BUILD_PLATFORM="$SOC"
+    
+        OPLUS_FLAGS=(
+          CHIPSET_COMPANY=QCOM
+          OPLUS_VND_BUILD_PLATFORM="$SOC"
         )
-        # OPLUS ext modules
+    
         for MODULE in "${EXT_OPLUS[@]}"; do
-            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}"
-            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
+          make -C "$MODULE" M="../$MODULE" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"
+          make -C "$MODULE" M="../$MODULE" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
         done
-
-        # QCOM ext modules
-        EXT_QCOM+=(
-            ../vendor/qcom/opensource/mmrm-driver
-            ../vendor/qcom/opensource/mm-drivers/hw_fence
-            ../vendor/qcom/opensource/mm-drivers/sync_fence
-            ../vendor/qcom/opensource/mm-drivers/msm_ext_display
-            ../vendor/qcom/opensource/securemsm-kernel
-            ../vendor/qcom/opensource/display-drivers/msm
-            ../vendor/qcom/opensource/audio-kernel
-            ../vendor/qcom/opensource/camera-kernel
-            ../vendor/oplus/kernel/explorer
-            ../vendor/qcom/opensource/video-driver
-            ../vendor/qcom/opensource/graphics-kernel
-            ../vendor/qcom/opensource/dataipa/drivers/platform/msm
-            ../vendor/qcom/opensource/datarmnet/core
-            ../vendor/qcom/opensource/datarmnet-ext/aps
-            ../vendor/qcom/opensource/datarmnet-ext/offload
-            ../vendor/qcom/opensource/datarmnet-ext/shs
-            ../vendor/qcom/opensource/datarmnet-ext/sch
-            ../vendor/qcom/opensource/datarmnet-ext/perf
-            ../vendor/qcom/opensource/datarmnet-ext/perf_tether
-            ../vendor/qcom/opensource/datarmnet-ext/wlan
-            ../vendor/qcom/opensource/eva-kernel
-            ../vendor/qcom/opensource/wlan/platform
-            ../vendor/qcom/opensource/bt-kernel
-            ../vendor/nxp/opensource/driver
-            ../vendor/st/opensource/driver
-            ../vendor/st/opensource/eSE-driver
-            ../vendor/qcom/opensource/wlan/qcacld-3.0
+    
+        EXT_QCOM=(
+          ../vendor/qcom/opensource/mmrm-driver
+          ../vendor/qcom/opensource/mm-drivers/hw_fence
+          ../vendor/qcom/opensource/mm-drivers/sync_fence
+          ../vendor/qcom/opensource/mm-drivers/msm_ext_display
+          ../vendor/qcom/opensource/securemsm-kernel
+          ../vendor/qcom/opensource/display-drivers/msm
+          ../vendor/qcom/opensource/audio-kernel
+          ../vendor/qcom/opensource/camera-kernel
+          ../vendor/oplus/kernel/explorer
+          ../vendor/qcom/opensource/video-driver
+          ../vendor/qcom/opensource/graphics-kernel
+          ../vendor/qcom/opensource/dataipa/drivers/platform/msm
+          ../vendor/qcom/opensource/datarmnet/core
+          ../vendor/qcom/opensource/datarmnet-ext/aps
+          ../vendor/qcom/opensource/datarmnet-ext/offload
+          ../vendor/qcom/opensource/datarmnet-ext/shs
+          ../vendor/qcom/opensource/datarmnet-ext/sch
+          ../vendor/qcom/opensource/datarmnet-ext/perf
+          ../vendor/qcom/opensource/datarmnet-ext/perf_tether
+          ../vendor/qcom/opensource/datarmnet-ext/wlan
+          ../vendor/qcom/opensource/eva-kernel
+          ../vendor/qcom/opensource/wlan/platform
+          ../vendor/qcom/opensource/bt-kernel
+          ../vendor/nxp/opensource/driver
+          ../vendor/st/opensource/driver
+          ../vendor/st/opensource/eSE-driver
+          ../vendor/qcom/opensource/wlan/qcacld-3.0
         )
-
+    
         for MODULE in "${EXT_QCOM[@]}"; do
-            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" modules
-            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
+          make -C "$MODULE" M="../$MODULE" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" modules
+          make -C "$MODULE" M="../$MODULE" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
         done
+            )
+    
+            for MODULE in "${EXT_QCOM[@]}"; do
+                make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" modules
+                make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
+            done
 
     - name: Filter modules
       shell: bash
