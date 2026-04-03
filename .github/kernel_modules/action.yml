@@ -310,14 +310,14 @@ runs:
             patch -p1 < "$patch_file"
         done
 
-    - name: Add memkernel module
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM"
-        curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
+    #- name: Add memkernel module
+     # shell: bash
+    #  run: |
+      #  set -euo pipefail
+      #  KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+       # MSM="$KERNEL_PATH/msm-kernel"
+       # cd "$MSM"
+        # curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
 
     - name: Add rtw88 modules
       shell: bash
