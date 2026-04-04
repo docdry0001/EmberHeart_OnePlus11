@@ -308,17 +308,17 @@ runs:
         set -euo pipefail
         cd "$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
         cat > /tmp/vmscan_fix.patch << 'EOF'
---- a/mm/vmscan.c
-+++ b/mm/vmscan.c
-@@ -2760,6 +2760,7 @@ static void shrink_node(pg_data_t *pgdat, struct scan_control *sc)
- {
- 	struct reclaim_state *reclaim_state = current->reclaim_state;
- 	unsigned long nr_reclaimed, nr_scanned;
-+	bool scan_adjusted = false;
- 	struct lruvec *target_lruvec;
- 	bool reclaimable = false;
- 	unsigned long file;
-EOF
+        --- a/mm/vmscan.c
+        +++ b/mm/vmscan.c
+        @@ -2760,6 +2760,7 @@ static void shrink_node(pg_data_t *pgdat, struct scan_control *sc)
+         {
+         	struct reclaim_state *reclaim_state = current->reclaim_state;
+         	unsigned long nr_reclaimed, nr_scanned;
+        +	bool scan_adjusted = false;
+         	struct lruvec *target_lruvec;
+         	bool reclaimable = false;
+         	unsigned long file;
+        EOF
         patch -p1 < /tmp/vmscan_fix.patch
         echo "Patch applied successfully"
         
