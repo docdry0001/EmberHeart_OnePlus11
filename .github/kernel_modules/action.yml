@@ -297,18 +297,18 @@ runs:
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
-    - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'kalma'
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "Applying kernel patches to msm kernel from my repo..."
-        cd "$CONFIG/kernel_platform/msm-kernel"
+  #  - name: Add my kernel patches to msm kernel
+    #  if: env.SOC == 'kalama'
+    #  shell: bash
+    #  run: |
+      #  set -euo pipefail
+      #  echo "Applying kernel patches to msm kernel from my repo..."
+      #  cd "$CONFIG/kernel_platform/msm-kernel"
 
-        for patch_file in ../../../my_patches/kernel_patches/op11/msm/*.patch; do
-            echo "Applying patch: $patch_file"
-            patch -p1 < "$patch_file"
-        done
+      #  for patch_file in ../../../my_patches/kernel_patches/op11/msm/*.patch; do
+          #  echo "Applying patch: $patch_file"
+          #  patch -p1 < "$patch_file"
+      #  done
 
     #- name: Add memkernel module
      # shell: bash
