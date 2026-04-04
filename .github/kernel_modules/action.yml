@@ -217,13 +217,6 @@ runs:
         job-summary: 'CCache stats'
         evict-old-files: 'job'
 
-    - name: Clone kernel patches for msm kernel
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "Cloning kernel patches for msm kernel..."
-        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
-
     - name: Clean Up ABI Protected Exports
       shell: bash
       run: |
