@@ -13,7 +13,7 @@ inputs:
     required: true
     type: string
     default: ""
- susfs_commit_hash_or_branch:
+  susfs_commit_hash_or_branch:
     required: false
     type: string
     default: "dev"
