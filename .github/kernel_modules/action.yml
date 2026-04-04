@@ -297,28 +297,6 @@ runs:
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
-  #  - name: Add my kernel patches to msm kernel
-    #  if: env.SOC == 'kalama'
-    #  shell: bash
-    #  run: |
-      #  set -euo pipefail
-      #  echo "Applying kernel patches to msm kernel from my repo..."
-      #  cd "$CONFIG/kernel_platform/msm-kernel"
-
-      #  for patch_file in ../../../my_patches/kernel_patches/op11/msm/*.patch; do
-          #  echo "Applying patch: $patch_file"
-          #  patch -p1 < "$patch_file"
-      #  done
-
-    #- name: Add memkernel module
-     # shell: bash
-    #  run: |
-      #  set -euo pipefail
-      #  KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-       # MSM="$KERNEL_PATH/msm-kernel"
-       # cd "$MSM"
-        # curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
-
     - name: Add rtw88 modules
       shell: bash
       run: |
@@ -355,14 +333,6 @@ runs:
         CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
-   
-    - name: Revert broken vmscan patch for clean modules build
-      shell: bash
-      run: |
-        set -euo pipefail
-        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-        cd "$MSM"
-        sed -i '/scan_adjusted/d' mm/vmscan.c
         
     - name: Build Kernel Modules
       shell: bash
