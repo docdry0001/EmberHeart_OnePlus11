@@ -440,13 +440,7 @@ runs:
           make -C "$MODULE" M="../$MODULE" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" modules
           make -C "$MODULE" M="../$MODULE" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
         done
-            )
     
-            for MODULE in "${EXT_QCOM[@]}"; do
-                make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" modules
-                make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
-            done
-
     - name: Filter modules
       shell: bash
       run: |
