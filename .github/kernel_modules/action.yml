@@ -375,28 +375,54 @@ runs:
         echo "[+] Verifying thermal fix..."
         grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
 
-    - name: FIX binder mmget_still_valid header (waipio)
+    - name: FIX binder mmget_still_valid compat (waipio)
       if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
         FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
 
-        echo "[+] Cleaning previous broken binder header injections..."
+        echo "[+] Cleaning previous broken binder edits..."
         sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
         sed -i '/^#include <linux\/sched\/mm.h>$/d' "$FILE"
-
-        echo "[+] Restoring function name..."
         sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE"
+        sed -i 's/!mmget(/!mmget_still_valid(/g' "$FILE"
         sed -i 's/mmget(/mmget_still_valid(/g' "$FILE"
 
-        echo "[+] Inserting correct header after existing includes..."
-        sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
-
-        echo "[+] Verifying binder fix..."
-        grep -n '^#define pr_fmt' "$FILE" | head -5
-        grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
-        grep -n 'mmget_still_valid' "$FILE" | head -10      
+        echo "[+] Injecting local compat shim after includes..."
+        python3 - <<'PY'
+        import os
+        from pathlib import Path
+        
+        p = Path(os.environ["FILE"])
+        text = p.read_text()
+        
+        shim = (
+            "\n#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n"
+            "#define HAVE_MMGET_STILL_VALID_COMPAT\n"
+            "static inline bool mmget_still_valid(struct mm_struct *mm)\n"
+            "{\n"
+            "\treturn likely(!mm->core_state);\n"
+            "}\n"
+            "#endif\n"
+        )
+        
+        if "static inline bool mmget_still_valid(struct mm_struct *mm)" not in text:
+            lines = text.splitlines()
+            last_include = -1
+            for i, line in enumerate(lines):
+                if line.startswith("#include "):
+                    last_include = i
+            if last_include == -1:
+                raise SystemExit("No include block found in binder_alloc.c")
+            lines.insert(last_include + 1, shim.rstrip("\n"))
+            text = "\n".join(lines) + "\n"
+        
+        p.write_text(text)
+        PY
+        
+                echo "[+] Verifying binder fix..."
+                grep -n "mmget_still_valid" "$FILE" | head -20
       
     - name: Add memkernel module
       shell: bash
