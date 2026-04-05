@@ -309,6 +309,13 @@ runs:
             echo "Applying patch: $patch_file"
             patch -p1 < "$patch_file"
         done
+    - name: Fix scan_adjusted undeclared in msm-kernel (waipio)
+      if: env.SOC == 'waipio'
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "$CONFIG/kernel_platform/msm-kernel"
+        patch -p1 < "$GITHUB_WORKSPACE/patches/waipio/fix-scan-adjusted.patch"
 
     - name: Add memkernel module
       shell: bash
