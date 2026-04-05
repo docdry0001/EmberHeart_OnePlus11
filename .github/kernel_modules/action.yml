@@ -340,29 +340,40 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
+        export FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
 
         echo "[+] Patching $FILE"
 
-        # 1) Try proper header include first
-        if ! grep -q '#include <linux/mm.h>' "$FILE"; then
-          sed -i '/#include <linux\/slab.h>/a #include <linux/mm.h>' "$FILE"
-        fi
+        python3 - <<'PY'
+        import os
+        from pathlib import Path
 
-        # 2) Fallback compatibility shim if kvzalloc/kvfree still lack declarations
-        if ! grep -q 'kvzalloc(size, flags)' "$FILE"; then
-          sed -i '/#include <linux\/mm.h>/a \
-#ifndef kvzalloc\
-#define kvzalloc(size, flags) kzalloc((size), (flags))\
-#endif\
-#ifndef kvfree\
-#define kvfree(ptr) kfree((ptr))\
-#endif' "$FILE"
-        fi
+        path = Path(os.environ["FILE"])
+        text = path.read_text()
+
+        if "#include <linux/mm.h>" not in text and "#include <linux/slab.h>" in text:
+            text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>\n#include <linux/mm.h>", 1)
+
+        if "#define kvzalloc(size, flags)" not in text:
+            shim = (
+                "\n#ifndef kvzalloc\n"
+                "#define kvzalloc(size, flags) kzalloc((size), (flags))\n"
+                "#endif\n"
+                "#ifndef kvfree\n"
+                "#define kvfree(ptr) kfree((ptr))\n"
+                "#endif\n"
+            )
+
+            if "#include <linux/mm.h>" in text:
+                text = text.replace("#include <linux/mm.h>", "#include <linux/mm.h>" + shim, 1)
+            elif "#include <linux/slab.h>" in text:
+                text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>" + shim, 1)
+
+        path.write_text(text)
+        PY
 
         echo "[+] Verifying thermal fix..."
-        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20
-
+        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
       
     - name: Add memkernel module
       shell: bash
