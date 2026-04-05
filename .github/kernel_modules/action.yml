@@ -298,19 +298,26 @@ runs:
           --module CONFIG_CAN_SLCAN
 
     - name: Add my kernel patches to msm kernel
+    - name: Add my kernel patches to msm kernel
       if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
         echo "Applying kernel patches to msm kernel from my repo..."
         cd "$CONFIG/kernel_platform/msm-kernel"
-
-        for patch_file in ../../../my_patches/kernel_patches/op11/msm/*.patch; do
+    
+        shopt -s nullglob
+        PATCHES=(../../../my_patches/kernel_patches/op11/msm/*.patch)
+    
+        if [ ${#PATCHES[@]} -eq 0 ]; then
+          echo "[!] No OP11 msm patches found, skipping."
+        else
+          for patch_file in "${PATCHES[@]}"; do
             echo "Applying patch: $patch_file"
             patch -p1 < "$patch_file"
-        done
-        
-    - name: FIX vmscan scan_adjusted (waipio)
+          done
+        fi
+    
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
       shell: bash
@@ -318,21 +325,28 @@ runs:
         set -euo pipefail
         cd "$CONFIG/kernel_platform/msm-kernel/mm"
     
-        echo "[+] Injecting scan_adjusted into vmscan.c..."
+        echo "[+] Checking whether scan_adjusted is already declared..."
+        if grep -qE '^[[:space:]]*bool[[:space:]]+scan_adjusted([[:space:]]*=[[:space:]]*false)?[[:space:]]*;' vmscan.c; then
+          echo "[=] scan_adjusted is already declared, skipping injection."
+        else
+          echo "[+] Injecting scan_adjusted into shrink_lruvec()..."
     
-        awk '
-        /shrink_lruvec[[:space:]]*\(/ { flag=1 }
-        flag && /{/ {
-            print
-            print "\tbool scan_adjusted = false;"
-            flag=0
-            next
-        }
-        { print }
-        ' vmscan.c > vmscan.c.tmp && mv vmscan.c.tmp vmscan.c
+          awk '
+          /shrink_lruvec[[:space:]]*\(/ { infunc=1 }
+          infunc && /{/ {
+              print
+              print "\tbool scan_adjusted = false;"
+              infunc=0
+              next
+          }
+          { print }
+          ' vmscan.c > vmscan.c.tmp && mv vmscan.c.tmp vmscan.c
+        fi
     
         echo "[+] Verifying insertion..."
-        grep -n "scan_adjusted" vmscan.c | head -20    
+        grep -n "scan_adjusted" vmscan.c | head -20     
+    
+      
     - name: Add memkernel module
       shell: bash
       run: |
