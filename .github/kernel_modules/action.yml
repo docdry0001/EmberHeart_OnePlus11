@@ -374,6 +374,20 @@ runs:
 
         echo "[+] Verifying thermal fix..."
         grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
+
+    - name: FIX binder mmget_still_valid (waipio)
+      if: env.SOC == 'waipio'
+      shell: bash
+      run: |
+        set -euo pipefail
+        FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
+
+        echo "[+] Patching binder_alloc.c..."
+
+        sed -i 's/mmget_still_valid/mmget/g' "$FILE"
+
+        echo "[+] Verifying..."
+        grep -n "mmget" "$FILE" | head -20
       
     - name: Add memkernel module
       shell: bash
