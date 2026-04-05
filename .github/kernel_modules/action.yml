@@ -335,6 +335,34 @@ runs:
         grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20
         grep -n "scan_adjusted" vmscan.c | head -20
 
+    - name: FIX thermal kvzalloc kvfree (waipio)
+      if: env.SOC == 'waipio'
+      shell: bash
+      run: |
+        set -euo pipefail
+        FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
+
+        echo "[+] Patching $FILE"
+
+        # 1) Try proper header include first
+        if ! grep -q '#include <linux/mm.h>' "$FILE"; then
+          sed -i '/#include <linux\/slab.h>/a #include <linux/mm.h>' "$FILE"
+        fi
+
+        # 2) Fallback compatibility shim if kvzalloc/kvfree still lack declarations
+        if ! grep -q 'kvzalloc(size, flags)' "$FILE"; then
+          sed -i '/#include <linux\/mm.h>/a \
+#ifndef kvzalloc\
+#define kvzalloc(size, flags) kzalloc((size), (flags))\
+#endif\
+#ifndef kvfree\
+#define kvfree(ptr) kfree((ptr))\
+#endif' "$FILE"
+        fi
+
+        echo "[+] Verifying thermal fix..."
+        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20
+
       
     - name: Add memkernel module
       shell: bash
