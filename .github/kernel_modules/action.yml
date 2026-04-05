@@ -375,41 +375,28 @@ runs:
         echo "[+] Verifying thermal fix..."
         grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
 
-    - name: FIX binder mmget_still_valid compat (waipio)
+    
+    - name: FIX binder mm headers (waipio)
       if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
         FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
 
-        echo "[+] Cleaning previous broken binder edits..."
+        echo "[+] Cleaning broken binder edits..."
+        sed -i '/HAVE_MMGET_STILL_VALID_COMPAT/,+6d' "$FILE"
+        sed -i '/static inline bool mmget_still_valid(struct mm_struct \*mm)/,+3d' "$FILE"
         sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
         sed -i '/^#include <linux\/sched\/mm.h>$/d' "$FILE"
         sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE"
-        sed -i 's/!mmget(/!mmget_still_valid(/g' "$FILE"
-        sed -i 's/mmget(/mmget_still_valid(/g' "$FILE"
 
-        echo "[+] Adding compat define near file top..."
-        grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || sed -i '12i \
-          #ifndef HAVE_MMGET_STILL_VALID_COMPAT\
-          #define HAVE_MMGET_STILL_VALID_COMPAT\
-          static inline bool mmget_still_valid(struct mm_struct *mm)\
-          {\
-          \treturn likely(!mm->core_state);\
-          }\
-          #endif' "$FILE"
+        echo "[+] Inserting correct header..."
+        sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
 
-        echo "[+] Verifying binder fix..."
-        grep -n "mmget_still_valid" "$FILE" | head -20
-    - name: Add memkernel module
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM"
-        curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
-
+        echo "[+] Verifying binder header fix..."
+        grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
+        grep -n 'mmget_still_valid' "$FILE" | head -10
+    
     - name: Add rtw88 modules
       shell: bash
       run: |
