@@ -572,19 +572,28 @@ runs:
             ../vendor/qcom/opensource/wlan/qcacld-3.0
         )
 
-        for MODULE in "${EXT_QCOM[@]}"; do
-            if [ ! -d "$MODULE" ]; then
-              echo "Skipping missing module dir: $MODULE"
-              continue
-            fi
+        for MODULE in "${EXT_OPLUS[@]}"; do
+          echo "==== Processing OPLUS module: $MODULE ===="
 
-            if [ ! -f "$MODULE/Makefile" ] && [ ! -f "$MODULE/Kbuild" ]; then
-              echo "Skipping module without Makefile/Kbuild: $MODULE"
-            continue
-           fi
+          if [ ! -d "$MODULE" ]; then
+           echo "Skipping missing module dir: $MODULE"
+        continue
+        fi
 
-           make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" modules
-           make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
+        if [ ! -f "$MODULE/Makefile" ] && [ ! -f "$MODULE/Kbuild" ]; then
+        echo "Skipping module without Makefile/Kbuild: $MODULE"
+        continue
+        fi
+
+        if ! make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}"; then
+           echo "Build failed, skipping OPLUS module: $MODULE"
+        continue
+        fi
+
+        if ! make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install; then
+           echo "Install failed, skipping OPLUS module: $MODULE"
+        continue
+        fi
         done
 
     - name: Filter modules
