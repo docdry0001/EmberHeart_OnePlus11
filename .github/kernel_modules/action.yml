@@ -310,14 +310,16 @@ runs:
             patch -p1 < "$patch_file"
         done
         
-    - name: Fix scan_adjusted undeclared in msm-kernel (waipio)
+    - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
-      shell: bash
       run: |
-        set -euo pipefail
-        cd "$CONFIG/kernel_platform/msm-kernel"
-        patch -p1 < "$GITHUB_WORKSPACE/patches/waipio/fix-scan-adjusted.patch"
-
+        cd $CONFIG/kernel_platform/msm-kernel/mm
+    
+        echo "[+] Patching vmscan.c..."
+    
+        # insert declaration inside shrink_lruvec
+        sed -i '/shrink_lruvec(/,/^{/ s/{/{\n\tbool scan_adjusted = false;/' vmscan.c
+        
     - name: Add memkernel module
       shell: bash
       run: |
