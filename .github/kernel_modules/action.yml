@@ -375,19 +375,41 @@ runs:
         echo "[+] Verifying thermal fix..."
         grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
 
-    - name: FIX binder mmget_still_valid (waipio)
+    - name: FIX binder mmget_still_valid include (waipio)
       if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
         FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
 
-        echo "[+] Patching binder_alloc.c..."
+        echo "[+] Restoring mmget_still_valid() in binder_alloc.c..."
+        sed -i 's/mmget(/mmget_still_valid(/g' "$FILE"
 
-        sed -i 's/mmget_still_valid/mmget/g' "$FILE"
-
-        echo "[+] Verifying..."
-        grep -n "mmget" "$FILE" | head -20
+        echo "[+] Ensuring linux/mm.h is included..."
+        if ! grep -q '^#include <linux/mm.h>' "$FILE"; then
+          python3 - <<'PY'
+            import os
+            from pathlib import Path
+            
+            p = Path(os.environ["FILE"])
+            text = p.read_text()
+            
+            if "#include <linux/mm.h>" not in text:
+                lines = text.splitlines()
+                insert_at = 0
+                for i, line in enumerate(lines):
+                    if line.startswith("#include "):
+                        insert_at = i + 1
+                lines.insert(insert_at, "#include <linux/mm.h>")
+                text = "\n".join(lines) + "\n"
+            
+            p.write_text(text)
+            PY
+                    fi
+            
+        echo "[+] Verifying binder fix..."
+        grep -n "mmget_still_valid" "$FILE" | head -10
+        grep -n "^#include <linux/mm.h>" "$FILE" | head -10      
       
     - name: Add memkernel module
       shell: bash
