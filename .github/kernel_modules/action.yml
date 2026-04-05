@@ -312,14 +312,26 @@ runs:
         
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
+      shell: bash
       run: |
-        cd $CONFIG/kernel_platform/msm-kernel/mm
+        cd "$CONFIG/kernel_platform/msm-kernel/mm"
     
-        echo "[+] Patching vmscan.c..."
+        echo "[+] Injecting scan_adjusted into vmscan.c..."
     
-        # insert declaration inside shrink_lruvec
-        sed -i '/shrink_lruvec(/,/^{/ s/{/{\n\tbool scan_adjusted = false;/' vmscan.c
-        
+        awk '
+        /shrink_lruvec[[:space:]]*\(/ { flag=1 }
+        flag && /{/ {
+            print
+            print "\tbool scan_adjusted = false;"
+            flag=0
+            next
+        }
+        { print }
+        ' vmscan.c > vmscan.c.tmp && mv vmscan.c.tmp vmscan.c
+    
+        echo "[+] Verifying insertion..."
+        grep -n "scan_adjusted" vmscan.c | head
+    
     - name: Add memkernel module
       shell: bash
       run: |
