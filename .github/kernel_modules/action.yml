@@ -309,6 +309,7 @@ runs:
             echo "Applying patch: $patch_file"
             patch -p1 < "$patch_file"
         done
+        
     - name: Fix scan_adjusted undeclared in msm-kernel (waipio)
       if: env.SOC == 'waipio'
       shell: bash
