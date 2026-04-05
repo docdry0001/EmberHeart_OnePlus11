@@ -375,23 +375,28 @@ runs:
         echo "[+] Verifying thermal fix..."
         grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
 
-    - name: FIX binder mmget_still_valid include (waipio)
+    - name: FIX binder mmget_still_valid header (waipio)
       if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
         FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
 
-        echo "[+] Cleaning broken binder replacements..."
+        echo "[+] Cleaning previous broken binder header injections..."
+        sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
+        sed -i '/^#include <linux\/sched\/mm.h>$/d' "$FILE"
+
+        echo "[+] Restoring function name..."
         sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE"
         sed -i 's/mmget(/mmget_still_valid(/g' "$FILE"
 
-        echo "[+] Ensuring linux/mm.h is included..."
-        grep -q '^#include <linux/mm.h>' "$FILE" || sed -i '2i #include <linux/mm.h>' "$FILE"
+        echo "[+] Inserting correct header after existing includes..."
+        sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
 
         echo "[+] Verifying binder fix..."
-        grep -n "mmget_still_valid" "$FILE" | head -10
-        grep -n "^#include <linux/mm.h>" "$FILE" | head -10    
+        grep -n '^#define pr_fmt' "$FILE" | head -5
+        grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
+        grep -n 'mmget_still_valid' "$FILE" | head -10      
       
     - name: Add memkernel module
       shell: bash
