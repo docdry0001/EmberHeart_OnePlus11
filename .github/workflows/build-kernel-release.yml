@@ -151,7 +151,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
+          
+      - name: Fix missing Oplus modules list
+        run: |
+          mkdir -p OP11R/kernel_platform/oplus/config
+          touch OP11R/kernel_platform/oplus/config/modules.ext.5.10.oplus
+          echo "Fixed missing modules.ext.5.10.oplus"
+          
       - name: Build Kernel Modules
         uses: ./.github/kernel_modules
         with:
