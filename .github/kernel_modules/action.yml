@@ -513,11 +513,34 @@ runs:
             OPLUS_VND_BUILD_PLATFORM="$SOC"
         )
         # OPLUS ext modules
-        for MODULE in "${EXT_OPLUS[@]}"; do
-            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}"
-            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
+        MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
+        
+        for MODULE in "${EXT_QCOM[@]}"; do
+            if [ ! -d "$MODULE" ]; then
+                echo "Skipping missing module dir: $MODULE"
+                continue
+            fi
+        
+            if [ ! -f "$MODULE/Makefile" ] && [ ! -f "$MODULE/Kbuild" ]; then
+                echo "Skipping module without Makefile/Kbuild: $MODULE"
+                continue
+            fi
+        
+            EXTRA_SYMS=()
+        
+            if [[ "$MODULE" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
+                EXTRA_SYMS+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
+                echo "Using mmrm Module.symvers for $MODULE"
+            fi
+        
+            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) \
+                "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" \
+                "${EXTRA_SYMS[@]}" modules
+        
+            make -C "$MODULE" M="../$MODULE" -j$(nproc --all) \
+                "${MAKE_FLAGS[@]}" O=$MSM/out "${OPLUS_FLAGS[@]}" \
+                "${EXTRA_SYMS[@]}" INSTALL_MOD_PATH=$INSTALL_MOD_PATH modules_install
         done
-
         # QCOM ext modules
         EXT_QCOM+=(
             ../vendor/qcom/opensource/mmrm-driver
