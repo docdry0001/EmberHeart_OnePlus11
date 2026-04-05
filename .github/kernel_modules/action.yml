@@ -488,18 +488,20 @@ runs:
         make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
         cd "$KERNEL_PLATFORM"
-      # ===== FIX START =====
-      # Fix missing OPLUS modules list
-         mkdir -p "$KERNEL_PLATFORM/oplus/config"
-         touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
-
-      # Fix missing mmrm-driver test Makefile
-         mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
-         cat > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile" <<'EOF'
-         obj-m :=
-         EOF
-
-       # ===== FIX END =====
+     
+        # ===== FIX START =====
+        # Fix missing OPLUS modules list
+        mkdir -p "$KERNEL_PLATFORM/oplus/config"
+        touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
+  
+        # Fix missing mmrm-driver test Makefile
+        mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
+        cat > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile" <<'EOF'
+        obj-m :=
+        EOF
+        
+      # ===== FIX END =====
+      
         MAKE_FLAGS+=(
           KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel"
         )
