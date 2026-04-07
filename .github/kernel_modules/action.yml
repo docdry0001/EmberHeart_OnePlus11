@@ -1,4 +1,4 @@
-name: Build OnePlus external Wi-Fi modules only
+name: Build OnePlus kernel modules
 
 permissions:
   contents: write
@@ -27,6 +27,7 @@ runs:
         set -euo pipefail
         echo '${{ inputs.op_config_json }}' > /tmp/config.json
         jq -r 'to_entries[] | "\(.key | ascii_upcase)=\(.value)"' /tmp/config.json >> "$GITHUB_ENV"
+        echo "Parsed config:"
         jq '.' /tmp/config.json
 
     - name: Set Manifest
@@ -35,16 +36,95 @@ runs:
         set -euo pipefail
         echo "MANIFEST=$MANIFEST_${{ inputs.manifest }}_MODULES" >> "$GITHUB_ENV"
 
+    - name: Validate Inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Validate inputs"
+        model="$MODEL"
+        soc="$SOC"
+        branch="$BRANCH"
+        manifest="$MANIFEST"
+        optimize='${{ inputs.optimize_level }}'
+
+        [[ -n "$model" ]] || { echo "Input 'model' cannot be empty"; exit 1; }
+        [[ -n "$soc" ]] || { echo "Input 'soc' cannot be empty"; exit 1; }
+        [[ -n "$branch" ]] || { echo "Input 'branch' cannot be empty"; exit 1; }
+        [[ -n "$manifest" ]] || { echo "Input 'manifest' cannot be empty"; exit 1; }
+
+        if ! [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]]; then
+          echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"
+          exit 1
+        fi
+
+        if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+          echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"
+          exit 1
+        fi
+
+        if [[ "$manifest" == http*://* ]]; then
+          if ! [[ "$manifest" =~ ^https:// ]]; then
+            echo "Manifest URL must be HTTPS"
+            exit 1
+          fi
+          if ! [[ "$manifest" =~ \.xml($|\?) ]]; then
+            echo "Manifest URL should point to an XML file (.xml)"
+            exit 1
+          fi
+        else
+          if ! [[ "$manifest" =~ \.xml$ ]]; then
+            echo "Manifest filename must end with .xml"
+            exit 1
+          fi
+          if [[ "$manifest" =~ [[:space:]] ]]; then
+            echo "Manifest filename cannot contain spaces"
+            exit 1
+          fi
+        fi
+
+        case "$optimize" in
+          O2|O3) ;;
+          *)
+            echo "optimize_level must be O2 or O3; got '$optimize'"
+            exit 1
+            ;;
+        esac
+
+        echo "Input validation OK."
+        echo "::endgroup::"
+
+    - name: Aggressive cleanup
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Cleanup space"
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/share/swift
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /usr/local/julia*
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/local/share/chromium
+        sudo rm -rf /opt/microsoft /opt/google
+        sudo rm -rf /opt/az
+        sudo rm -rf /usr/local/share/powershell
+        sudo rm -rf /opt/hostedtoolcache
+        docker system prune -af || true
+        docker builder prune -af || true
+        df -h
+        echo "::endgroup::"
+
     - name: Install Minimal Dependencies
       shell: bash
       run: |
         set -euo pipefail
+        echo "::group::Install deps"
         sudo apt-get -o Acquire::Retries=3 update -qq
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           git curl ca-certificates build-essential clang lld flex bison \
           libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache jq
+          libxml2-utils rsync unzip dwarves file python3 ccache
         sudo apt-get clean
+        echo "::endgroup::"
 
     - name: Setup Base Environment
       shell: bash
@@ -64,8 +144,10 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        echo "Creating folder for configuration: $CONFIG"
         mkdir -p "$CONFIG"
         cd "$CONFIG"
+        echo "Initializing and syncing kernel source..."
 
         if [[ "$MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
@@ -75,6 +157,7 @@ runs:
           "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
 
+        "$REPO" --version
         success=false
         for i in 1 2 3; do
           if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
@@ -82,7 +165,7 @@ runs:
             break
           fi
           echo "repo sync attempt $i failed; retrying..."
-          sleep 20
+          sleep 30
         done
         $success || { echo "repo sync failed after 3 attempts"; exit 1; }
 
@@ -93,37 +176,47 @@ runs:
         CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
         ARTIFACTS_DIR="$CONFIG_DIR/artifacts"
         mkdir -p "$ARTIFACTS_DIR"
-
         cd "$CONFIG_DIR/kernel_platform/msm-kernel"
-        VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
-        PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
-        SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
-        FULL_VERSION="$VERSION.$PATCHLEVEL.$SUBLEVEL"
 
         CONFIG_FILES=("build.config.common" "build.config.constants")
         BRANCH_LINE=""
         for f in "${CONFIG_FILES[@]}"; do
           if [ -f "$f" ]; then
             l=$(grep '^[[:space:]]*BRANCH=' "$f" || true)
-            if [ -n "$l" ]; then BRANCH_LINE="$l"; break; fi
+            if [ -n "$l" ]; then
+              BRANCH_LINE="$l"
+              break
+            fi
           fi
         done
 
-        if [ -n "$BRANCH_LINE" ]; then
-          BRANCH_VALUE="${BRANCH_LINE#*=}"
-          ANDROID_VERSION="${BRANCH_VALUE%-*}"
-        else
-          ANDROID_VERSION="android12"
+        if [ -z "$BRANCH_LINE" ]; then
+          echo "Error: No BRANCH= found"
+          exit 1
         fi
 
+        BRANCH_VALUE="${BRANCH_LINE#*=}"
+        ANDROID_VERSION="${BRANCH_VALUE%-*}"
+        if [ -z "$ANDROID_VERSION" ]; then
+          echo "Could not parse android version from BRANCH=$BRANCH_VALUE"
+          exit 1
+        fi
+
+        VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
+        PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
+        SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
+        FULL_VERSION="$VERSION.$PATCHLEVEL.$SUBLEVEL"
+
+        cd "$ARTIFACTS_DIR"
         echo "ANDROID_VER=$ANDROID_VERSION" >> "$GITHUB_ENV"
         echo "KERNEL_VER=$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
         echo "KERNEL_FULL_VER=$ANDROID_VERSION-$FULL_VERSION" >> "$GITHUB_ENV"
+        echo "SUSFS_KERNEL_BRANCH=gki-$ANDROID_VERSION-$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
 
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2.19
       with:
-        key: ${{ env.CONFIG }}-wifi-only-${{ env.KERNEL_FULL_VER }}
+        key: ${{ env.CONFIG }}-modules-${{ env.KERNEL_FULL_VER }}
         max-size: 5G
         append-timestamp: false
         create-symlink: true
@@ -136,8 +229,9 @@ runs:
         set -euo pipefail
         cd "$CONFIG/kernel_platform"
         rm -f msm-kernel/android/abi_gki_protected_exports_* || true
+        df -h
 
-    - name: Merge base defconfig
+    - name: Merge
       shell: bash
       run: |
         set -euo pipefail
@@ -149,14 +243,11 @@ runs:
         make ARCH=arm64 mrproper
         mkdir -p "$OUT"
 
-        ./scripts/kconfig/merge_config.sh -O "$OUT" -m \
-          arch/arm64/configs/gki_defconfig \
-          arch/arm64/configs/vendor/${SOC}_GKI.config
-
+        ./scripts/kconfig/merge_config.sh -O "$OUT" -m arch/arm64/configs/gki_defconfig arch/arm64/configs/vendor/${SOC}_GKI.config
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
-        rm -f "$OUT/.config"
+        rm "$OUT/.config"
 
-    - name: Enable external Wi-Fi oriented configs
+    - name: Add Wi-Fi drivers already present in kernel to be built as modules
       shell: bash
       run: |
         set -euo pipefail
@@ -164,71 +255,37 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
 
-        # Realtek
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK \
-          --module CONFIG_RTW88 \
-          --module CONFIG_RTW88_CORE \
-          --module CONFIG_RTW88_PCI \
-          --module CONFIG_RTW88_USB \
-          --module CONFIG_RTW88_SDIO \
-          --module CONFIG_RTW_8703B \
-          --module CONFIG_RTW_8723D \
-          --module CONFIG_RTW_8723DU \
-          --module CONFIG_RTW_8723DE \
-          --module CONFIG_RTW_8723DS \
-          --module CONFIG_RTW_8812A \
-          --module CONFIG_RTW_8812AU \
-          --module CONFIG_RTW_8812AE \
-          --module CONFIG_RTW_8814A \
-          --module CONFIG_RTW_8814AU \
-          --module CONFIG_RTW_8814AE \
-          --module CONFIG_RTW_8821A \
-          --module CONFIG_RTW_8821AU \
-          --module CONFIG_RTW_8821AE \
-          --module CONFIG_RTW_8821C \
-          --module CONFIG_RTW_8821CU \
-          --module CONFIG_RTW_8821CE \
-          --module CONFIG_RTW_8821CS \
-          --module CONFIG_RTW_8822B \
-          --module CONFIG_RTW_8822BU \
-          --module CONFIG_RTW_8822BE \
-          --module CONFIG_RTW_8822BS \
-          --module CONFIG_RTW_8822C \
-          --module CONFIG_RTW_8822CU \
-          --module CONFIG_RTW_8822CE \
-          --module CONFIG_RTW_8822CS
-
-        # Atheros / ath
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_ATH \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --enable CONFIG_WLAN_VENDOR_RALINK
+
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_ATH_COMMON \
           --module CONFIG_ATH9K \
           --module CONFIG_ATH9K_HW \
-          --module CONFIG_ATH9K_COMMON \
           --module CONFIG_ATH9K_HTC \
+          --module CONFIG_ATH9K_COMMON \
           --module CONFIG_ATH10K \
-          --module CONFIG_ATH10K_USB
+          --module CONFIG_ATH10K_USB \
+          --module CONFIG_ATH11K
 
-        # MediaTek / mt76
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT7601U \
           --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_USB \
           --module CONFIG_MT76x02_LIB \
           --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT76x2_COMMON \
           --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7601U \
           --module CONFIG_MT7603E \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
           --module CONFIG_MT7921E
 
-        # Ralink / rt2x00
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_RALINK \
           --module CONFIG_RT2X00 \
           --module CONFIG_RT2X00_LIB \
           --module CONFIG_RT2X00_LIB_FIRMWARE \
@@ -242,42 +299,45 @@ runs:
           --module CONFIG_RT2800USB_RT55XX \
           --module CONFIG_RT2800USB_UNKNOWN
 
-        # Shared bits
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211 \
           --module CONFIG_MAC80211_LEDS \
-          --module CONFIG_CFG80211 \
-          --module CONFIG_NL80211_TESTMODE
+          --module CONFIG_CAN_SLCAN
 
-    - name: Add rtw88 modules
+    - name: Fix binder mmget_still_valid compat (waipio)
+      if: env.SOC == 'waipio'
+      shell: bash
+      run: |
+        set -euo pipefail
+        FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
+
+        sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
+        sed -i '/HAVE_MMGET_STILL_VALID_COMPAT/,+5d' "$FILE"
+        sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE"
+
+        grep -q '^#include <linux/sched/mm.h>$' "$FILE" || \
+          sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
+
+        grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || \
+          perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$FILE"
+
+    - name: Add rtl8812au external driver
       shell: bash
       run: |
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
+        DRIVER_DIR="$KERNEL_PATH/external/rtl8812au"
 
-        mkdir -p "$MSM/drivers/net/wireless/realtek"
-        cd "$MSM/drivers/net/wireless/realtek"
+        rm -rf "$DRIVER_DIR"
+        mkdir -p "$KERNEL_PATH/external"
+        git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git "$DRIVER_DIR"
 
-        rm -rf rtw88
-        git clone --depth=1 https://github.com/lwfinger/rtw88.git rtw88
-
-        # Ensure realtek/Kconfig includes rtw88/Kconfig
-        if ! grep -q 'source "drivers/net/wireless/realtek/rtw88/Kconfig"' Kconfig; then
-          printf '\nsource "drivers/net/wireless/realtek/rtw88/Kconfig"\n' >> Kconfig
-        fi
-
-        # Ensure realtek/Makefile builds rtw88 as modules
-        if ! grep -q 'obj-\$(CONFIG_RTW88) += rtw88/' Makefile; then
-          printf '\nobj-$(CONFIG_RTW88) += rtw88/\n' >> Makefile
-        fi
-      
-    - name: Detect Clang
+    - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
         set -euo pipefail
         KP="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         CLANG_FOUND=false
+
         for base in "$KP/prebuilts" "$KP/prebuilts-master"; do
           [ -d "$base/clang/host/linux-x86" ] || continue
           latest=$(ls -d "$base"/clang/host/linux-x86/clang-r*/ 2>/dev/null | sort -V | tail -n1 || true)
@@ -290,12 +350,16 @@ runs:
         if ! $CLANG_FOUND && command -v clang >/dev/null 2>&1; then
           CLANG_BIN="$(dirname "$(command -v clang)")"
           CLANG_FOUND=true
+          echo "Using system clang."
         fi
 
         $CLANG_FOUND || { echo "No clang toolchain found"; exit 1; }
         echo "CLANG_BIN_PATH=$CLANG_BIN" >> "$GITHUB_ENV"
+        CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
+        echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
+        echo "Detected Clang: $CLANG_VERSION"
 
-    - name: Build Wi-Fi modules only
+    - name: Build Kernel Modules
       shell: bash
       run: |
         set -euo pipefail
@@ -340,13 +404,26 @@ runs:
           --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
           --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
 
+        echo "Building in-tree kernel modules..."
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
-
-        # Build all in-tree modules once, then filter to Wi-Fi related modules only
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
-    - name: Collect Wi-Fi modules only
+        echo "Building external rtl8812au..."
+        RTL8812AU_DIR="$KERNEL_PLATFORM/external/rtl8812au"
+        if [ -d "$RTL8812AU_DIR" ] && [ -f "$RTL8812AU_DIR/Makefile" ]; then
+          if ! make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules; then
+            echo "Build failed for rtl8812au, skipping"
+          else
+            if ! make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
+              echo "Install failed for rtl8812au, skipping"
+            fi
+          fi
+        else
+          echo "rtl8812au source missing or Makefile missing, skipping"
+        fi
+
+    - name: Filter modules
       shell: bash
       run: |
         set -euo pipefail
@@ -354,23 +431,29 @@ runs:
         MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
         UNAME=$(ls "$OUT/lib/modules/")
-        DEST="$OUT/wifi-modules"
 
-        mkdir -p "$DEST"
+        echo "Copying all modules to $OUT/modules"
+        cd "$OUT"
+        mkdir -p modules
+        find lib/modules/"$UNAME" -type f -name '*.ko' -exec cp {} modules/ \;
+        echo "Total modules copied: $(find modules -type f -name '*.ko' | wc -l)"
 
-        find "$OUT/lib/modules/$UNAME" -type f -name '*.ko' | while read -r f; do
-          base="$(basename "$f")"
-          case "$base" in
-            ath*.ko|rtw*.ko|mt*.ko|rt2*.ko|rt2800*.ko|cfg80211.ko|mac80211.ko)
-              cp "$f" "$DEST/"
-              ;;
-          esac
-        done
+        echo "Keeping Wi-Fi related modules only..."
+        cd modules
+        find . -type f -name '*.ko' \
+          ! -name 'ath*.ko' \
+          ! -name 'rt*.ko' \
+          ! -name 'rtl*.ko' \
+          ! -name '8812au*.ko' \
+          ! -name '88XXau*.ko' \
+          ! -name 'mt*.ko' \
+          ! -name 'mac80211*.ko' \
+          ! -name 'cfg80211*.ko' \
+          -delete
 
-        echo "Collected Wi-Fi modules:"
-        ls -1 "$DEST" || true
+        echo "Modules remaining after filtering: $(find . -type f -name '*.ko' | wc -l)"
 
-    - name: Create Wi-Fi modules zip
+    - name: Create Kernel Modules zip
       id: create_zip
       shell: bash
       run: |
@@ -379,19 +462,38 @@ runs:
         KERNEL_PLATFORM="$CONFIG_DIR/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
-        MODULES_SRC="$OUT/wifi-modules"
-        MODULES_ZIP="$CONFIG_DIR/artifacts/wifi_modules_${{ env.MODEL }}.zip"
+        MODULES_SRC="$OUT/modules"
+        MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
 
         mkdir -p "$CONFIG_DIR/artifacts"
+        find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
+        echo "Packaged kernel modules to $MODULES_ZIP"
 
-        cd "$MODULES_SRC"
-        zip -r "$MODULES_ZIP" ./* >/dev/null || true
-        echo "Packaged Wi-Fi modules to $MODULES_ZIP"
+    - name: Final Build Summary
+      shell: bash
+      run: |
+        set -euo pipefail
+        {
+          echo "CCache Statistics :"
+          echo "$(/usr/bin/ccache -s)"
+        } | tee summary.txt
+        {
+          echo "### Kernel Modules Build Summary"
+          echo ""
+          echo "CCache Statistics :"
+          echo "$(ccache -s -v)"
+        } >> "$GITHUB_STEP_SUMMARY"
 
-    - name: Upload Wi-Fi modules zip
+    - name: Cleanup old ccache
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Deleting old ccache..."
+        gh cache delete ccache-${{ env.CONFIG }}-modules-${{ env.KERNEL_FULL_VER }}- || true
+
+    - name: Upload Kernel Modules zip
       if: success() && steps.create_zip.conclusion == 'success'
       uses: actions/upload-artifact@v4
       with:
-        name: wifi-modules-${{ env.CONFIG }}
+        name: kernel-modules-${{ env.CONFIG }}
         path: ${{ env.CONFIG }}/artifacts/
-        
