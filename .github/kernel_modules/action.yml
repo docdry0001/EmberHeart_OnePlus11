@@ -249,19 +249,29 @@ runs:
           --module CONFIG_CFG80211 \
           --module CONFIG_NL80211_TESTMODE
 
-    - name: Add external rtw88 tree
+    - name: Add rtw88 modules
       shell: bash
       run: |
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek"
-        rm -rf rtw88
-        git clone --depth=1 https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile || true
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/d' Kconfig || true
-        printf '\nsource "drivers/net/wireless/realtek/rtw88/Kconfig"\n' >> Kconfig
 
+        mkdir -p "$MSM/drivers/net/wireless/realtek"
+        cd "$MSM/drivers/net/wireless/realtek"
+
+        rm -rf rtw88
+        git clone --depth=1 https://github.com/lwfinger/rtw88.git rtw88
+
+        # Ensure realtek/Kconfig includes rtw88/Kconfig
+        if ! grep -q 'source "drivers/net/wireless/realtek/rtw88/Kconfig"' Kconfig; then
+          printf '\nsource "drivers/net/wireless/realtek/rtw88/Kconfig"\n' >> Kconfig
+        fi
+
+        # Ensure realtek/Makefile builds rtw88 as modules
+        if ! grep -q 'obj-\$(CONFIG_RTW88) += rtw88/' Makefile; then
+          printf '\nobj-$(CONFIG_RTW88) += rtw88/\n' >> Makefile
+        fi
+      
     - name: Detect Clang
       shell: bash
       run: |
