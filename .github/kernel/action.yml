@@ -706,6 +706,23 @@ runs:
           --enable CONFIG_USB_SERIAL_FTDI_SIO \
           --enable CONFIG_USB_SERIAL_PL2303
 
+# Ralink / rt2x00 drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_RALINK \
+          --module CONFIG_RT2X00 \
+          --module CONFIG_RT2X00_LIB \
+          --module CONFIG_RT2X00_LIB_FIRMWARE \
+          --module CONFIG_RT2X00_USB \
+          --module CONFIG_RT2800LIB \
+          --module CONFIG_RT2800USB \
+          --module CONFIG_RT2800USB_RT33XX \
+          --module CONFIG_RT2800USB_RT35XX \
+          --module CONFIG_RT2800USB_RT3573 \
+          --module CONFIG_RT2800USB_RT53XX \
+          --module CONFIG_RT2800USB_RT55XX \
+          --module CONFIG_RT2800USB_UNKNOWN
+
+
         echo "Nethunter configs applied ✅"
         echo "::endgroup::"
 
