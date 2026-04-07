@@ -625,102 +625,137 @@ runs:
         echo "Other kernel patches applied 🔥"
         echo "::endgroup::"
 
-    - name: Add Nethunter inline configs
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Applying Nethunter configs..."
-        cd "$CONFIG/kernel_platform/common"
-
-        # Bluetooth configs
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_BT_HCIBTUSB \
-          --enable CONFIG_BT_HCIBTUSB_BCM \
-          --enable CONFIG_BT_HCIBTUSB_RTL \
-          --enable CONFIG_BT_HCIVHCI \
-          --enable CONFIG_BT_HCIBCM203X \
-          --enable CONFIG_BT_HCIBPA10X \
-          --enable CONFIG_BT_HCIBFUSB
-
-        # Airspy & HackRF
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_USB_AIRSPY \
-          --enable CONFIG_USB_HACKRF
-
-        # CAN
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN \
-          --enable CONFIG_CAN_DEV \
-          --enable CONFIG_CAN_CALC_BITTIMING \
-          --enable CONFIG_CAN_LEDS \
-          --enable CONFIG_CAN_VCAN \
-          --enable CONFIG_CAN_GRCAN \
-          --enable CONFIG_CAN_XILINXCAN
-
-        # Bosch C_CAN/D_CAN devices
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_C_CAN \
-          --enable CONFIG_CAN_C_CAN_PLATFORM \
-          --enable CONFIG_CAN_C_CAN_PCI
-
-        # Bosch CC770 and Intel AN82527 devices
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_CC770 \
-          --enable CONFIG_CAN_CC770_ISA \
-          --enable CONFIG_CAN_CC770_PLATFORM
-
-        # Bosch M_CAN devices
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_M_CAN \
-          --enable CONFIG_CAN_M_CAN_PCI \
-          --enable CONFIG_CAN_M_CAN_PLATFORM \
-          --enable CONFIG_CAN_M_CAN_TCAN4X5X
-
-        # CAN SPI interfaces
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_HI311X \
-          --enable CONFIG_CAN_MCP251X
-
-        # CAN USB interfaces
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_CAN_8DEV_USB \
-          --enable CONFIG_CAN_EMS_USB \
-          --enable CONFIG_CAN_ESD_USB2 \
-          --enable CONFIG_CAN_GS_USB \
-          --enable CONFIG_CAN_KVASER_USB \
-          --enable CONFIG_CAN_PEAK_USB
-
-        # CAN - Networking
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_NETLINK_DIAG \
-          --enable CONFIG_VSOCKETS \
-          --enable CONFIG_NET_SCHED \
-          --enable CONFIG_NET_EMATCH_CANID
-
-        # USB Serial Converter
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_USB_SERIAL \
-          --enable CONFIG_USB_SERIAL_CONSOLE \
-          --enable CONFIG_USB_SERIAL_GENERIC \
-          --enable CONFIG_USB_SERIAL_CH341 \
-          --enable CONFIG_USB_SERIAL_FTDI_SIO \
-          --enable CONFIG_USB_SERIAL_PL2303
-        # Ralink / rt2x00 drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_RALINK \
-          --module CONFIG_RT2X00 \
-          --module CONFIG_RT2X00_LIB \
-          --module CONFIG_RT2X00_LIB_FIRMWARE \
-          --module CONFIG_RT2X00_USB \
-          --module CONFIG_RT2800LIB \
-          --module CONFIG_RT2800USB \
-          --module CONFIG_RT2800USB_RT33XX \
-          --module CONFIG_RT2800USB_RT35XX \
-          --module CONFIG_RT2800USB_RT3573 \
-          --module CONFIG_RT2800USB_RT53XX \
-          --module CONFIG_RT2800USB_RT55XX \
-          --module CONFIG_RT2800USB_UNKNOWN
-       
+     
+    - name: Add Nethunter inline configs- name: Add Nethunter inline configs
+    shell: bash
+    run: |
+      set -euo pipefail
+      echo "::group::Applying Nethunter configs..."
+      cd "$CONFIG/kernel_platform/common"
+  
+      # Import Ralink rt2x00 driver subtree
+      RT2X00_TMP="$GITHUB_WORKSPACE/rt2x00-import"
+      KERNEL_DIR="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
+  
+      rm -rf "$RT2X00_TMP"
+      git clone --depth=1 --filter=blob:none --sparse https://github.com/torvalds/linux.git "$RT2X00_TMP"
+      cd "$RT2X00_TMP"
+      git sparse-checkout set \
+        drivers/net/wireless/ralink/rt2x00 \
+        drivers/net/wireless/ralink/Kconfig \
+        drivers/net/wireless/ralink/Makefile
+  
+      mkdir -p "$KERNEL_DIR/drivers/net/wireless/ralink"
+      rm -rf "$KERNEL_DIR/drivers/net/wireless/ralink/rt2x00"
+      cp -a "$RT2X00_TMP/drivers/net/wireless/ralink/rt2x00" \
+            "$KERNEL_DIR/drivers/net/wireless/ralink/"
+  
+      if ! grep -q 'drivers/net/wireless/ralink/rt2x00/Kconfig' \
+          "$KERNEL_DIR/drivers/net/wireless/ralink/Kconfig"; then
+        printf '\nsource "drivers/net/wireless/ralink/rt2x00/Kconfig"\n' \
+          >> "$KERNEL_DIR/drivers/net/wireless/ralink/Kconfig"
+      fi
+  
+      if ! grep -q 'obj-$(CONFIG_RT2X00) += rt2x00/' \
+          "$KERNEL_DIR/drivers/net/wireless/ralink/Makefile"; then
+        printf '\nobj-$(CONFIG_RT2X00) += rt2x00/\n' \
+          >> "$KERNEL_DIR/drivers/net/wireless/ralink/Makefile"
+      fi
+  
+      cd "$KERNEL_DIR"
+  
+      # Bluetooth configs
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_BT_HCIBTUSB \
+        --enable CONFIG_BT_HCIBTUSB_BCM \
+        --enable CONFIG_BT_HCIBTUSB_RTL \
+        --enable CONFIG_BT_HCIVHCI \
+        --enable CONFIG_BT_HCIBCM203X \
+        --enable CONFIG_BT_HCIBPA10X \
+        --enable CONFIG_BT_HCIBFUSB
+  
+      # Airspy & HackRF
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_USB_AIRSPY \
+        --enable CONFIG_USB_HACKRF
+  
+      # CAN
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_CAN \
+        --enable CONFIG_CAN_DEV \
+        --enable CONFIG_CAN_CALC_BITTIMING \
+        --enable CONFIG_CAN_LEDS \
+        --enable CONFIG_CAN_VCAN \
+        --enable CONFIG_CAN_GRCAN \
+        --enable CONFIG_CAN_XILINXCAN
+  
+      # Bosch C_CAN/D_CAN devices
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_CAN_C_CAN \
+        --enable CONFIG_CAN_C_CAN_PLATFORM \
+        --enable CONFIG_CAN_C_CAN_PCI
+  
+      # Bosch CC770 and Intel AN82527 devices
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_CAN_CC770 \
+        --enable CONFIG_CAN_CC770_ISA \
+        --enable CONFIG_CAN_CC770_PLATFORM
+  
+      # Bosch M_CAN devices
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_CAN_M_CAN \
+        --enable CONFIG_CAN_M_CAN_PCI \
+        --enable CONFIG_CAN_M_CAN_PLATFORM \
+        --enable CONFIG_CAN_M_CAN_TCAN4X5X
+  
+      # CAN SPI interfaces
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_CAN_HI311X \
+        --enable CONFIG_CAN_MCP251X
+  
+      # CAN USB interfaces
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_CAN_8DEV_USB \
+        --enable CONFIG_CAN_EMS_USB \
+        --enable CONFIG_CAN_ESD_USB2 \
+        --enable CONFIG_CAN_GS_USB \
+        --enable CONFIG_CAN_KVASER_USB \
+        --enable CONFIG_CAN_PEAK_USB
+  
+      # CAN - Networking
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_NETLINK_DIAG \
+        --enable CONFIG_VSOCKETS \
+        --enable CONFIG_NET_SCHED \
+        --enable CONFIG_NET_EMATCH_CANID
+  
+      # USB Serial Converter
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_USB_SERIAL \
+        --enable CONFIG_USB_SERIAL_CONSOLE \
+        --enable CONFIG_USB_SERIAL_GENERIC \
+        --enable CONFIG_USB_SERIAL_CH341 \
+        --enable CONFIG_USB_SERIAL_FTDI_SIO \
+        --enable CONFIG_USB_SERIAL_PL2303
+  
+      # Ralink / rt2x00 drivers
+      ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        --enable CONFIG_WLAN_VENDOR_RALINK \
+        --module CONFIG_RT2X00 \
+        --module CONFIG_RT2X00_LIB \
+        --module CONFIG_RT2X00_LIB_FIRMWARE \
+        --module CONFIG_RT2X00_USB \
+        --module CONFIG_RT2800LIB \
+        --module CONFIG_RT2800USB \
+        --module CONFIG_RT2800USB_RT33XX \
+        --module CONFIG_RT2800USB_RT35XX \
+        --module CONFIG_RT2800USB_RT3573 \
+        --module CONFIG_RT2800USB_RT53XX \
+        --module CONFIG_RT2800USB_RT55XX \
+        --module CONFIG_RT2800USB_UNKNOWN
+  
+      echo "Nethunter configs applied ✅"
+      echo "::endgroup::"     
         echo "Nethunter configs applied ✅"
         echo "::endgroup::"
 
