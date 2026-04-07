@@ -270,6 +270,29 @@ runs:
               enable) ./scripts/config --file "$DEFCONFIG" --enable "$sym" ;;
               module) ./scripts/config --file "$DEFCONFIG" --module "$sym" ;;
               disable) ./scripts/config --file "$DEFCONFIG" --disable "$sym" ;;
+              
+    - name: Add Wi-Fi drivers already present in kernel to be built as modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        DEFCONFIG="$MSM/arch/arm64/configs/gki_defconfig"
+
+        cd "$MSM"
+        chmod +x ./scripts/config
+
+        set_symbol() {
+          local mode="$1"
+          local sym="$2"
+
+          if grep -Rqs "^[[:space:]]*config[[:space:]]\+$sym\\b" \
+            drivers net security fs arch kernel mm crypto block sound virt init ipc lib 2>/dev/null; then
+            echo "[+] $mode $sym"
+            case "$mode" in
+              enable) ./scripts/config --file "$DEFCONFIG" --enable "$sym" ;;
+              module) ./scripts/config --file "$DEFCONFIG" --module "$sym" ;;
+              disable) ./scripts/config --file "$DEFCONFIG" --disable "$sym" ;;
               *) echo "Unknown mode: $mode"; exit 1 ;;
             esac
           else
@@ -277,49 +300,26 @@ runs:
           fi
         }
 
-        # Core wireless stack
         set_symbol enable WLAN
         set_symbol enable CFG80211
         set_symbol enable MAC80211
 
-        # Vendor families
         set_symbol enable WLAN_VENDOR_ATH
         set_symbol enable WLAN_VENDOR_MEDIATEK
         set_symbol enable WLAN_VENDOR_RALINK
         set_symbol enable WLAN_VENDOR_REALTEK
 
-        # Atheros
-        set_symbol module ATH_COMMON
-        set_symbol module ATH9K
-        set_symbol module ATH9K_HW
-        set_symbol module ATH9K_HTC
-        set_symbol module ATH9K_COMMON
-        set_symbol module ATH10K
-        set_symbol module ATH10K_USB
-        set_symbol module ATH11K
-
-        # MediaTek / mt76 / mt7921u
-        set_symbol module MT7601U
         set_symbol module MT76_CORE
         set_symbol module MT76_USB
-        set_symbol module MT76x02_LIB
-        set_symbol module MT76x02_USB
         set_symbol module MT76_CONNAC_LIB
-        set_symbol module MT7603E
-        set_symbol module MT76x2_COMMON
-        set_symbol module MT76x0_COMMON
-        set_symbol module MT7615_COMMON
-        set_symbol module MT7915E
-        set_symbol module MT7921E
-        set_symbol module MT7921_COMMON
         set_symbol module MT792X_LIB
+        set_symbol module MT7921_COMMON
         set_symbol module MT7921U
 
-        # Ralink / rt2x00 / rt2800usb
         set_symbol module RT2X00
         set_symbol module RT2X00_LIB
-        set_symbol module RT2X00_LIB_FIRMWARE
         set_symbol module RT2X00_LIB_USB
+        set_symbol module RT2X00_LIB_FIRMWARE
         set_symbol module RT2X00_USB
         set_symbol module RT2800_LIB
         set_symbol module RT2800USB
@@ -330,14 +330,17 @@ runs:
         set_symbol module RT2800USB_RT55XX
         set_symbol module RT2800USB_UNKNOWN
 
-        # Generic helpers sometimes needed by Wi-Fi stacks
+        set_symbol module ATH_COMMON
+        set_symbol module ATH9K
+        set_symbol module ATH9K_HTC
+        set_symbol module ATH10K_USB
+
         set_symbol module MAC80211_LEDS
         set_symbol module LEDS_CLASS
         set_symbol module NEW_LEDS
-        set_symbol module USB
-        set_symbol module CAN_SLCAN
 
-        yes "" | make O=out oldconfig
+        echo "[+] Finalizing config with defaults..."
+        make O=out olddefconfig
 
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
