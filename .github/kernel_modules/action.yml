@@ -122,7 +122,7 @@ runs:
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           git curl ca-certificates build-essential clang lld flex bison \
           libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache
+          libxml2-utils rsync unzip dwarves file python3 ccache jq
         sudo apt-get clean
         echo "::endgroup::"
 
@@ -253,57 +253,92 @@ runs:
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
+        DEFCONFIG="$MSM/arch/arm64/configs/gki_defconfig"
+
         cd "$MSM"
 
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK \
-          --enable CONFIG_WLAN_VENDOR_ATH \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --enable CONFIG_WLAN_VENDOR_RALINK
+        chmod +x ./scripts/config
 
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_ATH_COMMON \
-          --module CONFIG_ATH9K \
-          --module CONFIG_ATH9K_HW \
-          --module CONFIG_ATH9K_HTC \
-          --module CONFIG_ATH9K_COMMON \
-          --module CONFIG_ATH10K \
-          --module CONFIG_ATH10K_USB \
-          --module CONFIG_ATH11K
+        set_symbol() {
+          local mode="$1"
+          local sym="$2"
 
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MT7601U \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
-          --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E
+          if grep -Rqs "^[[:space:]]*config[[:space:]]\+$sym\\b" \
+            drivers net security fs arch kernel mm crypto block sound virt init ipc lib 2>/dev/null; then
+            echo "[+] $mode $sym"
+            case "$mode" in
+              enable) ./scripts/config --file "$DEFCONFIG" --enable "$sym" ;;
+              module) ./scripts/config --file "$DEFCONFIG" --module "$sym" ;;
+              disable) ./scripts/config --file "$DEFCONFIG" --disable "$sym" ;;
+              *) echo "Unknown mode: $mode"; exit 1 ;;
+            esac
+          else
+            echo "[-] Symbol not found in tree: $sym"
+          fi
+        }
 
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_RT2X00 \
-          --module CONFIG_RT2X00_LIB \
-          --module CONFIG_RT2X00_LIB_FIRMWARE \
-          --module CONFIG_RT2X00_USB \
-          --module CONFIG_RT2800LIB \
-          --module CONFIG_RT2800USB \
-          --module CONFIG_RT2800USB_RT33XX \
-          --module CONFIG_RT2800USB_RT35XX \
-          --module CONFIG_RT2800USB_RT3573 \
-          --module CONFIG_RT2800USB_RT53XX \
-          --module CONFIG_RT2800USB_RT55XX \
-          --module CONFIG_RT2800USB_UNKNOWN
+        # Core wireless stack
+        set_symbol enable WLAN
+        set_symbol enable CFG80211
+        set_symbol enable MAC80211
 
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
-          --module CONFIG_CAN_SLCAN
+        # Vendor families
+        set_symbol enable WLAN_VENDOR_ATH
+        set_symbol enable WLAN_VENDOR_MEDIATEK
+        set_symbol enable WLAN_VENDOR_RALINK
+        set_symbol enable WLAN_VENDOR_REALTEK
 
-    
+        # Atheros
+        set_symbol module ATH_COMMON
+        set_symbol module ATH9K
+        set_symbol module ATH9K_HW
+        set_symbol module ATH9K_HTC
+        set_symbol module ATH9K_COMMON
+        set_symbol module ATH10K
+        set_symbol module ATH10K_USB
+        set_symbol module ATH11K
+
+        # MediaTek / mt76 / mt7921u
+        set_symbol module MT7601U
+        set_symbol module MT76_CORE
+        set_symbol module MT76_USB
+        set_symbol module MT76x02_LIB
+        set_symbol module MT76x02_USB
+        set_symbol module MT76_CONNAC_LIB
+        set_symbol module MT7603E
+        set_symbol module MT76x2_COMMON
+        set_symbol module MT76x0_COMMON
+        set_symbol module MT7615_COMMON
+        set_symbol module MT7915E
+        set_symbol module MT7921E
+        set_symbol module MT7921_COMMON
+        set_symbol module MT792X_LIB
+        set_symbol module MT7921U
+
+        # Ralink / rt2x00 / rt2800usb
+        set_symbol module RT2X00
+        set_symbol module RT2X00_LIB
+        set_symbol module RT2X00_LIB_FIRMWARE
+        set_symbol module RT2X00_LIB_USB
+        set_symbol module RT2X00_USB
+        set_symbol module RT2800_LIB
+        set_symbol module RT2800USB
+        set_symbol module RT2800USB_RT33XX
+        set_symbol module RT2800USB_RT35XX
+        set_symbol module RT2800USB_RT3573
+        set_symbol module RT2800USB_RT53XX
+        set_symbol module RT2800USB_RT55XX
+        set_symbol module RT2800USB_UNKNOWN
+
+        # Generic helpers sometimes needed by Wi-Fi stacks
+        set_symbol module MAC80211_LEDS
+        set_symbol module LEDS_CLASS
+        set_symbol module NEW_LEDS
+        set_symbol module USB
+        set_symbol module CAN_SLCAN
+
+        yes "" | make O=out oldconfig
+
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
       shell: bash
@@ -360,9 +395,8 @@ runs:
         PY
 
         echo "[+] Verifying thermal fix..."
-        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
+        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20
 
-    
     - name: FIX binder mmget_still_valid compat (waipio)
       if: env.SOC == 'waipio'
       shell: bash
@@ -386,6 +420,7 @@ runs:
         echo "[+] Verifying binder fix..."
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20
+
     - name: Add rtl8812au external driver
       shell: bash
       run: |
@@ -465,10 +500,10 @@ runs:
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
         ./scripts/config --file "$OUT/.config" \
-          --enable CONFIG_LTO_CLANG_THIN \
-          --enable CONFIG_LTO_CLANG \
-          --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
-          --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+          --enable LTO_CLANG_THIN \
+          --enable LTO_CLANG \
+          --enable CC_OPTIMIZE_FOR_PERFORMANCE \
+          --disable CC_OPTIMIZE_FOR_PERFORMANCE_O3
 
         echo "Building in-tree kernel modules..."
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
@@ -518,6 +553,8 @@ runs:
           -delete
 
         echo "Modules remaining after filtering: $(find . -type f -name '*.ko' | wc -l)"
+        echo "Remaining modules:"
+        find . -type f -name '*.ko' | sort
 
     - name: Create Kernel Modules zip
       id: create_zip
