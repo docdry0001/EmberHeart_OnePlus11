@@ -247,6 +247,7 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
+
     - name: Add Wi-Fi drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -256,91 +257,55 @@ runs:
         DEFCONFIG="$MSM/arch/arm64/configs/gki_defconfig"
 
         cd "$MSM"
-
         chmod +x ./scripts/config
 
-        set_symbol() {
-          local mode="$1"
-          local sym="$2"
+        ./scripts/config --file "$DEFCONFIG" --enable WLAN || true
+        ./scripts/config --file "$DEFCONFIG" --enable CFG80211 || true
+        ./scripts/config --file "$DEFCONFIG" --enable MAC80211 || true
 
-          if grep -Rqs "^[[:space:]]*config[[:space:]]\+$sym\\b" \
-            drivers net security fs arch kernel mm crypto block sound virt init ipc lib 2>/dev/null; then
+        ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_ATH || true
+        ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_MEDIATEK || true
+        ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_RALINK || true
+        ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_REALTEK || true
+
+        ./scripts/config --file "$DEFCONFIG" --module MT76_CORE || true
+        ./scripts/config --file "$DEFCONFIG" --module MT76_USB || true
+        ./scripts/config --file "$DEFCONFIG" --module MT76_CONNAC_LIB || true
+        ./scripts/config --file "$DEFCONFIG" --module MT792X_LIB || true
+        ./scripts/config --file "$DEFCONFIG" --module MT7921_COMMON || true
+        ./scripts/config --file "$DEFCONFIG" --module MT7921U || true
+
+        ./scripts/config --file "$DEFCONFIG" --module RT2X00 || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2X00_LIB || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2X00_LIB_USB || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2X00_LIB_FIRMWARE || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2X00_USB || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2800_LIB || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2800USB || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT33XX || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT35XX || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT3573 || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT53XX || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT55XX || true
+        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_UNKNOWN || true
+
+        ./scripts/config --file "$DEFCONFIG" --module ATH_COMMON || true
+        ./scripts/config --file "$DEFCONFIG" --module ATH9K || true
+        ./scripts/config --file "$DEFCONFIG" --module ATH9K_HTC || true
+        ./scripts/config --file "$DEFCONFIG" --module ATH10K_USB || true
+
+        ./scripts/config --file "$DEFCONFIG" --module MAC80211_LEDS || true
+        ./scripts/config --file "$DEFCONFIG" --module LEDS_CLASS || true
+        ./scripts/config --file "$DEFCONFIG" --module NEW_LEDS || true
+
+        make O=out olddefconfigt init ipc lib 2>/dev/null; then
             echo "[+] $mode $sym"
             case "$mode" in
               enable) ./scripts/config --file "$DEFCONFIG" --enable "$sym" ;;
               module) ./scripts/config --file "$DEFCONFIG" --module "$sym" ;;
               disable) ./scripts/config --file "$DEFCONFIG" --disable "$sym" ;;
               
-    - name: Add Wi-Fi drivers already present in kernel to be built as modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        DEFCONFIG="$MSM/arch/arm64/configs/gki_defconfig"
 
-        cd "$MSM"
-        chmod +x ./scripts/config
-
-        set_symbol() {
-          local mode="$1"
-          local sym="$2"
-
-          if grep -Rqs "^[[:space:]]*config[[:space:]]\+$sym\\b" \
-            drivers net security fs arch kernel mm crypto block sound virt init ipc lib 2>/dev/null; then
-            echo "[+] $mode $sym"
-            case "$mode" in
-              enable) ./scripts/config --file "$DEFCONFIG" --enable "$sym" ;;
-              module) ./scripts/config --file "$DEFCONFIG" --module "$sym" ;;
-              disable) ./scripts/config --file "$DEFCONFIG" --disable "$sym" ;;
-              *) echo "Unknown mode: $mode"; exit 1 ;;
-            esac
-          else
-            echo "[-] Symbol not found in tree: $sym"
-          fi
-        }
-
-        set_symbol enable WLAN
-        set_symbol enable CFG80211
-        set_symbol enable MAC80211
-
-        set_symbol enable WLAN_VENDOR_ATH
-        set_symbol enable WLAN_VENDOR_MEDIATEK
-        set_symbol enable WLAN_VENDOR_RALINK
-        set_symbol enable WLAN_VENDOR_REALTEK
-
-        set_symbol module MT76_CORE
-        set_symbol module MT76_USB
-        set_symbol module MT76_CONNAC_LIB
-        set_symbol module MT792X_LIB
-        set_symbol module MT7921_COMMON
-        set_symbol module MT7921U
-
-        set_symbol module RT2X00
-        set_symbol module RT2X00_LIB
-        set_symbol module RT2X00_LIB_USB
-        set_symbol module RT2X00_LIB_FIRMWARE
-        set_symbol module RT2X00_USB
-        set_symbol module RT2800_LIB
-        set_symbol module RT2800USB
-        set_symbol module RT2800USB_RT33XX
-        set_symbol module RT2800USB_RT35XX
-        set_symbol module RT2800USB_RT3573
-        set_symbol module RT2800USB_RT53XX
-        set_symbol module RT2800USB_RT55XX
-        set_symbol module RT2800USB_UNKNOWN
-
-        set_symbol module ATH_COMMON
-        set_symbol module ATH9K
-        set_symbol module ATH9K_HTC
-        set_symbol module ATH10K_USB
-
-        set_symbol module MAC80211_LEDS
-        set_symbol module LEDS_CLASS
-        set_symbol module NEW_LEDS
-
-        echo "[+] Finalizing config with defaults..."
-        make O=out olddefconfig
 
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
