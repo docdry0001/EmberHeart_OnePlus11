@@ -298,13 +298,7 @@ runs:
         ./scripts/config --file "$DEFCONFIG" --module LEDS_CLASS || true
         ./scripts/config --file "$DEFCONFIG" --module NEW_LEDS || true
 
-        make O=out olddefconfigt init ipc lib 2>/dev/null; then
-            echo "[+] $mode $sym"
-            case "$mode" in
-              enable) ./scripts/config --file "$DEFCONFIG" --enable "$sym" ;;
-              module) ./scripts/config --file "$DEFCONFIG" --module "$sym" ;;
-              disable) ./scripts/config --file "$DEFCONFIG" --disable "$sym" ;;
-              
+        make O=out olddefconfig
 
 
     - name: FIX vmscan scan_adjusted (waipio)
