@@ -520,7 +520,17 @@ runs:
         mkdir -p "$OUT"
 
         echo "[*] Preparing kernel config"
+        
         make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+        make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
+
+        # 🔥 սա է critical fix-ը
+        scripts/config --file "$OUT/.config" --disable CONFIG_LTO
+        scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG || true
+        scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG_THIN || true
+        scripts/config --file "$OUT/.config" --disable CONFIG_CFI || true
+        scripts/config --file "$OUT/.config" --disable CONFIG_CFI_CLANG || true
+
         make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
         echo "[*] Building in-tree modules"
