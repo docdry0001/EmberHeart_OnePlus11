@@ -369,6 +369,80 @@ runs:
         mkdir -p "$KERNEL_PATH/external"
         git clone --depth=1 https://github.com/openwrt/mt76.git "$DRIVER_DIR"
 
+    - name: Patch mt76 for Snapdragon Android kernel (disable WED / MMIO DMA)
+      shell: bash
+      run: |
+        set -euo pipefail
+        MT76_DIR="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/external/mt76"
+
+        echo "[*] Patching mt76 for non-MediaTek kernel..."
+
+        # 1) Remove missing MediaTek WED header include
+        sed -i '/linux\/soc\/mediatek\/mtk_wed.h/d' "$MT76_DIR/mt76.h"
+
+        # 2) Inject WED stub macros/types so Qualcomm kernel can compile mt76
+        python3 - <<PY
+        from pathlib import Path
+
+        p = Path(r"$MT76_DIR/mt76.h")
+        txt = p.read_text()
+
+        marker = "#include <linux/etherdevice.h>\n"
+        stub = r'''
+        #ifndef __MT76_WED_STUBS_H
+        #define __MT76_WED_STUBS_H
+
+        struct mtk_wed_device { int dummy; };
+        struct mtk_wed_ops { int dummy; };
+
+        enum mtk_wed_bus_type {
+            MTK_WED_BUS_PCIE = 0,
+            MTK_WED_BUS_AXI = 1,
+            MTK_WED_BUS_USB = 2,
+        };
+
+        #define mtk_wed_device_active(...)            false
+        #define mtk_wed_get_rx_capa(...)              false
+        #define mtk_wed_device_attach(...)            (-1)
+        #define mtk_wed_device_detach(...)            do { } while (0)
+        #define mtk_wed_device_start(...)             do { } while (0)
+        #define mtk_wed_device_stop(...)              do { } while (0)
+        #define mtk_wed_device_tx_ring_setup(...)     0
+        #define mtk_wed_device_rx_ring_setup(...)     0
+        #define mtk_wed_device_dma_reset(...)         do { } while (0)
+        #define mtk_wed_device_ppe_check(...)         false
+        #define mtk_wed_device_irq_set_mask(...)      do { } while (0)
+        #define mtk_wed_device_update_msg(...)        do { } while (0)
+        #define mtk_wed_get_pci_bus(...)              NULL
+        #define mtk_wed_device_setup_tc(...)          0
+        #define mtk_wed_device_txfree(...)            false
+        #define mtk_wed_device_register(...)          0
+        #define mtk_wed_device_unregister(...)        do { } while (0)
+
+        #endif
+        '''
+
+        if "__MT76_WED_STUBS_H" not in txt:
+            if marker in txt:
+                txt = txt.replace(marker, marker + stub + "\n", 1)
+            else:
+                txt = stub + "\n" + txt
+
+        p.write_text(txt)
+        PY
+
+        # 3) For USB mt7921u on Snapdragon, drop MMIO/DMA objects from generic mt76 core
+        #    They pull in platform-specific code not needed for USB.
+        sed -i -E 's/\bmmio\.o\b//g; s/\bdma\.o\b//g' "$MT76_DIR/Makefile"
+
+        # normalize extra spaces
+        sed -i -E 's/[[:space:]]+/ /g' "$MT76_DIR/Makefile"
+
+        echo "[*] mt76 patch complete"
+        echo "[*] Sanity checks:"
+        grep -n "MT76_WED_STUBS" "$MT76_DIR/mt76.h" || true
+        grep -n "mmio.o\|dma.o" "$MT76_DIR/Makefile" || true
+        
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
