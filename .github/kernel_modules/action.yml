@@ -350,6 +350,73 @@ runs:
         echo "[+] Replaced in-tree mt76 with 5.10 backport"
         test -f "$MT76_DST/mt7921/usb.c"
 
+    - name: Patch mt76-backport for Snapdragon kernel (disable WED)
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        MT76_DIR="$MSM/drivers/net/wireless/mediatek/mt76"
+
+        echo "[*] Patching mt76-backport for non-MediaTek kernel..."
+
+        # remove missing MediaTek WED header
+        sed -i '/linux\/soc\/mediatek\/mtk_wed.h/d' "$MT76_DIR/mt76.h"
+
+        # inject local WED stubs so code can compile on Qualcomm kernel
+        python3 - <<PY
+        from pathlib import Path
+
+        p = Path(r"$MT76_DIR/mt76.h")
+        txt = p.read_text()
+
+        marker = "#include <linux/etherdevice.h>\n"
+        stub = r'''
+        #ifndef __MT76_WED_STUBS_H
+        #define __MT76_WED_STUBS_H
+
+        struct mtk_wed_device { int dummy; };
+        struct mtk_wed_ops { int dummy; };
+
+        enum mtk_wed_bus_type {
+            MTK_WED_BUS_PCIE = 0,
+            MTK_WED_BUS_AXI = 1,
+            MTK_WED_BUS_USB = 2,
+        };
+
+        #define mtk_wed_device_active(...)            false
+        #define mtk_wed_get_rx_capa(...)              false
+        #define mtk_wed_device_attach(...)            (-1)
+        #define mtk_wed_device_detach(...)            do { } while (0)
+        #define mtk_wed_device_start(...)             do { } while (0)
+        #define mtk_wed_device_stop(...)              do { } while (0)
+        #define mtk_wed_device_tx_ring_setup(...)     0
+        #define mtk_wed_device_rx_ring_setup(...)     0
+        #define mtk_wed_device_dma_reset(...)         do { } while (0)
+        #define mtk_wed_device_ppe_check(...)         false
+        #define mtk_wed_device_irq_set_mask(...)      do { } while (0)
+        #define mtk_wed_device_update_msg(...)        do { } while (0)
+        #define mtk_wed_get_pci_bus(...)              NULL
+        #define mtk_wed_device_setup_tc(...)          0
+        #define mtk_wed_device_txfree(...)            false
+        #define mtk_wed_device_register(...)          0
+        #define mtk_wed_device_unregister(...)        do { } while (0)
+
+        #endif
+        '''
+
+        if "__MT76_WED_STUBS_H" not in txt:
+            if marker in txt:
+                txt = txt.replace(marker, marker + stub + "\n", 1)
+            else:
+                txt = stub + "\n" + txt
+
+        p.write_text(txt)
+        PY
+
+        echo "[*] mt76-backport WED patch applied"
+        grep -n 'mtk_wed' "$MT76_DIR/mt76.h" || true
+
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
