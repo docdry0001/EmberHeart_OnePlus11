@@ -122,7 +122,7 @@ runs:
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           git curl ca-certificates build-essential clang lld flex bison \
           libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache jq bc kmod
+          libxml2-utils rsync unzip dwarves file python3 ccache jq bc kmod perl
         sudo apt-get clean
         echo "::endgroup::"
 
@@ -259,8 +259,8 @@ runs:
         chmod +x ./scripts/config
 
         ./scripts/config --file "$DEFCONFIG" --enable WLAN || true
-        ./scripts/config --file "$DEFCONFIG" --enable CFG80211 || true
-        ./scripts/config --file "$DEFCONFIG" --enable MAC80211 || true
+        ./scripts/config --file "$DEFCONFIG" --module CFG80211 || true
+        ./scripts/config --file "$DEFCONFIG" --module MAC80211 || true
 
         ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_ATH || true
         ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_MEDIATEK || true
@@ -298,14 +298,8 @@ runs:
       run: |
         set -euo pipefail
         cd "$CONFIG/kernel_platform/msm-kernel/mm"
-
-        echo "[+] Cleaning old broken injections..."
         sed -i '/bool scan_adjusted = false;/d' vmscan.c
-
-        echo "[+] Patching exact declaration block in shrink_lruvec()..."
         perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
-
-        echo "[+] Verifying..."
         grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20
         grep -n "scan_adjusted" vmscan.c | head -20
 
@@ -315,19 +309,13 @@ runs:
       run: |
         set -euo pipefail
         export FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
-
-        echo "[+] Patching $FILE"
-
         python3 - <<'PY'
         import os
         from pathlib import Path
-
         path = Path(os.environ["FILE"])
         text = path.read_text()
-
         if "#include <linux/mm.h>" not in text and "#include <linux/slab.h>" in text:
             text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>\n#include <linux/mm.h>", 1)
-
         if "#define kvzalloc(size, flags)" not in text:
             shim = (
                 "\n#ifndef kvzalloc\n"
@@ -337,16 +325,12 @@ runs:
                 "#define kvfree(ptr) kfree((ptr))\n"
                 "#endif\n"
             )
-
             if "#include <linux/mm.h>" in text:
                 text = text.replace("#include <linux/mm.h>", "#include <linux/mm.h>" + shim, 1)
             elif "#include <linux/slab.h>" in text:
                 text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>" + shim, 1)
-
         path.write_text(text)
         PY
-
-        echo "[+] Verifying thermal fix..."
         grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20
 
     - name: FIX binder mmget_still_valid compat (waipio)
@@ -355,21 +339,13 @@ runs:
       run: |
         set -euo pipefail
         FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
-
-        echo "[+] Cleaning previous broken binder edits..."
         sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
         sed -i '/HAVE_MMGET_STILL_VALID_COMPAT/,+5d' "$FILE"
         sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE"
-
-        echo "[+] Ensuring correct mm header..."
         grep -q '^#include <linux/sched/mm.h>$' "$FILE" || \
           sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
-
-        echo "[+] Adding local compat shim only for mmget_still_valid()..."
         grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || \
           perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$FILE"
-
-        echo "[+] Verifying binder fix..."
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20
 
@@ -379,7 +355,6 @@ runs:
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         DRIVER_DIR="$KERNEL_PATH/external/rtl8812au"
-
         rm -rf "$DRIVER_DIR"
         mkdir -p "$KERNEL_PATH/external"
         git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git "$DRIVER_DIR"
@@ -390,7 +365,6 @@ runs:
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         DRIVER_DIR="$KERNEL_PATH/external/mt76"
-
         rm -rf "$DRIVER_DIR"
         mkdir -p "$KERNEL_PATH/external"
         git clone --depth=1 https://github.com/openwrt/mt76.git "$DRIVER_DIR"
@@ -429,6 +403,11 @@ runs:
         set -euo pipefail
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
+        OUT="$MSM/out"
+        INSTALL_MOD_PATH="$OUT"
+        RTL8812AU_DIR="$KERNEL_PLATFORM/external/rtl8812au"
+        MT76_DIR="$KERNEL_PLATFORM/external/mt76"
+
         cd "$MSM"
 
         export PATH="${CLANG_BIN_PATH}:$PATH"
@@ -456,50 +435,59 @@ runs:
           CC="ccache clang"
         )
 
-        OUT=out
-        INSTALL_MOD_PATH="$MSM/out"
         mkdir -p "$OUT"
 
+        echo "[*] Preparing kernel config"
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
         ./scripts/config --file "$OUT/.config" \
+          --module CFG80211 \
+          --module MAC80211 \
+          --enable WLAN \
+          --enable WLAN_VENDOR_ATH \
+          --enable WLAN_VENDOR_MEDIATEK \
+          --enable WLAN_VENDOR_RALINK \
+          --enable WLAN_VENDOR_REALTEK \
           --enable LTO_CLANG_THIN \
           --enable LTO_CLANG \
           --enable CC_OPTIMIZE_FOR_PERFORMANCE \
           --disable CC_OPTIMIZE_FOR_PERFORMANCE_O3
 
-        echo "Building in-tree kernel modules..."
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
+
+        echo "[*] Building in-tree modules"
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
+
+        echo "[*] Installing in-tree modules"
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
-        echo "Building external rtl8812au..."
-        RTL8812AU_DIR="$KERNEL_PLATFORM/external/rtl8812au"
-        if [ -d "$RTL8812AU_DIR" ] && [ -f "$RTL8812AU_DIR/Makefile" ]; then
-          if ! make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules; then
-            echo "Build failed for rtl8812au, skipping"
-          else
-            if ! make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
-              echo "Install failed for rtl8812au, skipping"
-            fi
-          fi
-        else
-          echo "rtl8812au source missing or Makefile missing, skipping"
+        echo "[*] Building external rtl8812au"
+        [ -d "$RTL8812AU_DIR" ] && [ -f "$RTL8812AU_DIR/Makefile" ] || { echo "rtl8812au source missing"; exit 1; }
+        make -C "$MSM" M="$RTL8812AU_DIR" O="$OUT" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules
+        make -C "$MSM" M="$RTL8812AU_DIR" O="$OUT" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+
+        echo "[*] Building external mt76 / mt7921u"
+        [ -d "$MT76_DIR" ] && [ -f "$MT76_DIR/Makefile" ] || { echo "mt76 source missing"; exit 1; }
+        make -C "$MSM" M="$MT76_DIR" O="$OUT" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules
+        make -C "$MSM" M="$MT76_DIR" O="$OUT" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+
+        echo "[*] Collecting modules"
+        UNAME="$(find "$OUT/lib/modules" -mindepth 1 -maxdepth 1 -type d | head -n1 | xargs basename)"
+        mkdir -p "$OUT/modules"
+        find "$OUT/lib/modules/$UNAME" -type f -name '*.ko' -exec cp {} "$OUT/modules/" \;
+
+        echo "[*] Final module list"
+        find "$OUT/modules" -type f -name '*.ko' | sort
+
+        echo "[*] Checking for mt7921 artifacts"
+        find "$OUT/modules" -type f -name '*.ko' | sort | grep -E 'mt76|mt7921|cfg80211|mac80211' || true
+
+        if ! find "$OUT/modules" -type f -name 'mt7921u*.ko' | grep -q .; then
+          echo "mt7921u.ko was not produced"
+          exit 1
         fi
 
-        echo "Building external mt76 / mt7921u..."
-        MT76_DIR="$KERNEL_PLATFORM/external/mt76"
-        if [ -d "$MT76_DIR" ] && [ -f "$MT76_DIR/Makefile" ]; then
-          if ! make -C "$MSM" M="$MT76_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules; then
-            echo "Build failed for mt76, skipping"
-          else
-            if ! make -C "$MSM" M="$MT76_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
-              echo "Install failed for mt76, skipping"
-            fi
-          fi
-        else
-          echo "mt76 source missing or Makefile missing, skipping"
-        fi
+        echo "[+] mt7921u.ko detected successfully"
 
     - name: Filter modules
       shell: bash
@@ -508,12 +496,11 @@ runs:
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
-        UNAME=$(ls "$OUT/lib/modules/" | head -n1)
 
         echo "Copying all modules to $OUT/modules"
         cd "$OUT"
         mkdir -p modules
-        find lib/modules/"$UNAME" -type f -name '*.ko' -exec cp {} modules/ \;
+        find lib/modules -type f -name '*.ko' -exec cp {} modules/ \;
         echo "Total modules copied: $(find modules -type f -name '*.ko' | wc -l)"
 
         echo "Keeping Wi-Fi related modules only..."
@@ -545,7 +532,8 @@ runs:
         find "$OUT" -type f -name '*.ko' | sort | grep -E 'mt76|mt7921|cfg80211|mac80211' || true
 
         if ! find "$OUT" -type f -name 'mt7921u*.ko' | grep -q .; then
-          echo "::warning::mt7921u.ko was not produced"
+          echo "::error::mt7921u.ko was not produced"
+          exit 1
         fi
 
     - name: Create Kernel Modules zip
