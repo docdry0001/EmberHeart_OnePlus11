@@ -122,7 +122,7 @@ runs:
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           git curl ca-certificates build-essential clang lld flex bison \
           libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache jq
+          libxml2-utils rsync unzip dwarves file python3 ccache jq bc kmod
         sudo apt-get clean
         echo "::endgroup::"
 
@@ -247,7 +247,6 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
-
     - name: Add Wi-Fi drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -267,13 +266,6 @@ runs:
         ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_MEDIATEK || true
         ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_RALINK || true
         ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_REALTEK || true
-
-        ./scripts/config --file "$DEFCONFIG" --module MT76_CORE || true
-        ./scripts/config --file "$DEFCONFIG" --module MT76_USB || true
-        ./scripts/config --file "$DEFCONFIG" --module MT76_CONNAC_LIB || true
-        ./scripts/config --file "$DEFCONFIG" --module MT792X_LIB || true
-        ./scripts/config --file "$DEFCONFIG" --module MT7921_COMMON || true
-        ./scripts/config --file "$DEFCONFIG" --module MT7921U || true
 
         ./scripts/config --file "$DEFCONFIG" --module RT2X00 || true
         ./scripts/config --file "$DEFCONFIG" --module RT2X00_LIB || true
@@ -300,7 +292,6 @@ runs:
 
         make O=out olddefconfig
 
-
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
       shell: bash
@@ -312,7 +303,6 @@ runs:
         sed -i '/bool scan_adjusted = false;/d' vmscan.c
 
         echo "[+] Patching exact declaration block in shrink_lruvec()..."
-
         perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
 
         echo "[+] Verifying..."
@@ -393,6 +383,17 @@ runs:
         rm -rf "$DRIVER_DIR"
         mkdir -p "$KERNEL_PATH/external"
         git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git "$DRIVER_DIR"
+
+    - name: Add mt76 external driver
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        DRIVER_DIR="$KERNEL_PATH/external/mt76"
+
+        rm -rf "$DRIVER_DIR"
+        mkdir -p "$KERNEL_PATH/external"
+        git clone --depth=1 https://github.com/openwrt/mt76.git "$DRIVER_DIR"
 
     - name: Detect Clang (toolchain for build)
       shell: bash
@@ -486,6 +487,20 @@ runs:
           echo "rtl8812au source missing or Makefile missing, skipping"
         fi
 
+        echo "Building external mt76 / mt7921u..."
+        MT76_DIR="$KERNEL_PLATFORM/external/mt76"
+        if [ -d "$MT76_DIR" ] && [ -f "$MT76_DIR/Makefile" ]; then
+          if ! make -C "$MSM" M="$MT76_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules; then
+            echo "Build failed for mt76, skipping"
+          else
+            if ! make -C "$MSM" M="$MT76_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
+              echo "Install failed for mt76, skipping"
+            fi
+          fi
+        else
+          echo "mt76 source missing or Makefile missing, skipping"
+        fi
+
     - name: Filter modules
       shell: bash
       run: |
@@ -493,7 +508,7 @@ runs:
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
-        UNAME=$(ls "$OUT/lib/modules/")
+        UNAME=$(ls "$OUT/lib/modules/" | head -n1)
 
         echo "Copying all modules to $OUT/modules"
         cd "$OUT"
@@ -517,6 +532,21 @@ runs:
         echo "Modules remaining after filtering: $(find . -type f -name '*.ko' | wc -l)"
         echo "Remaining modules:"
         find . -type f -name '*.ko' | sort
+
+    - name: Verify expected MT7921 modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PLATFORM/msm-kernel"
+        OUT="$MSM/out/modules"
+
+        echo "Checking for mt7921 artifacts..."
+        find "$OUT" -type f -name '*.ko' | sort | grep -E 'mt76|mt7921|cfg80211|mac80211' || true
+
+        if ! find "$OUT" -type f -name 'mt7921u*.ko' | grep -q .; then
+          echo "::warning::mt7921u.ko was not produced"
+        fi
 
     - name: Create Kernel Modules zip
       id: create_zip
