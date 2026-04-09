@@ -456,6 +456,22 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
 
+    - name: Disable -Werror for mt76 (fix backport compatibility)
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+
+        echo "[*] Disabling -Werror for mt76..."
+
+        find "$MSM/drivers/net/wireless/mediatek/mt76" -type f -name Makefile -exec sed -i 's/-Werror//g' {} +
+
+        # fallback (in case flags are injected differently)
+        find "$MSM/drivers/net/wireless/mediatek/mt76" -type f -exec sed -i 's/-Werror//g' {} +
+
+        echo "[*] Done"
+
     - name: Build Kernel Modules
       shell: bash
       run: |
