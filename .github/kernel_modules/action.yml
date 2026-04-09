@@ -350,6 +350,17 @@ runs:
         echo "[+] Replaced in-tree mt76 with 5.10 backport"
         test -f "$MT76_DST/mt7921/usb.c"
 
+    - name: Patch mt76-backport uninitialized sar_power
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        FILE="$MSM/drivers/net/wireless/mediatek/mt76/mt76_connac_mcu.c"
+
+        sed -i 's/s8 reg_power, sar_power;/s8 reg_power = 0, sar_power = 0;/' "$FILE"
+        grep -n "reg_power = 0, sar_power = 0" "$FILE"
+
     - name: Patch mt76-backport for Snapdragon kernel (disable WED)
       shell: bash
       run: |
