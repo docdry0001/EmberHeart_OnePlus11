@@ -247,7 +247,7 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
-    - name: Add Wi-Fi drivers already present in kernel to be built as modules
+    - name: Enable mt7921u backport in kernel config
       shell: bash
       run: |
         set -euo pipefail
@@ -258,37 +258,19 @@ runs:
         cd "$MSM"
         chmod +x ./scripts/config
 
-        ./scripts/config --file "$DEFCONFIG" --enable WLAN || true
-        ./scripts/config --file "$DEFCONFIG" --module CFG80211 || true
-        ./scripts/config --file "$DEFCONFIG" --module MAC80211 || true
+        ./scripts/config --file "$DEFCONFIG" --enable CONFIG_WLAN
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_CFG80211
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MAC80211
+        ./scripts/config --file "$DEFCONFIG" --enable CONFIG_WLAN_VENDOR_MEDIATEK
 
-        ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_ATH || true
-        ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_MEDIATEK || true
-        ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_RALINK || true
-        ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_REALTEK || true
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT76_CORE
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT76_USB
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT76_CONNAC_LIB
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT7921_COMMON
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT7921U
 
-        ./scripts/config --file "$DEFCONFIG" --module RT2X00 || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2X00_LIB || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2X00_LIB_USB || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2X00_LIB_FIRMWARE || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2X00_USB || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2800_LIB || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2800USB || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT33XX || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT35XX || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT3573 || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT53XX || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_RT55XX || true
-        ./scripts/config --file "$DEFCONFIG" --module RT2800USB_UNKNOWN || true
-
-        ./scripts/config --file "$DEFCONFIG" --module ATH_COMMON || true
-        ./scripts/config --file "$DEFCONFIG" --module ATH9K || true
-        ./scripts/config --file "$DEFCONFIG" --module ATH9K_HTC || true
-        ./scripts/config --file "$DEFCONFIG" --module ATH10K_USB || true
-
-        ./scripts/config --file "$DEFCONFIG" --module MAC80211_LEDS || true
-        ./scripts/config --file "$DEFCONFIG" --module LEDS_CLASS || true
-        ./scripts/config --file "$DEFCONFIG" --module NEW_LEDS || true
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT76_LEDS || true
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MAC80211_LEDS || true
 
         make O=out olddefconfig
 
@@ -349,114 +331,25 @@ runs:
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20
 
-    - name: Add rtl8812au external driver
+    - name: Replace in-tree mt76 with 5.10 backport
       shell: bash
       run: |
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        DRIVER_DIR="$KERNEL_PATH/external/rtl8812au"
-        rm -rf "$DRIVER_DIR"
-        mkdir -p "$KERNEL_PATH/external"
-        git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git "$DRIVER_DIR"
+        MSM="$KERNEL_PATH/msm-kernel"
+        MT76_DST="$MSM/drivers/net/wireless/mediatek/mt76"
+        TMP_DIR="$GITHUB_WORKSPACE/mt76-backport"
 
-    - name: Add mt76 external driver
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        DRIVER_DIR="$KERNEL_PATH/external/mt76"
-        rm -rf "$DRIVER_DIR"
-        mkdir -p "$KERNEL_PATH/external"
-        git clone --depth=1 https://github.com/openwrt/mt76.git "$DRIVER_DIR"
+        rm -rf "$TMP_DIR"
+        git clone --depth=1 https://github.com/shengliangd/mt76-backport.git "$TMP_DIR"
 
-    - name: Patch mt76 for Snapdragon Android 5.10 kernel
-      shell: bash
-      run: |
-        set -euo pipefail
-        MT76_DIR="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/external/mt76"
-        KERNEL_DIR="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        rm -rf "$MT76_DST"
+        mkdir -p "$(dirname "$MT76_DST")"
+        cp -a "$TMP_DIR" "$MT76_DST"
 
-        echo "[*] Patching mt76 for non-MediaTek Android 5.10 kernel..."
+        echo "[+] Replaced in-tree mt76 with 5.10 backport"
+        test -f "$MT76_DST/mt7921/usb.c"
 
-        # 1) Remove missing MediaTek WED header include
-        sed -i '/linux\/soc\/mediatek\/mtk_wed.h/d' "$MT76_DIR/mt76.h"
-
-        # 2) Ensure version macros exist
-        grep -q '^#include <linux/version.h>$' "$MT76_DIR/mt76.h" || \
-          sed -i '/^#include <linux\/module.h>$/a #include <linux/version.h>' "$MT76_DIR/mt76.h"
-
-        # 3) page_pool helpers header is too new for this kernel
-        if [ ! -f "$KERNEL_DIR/include/net/page_pool/helpers.h" ]; then
-          sed -i 's#<net/page_pool/helpers.h>#<net/page_pool.h>#g' "$MT76_DIR/mt76.h"
-        fi
-
-        # 4) Inject WED stub macros/types so Qualcomm kernel can compile mt76
-        python3 - <<PY
-        from pathlib import Path
-
-        p = Path(r"$MT76_DIR/mt76.h")
-        txt = p.read_text()
-
-        marker = "#include <linux/etherdevice.h>\n"
-        stub = r'''
-        #ifndef __MT76_WED_STUBS_H
-        #define __MT76_WED_STUBS_H
-
-        struct mtk_wed_device { int dummy; };
-        struct mtk_wed_ops { int dummy; };
-
-        enum mtk_wed_bus_type {
-            MTK_WED_BUS_PCIE = 0,
-            MTK_WED_BUS_AXI = 1,
-            MTK_WED_BUS_USB = 2,
-        };
-
-        #define mtk_wed_device_active(...)            false
-        #define mtk_wed_get_rx_capa(...)              false
-        #define mtk_wed_device_attach(...)            (-1)
-        #define mtk_wed_device_detach(...)            do { } while (0)
-        #define mtk_wed_device_start(...)             do { } while (0)
-        #define mtk_wed_device_stop(...)              do { } while (0)
-        #define mtk_wed_device_tx_ring_setup(...)     0
-        #define mtk_wed_device_rx_ring_setup(...)     0
-        #define mtk_wed_device_dma_reset(...)         do { } while (0)
-        #define mtk_wed_device_ppe_check(...)         false
-        #define mtk_wed_device_irq_set_mask(...)      do { } while (0)
-        #define mtk_wed_device_update_msg(...)        do { } while (0)
-        #define mtk_wed_get_pci_bus(...)              NULL
-        #define mtk_wed_device_setup_tc(...)          0
-        #define mtk_wed_device_txfree(...)            false
-        #define mtk_wed_device_register(...)          0
-        #define mtk_wed_device_unregister(...)        do { } while (0)
-
-        #endif
-        '''
-
-        if "__MT76_WED_STUBS_H" not in txt:
-            if marker in txt:
-                txt = txt.replace(marker, marker + stub + "\n", 1)
-            else:
-                txt = stub + "\n" + txt
-
-        p.write_text(txt)
-        PY
-
-        # 5) USB mt7921u does not need MT76 platform MMIO/DMA objects here
-        sed -i -E 's/\bmmio\.o\b//g; s/\bdma\.o\b//g' "$MT76_DIR/Makefile"
-
-        # 6) Also avoid page-pool dependent ethernet RX path objects on old kernels
-        sed -i -E 's/\bethernet\.o\b//g; s/\btoken\.o\b//g' "$MT76_DIR/Makefile" || true
-
-        # 7) Normalize whitespace in Makefile after removals
-        sed -i -E 's/[[:space:]]+/ /g' "$MT76_DIR/Makefile"
-
-        echo "[*] mt76 patch complete"
-        echo "[*] Sanity checks:"
-        grep -n 'linux/version.h' "$MT76_DIR/mt76.h" || true
-        grep -n 'page_pool' "$MT76_DIR/mt76.h" || true
-        grep -n 'MT76_WED_STUBS' "$MT76_DIR/mt76.h" || true
-        grep -n 'mmio.o\|dma.o\|ethernet.o\|token.o' "$MT76_DIR/Makefile" || true
-        
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
@@ -493,8 +386,6 @@ runs:
         MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
         INSTALL_MOD_PATH="$OUT"
-        RTL8812AU_DIR="$KERNEL_PLATFORM/external/rtl8812au"
-        MT76_DIR="$KERNEL_PLATFORM/external/mt76"
 
         cd "$MSM"
 
@@ -527,20 +418,6 @@ runs:
 
         echo "[*] Preparing kernel config"
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-
-        ./scripts/config --file "$OUT/.config" \
-          --module CFG80211 \
-          --module MAC80211 \
-          --enable WLAN \
-          --enable WLAN_VENDOR_ATH \
-          --enable WLAN_VENDOR_MEDIATEK \
-          --enable WLAN_VENDOR_RALINK \
-          --enable WLAN_VENDOR_REALTEK \
-          --enable LTO_CLANG_THIN \
-          --enable LTO_CLANG \
-          --enable CC_OPTIMIZE_FOR_PERFORMANCE \
-          --disable CC_OPTIMIZE_FOR_PERFORMANCE_O3
-
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
         echo "[*] Building in-tree modules"
@@ -549,29 +426,16 @@ runs:
         echo "[*] Installing in-tree modules"
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
-        echo "[*] Building external rtl8812au"
-        [ -d "$RTL8812AU_DIR" ] && [ -f "$RTL8812AU_DIR/Makefile" ] || { echo "rtl8812au source missing"; exit 1; }
-        make -C "$MSM" M="$RTL8812AU_DIR" O="$OUT" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules
-        make -C "$MSM" M="$RTL8812AU_DIR" O="$OUT" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-
-        echo "[*] Building external mt76 / mt7921u"
-        [ -d "$MT76_DIR" ] && [ -f "$MT76_DIR/Makefile" ] || { echo "mt76 source missing"; exit 1; }
-        make -C "$MSM" M="$MT76_DIR" O="$OUT" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules
-        make -C "$MSM" M="$MT76_DIR" O="$OUT" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-
         echo "[*] Collecting modules"
         UNAME="$(find "$OUT/lib/modules" -mindepth 1 -maxdepth 1 -type d | head -n1 | xargs basename)"
         mkdir -p "$OUT/modules"
         find "$OUT/lib/modules/$UNAME" -type f -name '*.ko' -exec cp {} "$OUT/modules/" \;
 
-        echo "[*] Final module list"
-        find "$OUT/modules" -type f -name '*.ko' | sort
-
-        echo "[*] Checking for mt7921 artifacts"
+        echo "[*] MT7921 check"
         find "$OUT/modules" -type f -name '*.ko' | sort | grep -E 'mt76|mt7921|cfg80211|mac80211' || true
 
         if ! find "$OUT/modules" -type f -name 'mt7921u*.ko' | grep -q .; then
-          echo "mt7921u.ko was not produced"
+          echo "::error::mt7921u.ko was not produced"
           exit 1
         fi
 
@@ -585,26 +449,17 @@ runs:
         MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
 
-        echo "Copying all modules to $OUT/modules"
         cd "$OUT"
         mkdir -p modules
         find lib/modules -type f -name '*.ko' -exec cp {} modules/ \;
-        echo "Total modules copied: $(find modules -type f -name '*.ko' | wc -l)"
 
-        echo "Keeping Wi-Fi related modules only..."
         cd modules
         find . -type f -name '*.ko' \
-          ! -name 'ath*.ko' \
-          ! -name 'rt*.ko' \
-          ! -name 'rtl*.ko' \
-          ! -name '8812au*.ko' \
-          ! -name '88XXau*.ko' \
           ! -name 'mt*.ko' \
-          ! -name 'mac80211*.ko' \
           ! -name 'cfg80211*.ko' \
+          ! -name 'mac80211*.ko' \
           -delete
 
-        echo "Modules remaining after filtering: $(find . -type f -name '*.ko' | wc -l)"
         echo "Remaining modules:"
         find . -type f -name '*.ko' | sort
 
