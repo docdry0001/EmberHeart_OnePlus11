@@ -369,18 +369,28 @@ runs:
         mkdir -p "$KERNEL_PATH/external"
         git clone --depth=1 https://github.com/openwrt/mt76.git "$DRIVER_DIR"
 
-    - name: Patch mt76 for Snapdragon Android kernel (disable WED / MMIO DMA)
+    - name: Patch mt76 for Snapdragon Android 5.10 kernel
       shell: bash
       run: |
         set -euo pipefail
         MT76_DIR="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/external/mt76"
+        KERNEL_DIR="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
 
-        echo "[*] Patching mt76 for non-MediaTek kernel..."
+        echo "[*] Patching mt76 for non-MediaTek Android 5.10 kernel..."
 
         # 1) Remove missing MediaTek WED header include
         sed -i '/linux\/soc\/mediatek\/mtk_wed.h/d' "$MT76_DIR/mt76.h"
 
-        # 2) Inject WED stub macros/types so Qualcomm kernel can compile mt76
+        # 2) Ensure version macros exist
+        grep -q '^#include <linux/version.h>$' "$MT76_DIR/mt76.h" || \
+          sed -i '/^#include <linux\/module.h>$/a #include <linux/version.h>' "$MT76_DIR/mt76.h"
+
+        # 3) page_pool helpers header is too new for this kernel
+        if [ ! -f "$KERNEL_DIR/include/net/page_pool/helpers.h" ]; then
+          sed -i 's#<net/page_pool/helpers.h>#<net/page_pool.h>#g' "$MT76_DIR/mt76.h"
+        fi
+
+        # 4) Inject WED stub macros/types so Qualcomm kernel can compile mt76
         python3 - <<PY
         from pathlib import Path
 
@@ -431,17 +441,21 @@ runs:
         p.write_text(txt)
         PY
 
-        # 3) For USB mt7921u on Snapdragon, drop MMIO/DMA objects from generic mt76 core
-        #    They pull in platform-specific code not needed for USB.
+        # 5) USB mt7921u does not need MT76 platform MMIO/DMA objects here
         sed -i -E 's/\bmmio\.o\b//g; s/\bdma\.o\b//g' "$MT76_DIR/Makefile"
 
-        # normalize extra spaces
+        # 6) Also avoid page-pool dependent ethernet RX path objects on old kernels
+        sed -i -E 's/\bethernet\.o\b//g; s/\btoken\.o\b//g' "$MT76_DIR/Makefile" || true
+
+        # 7) Normalize whitespace in Makefile after removals
         sed -i -E 's/[[:space:]]+/ /g' "$MT76_DIR/Makefile"
 
         echo "[*] mt76 patch complete"
         echo "[*] Sanity checks:"
-        grep -n "MT76_WED_STUBS" "$MT76_DIR/mt76.h" || true
-        grep -n "mmio.o\|dma.o" "$MT76_DIR/Makefile" || true
+        grep -n 'linux/version.h' "$MT76_DIR/mt76.h" || true
+        grep -n 'page_pool' "$MT76_DIR/mt76.h" || true
+        grep -n 'MT76_WED_STUBS' "$MT76_DIR/mt76.h" || true
+        grep -n 'mmio.o\|dma.o\|ethernet.o\|token.o' "$MT76_DIR/Makefile" || true
         
     - name: Detect Clang (toolchain for build)
       shell: bash
