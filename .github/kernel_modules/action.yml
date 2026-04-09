@@ -516,7 +516,7 @@ runs:
           CC="ccache clang"
         )
 
-        JOBS=4
+        JOBS=2
         mkdir -p "$OUT"
 
         echo "[*] Preparing kernel config"
