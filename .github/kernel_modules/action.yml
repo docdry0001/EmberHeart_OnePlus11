@@ -247,6 +247,7 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
+      
     - name: Enable mt7921u backport in kernel config
       shell: bash
       run: |
@@ -272,8 +273,15 @@ runs:
         ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT76_LEDS || true
         ./scripts/config --file "$DEFCONFIG" --module CONFIG_MAC80211_LEDS || true
 
-        make O=out olddefconfig
+        ./scripts/config --file "$DEFCONFIG" --disable CONFIG_LTO || true
+        ./scripts/config --file "$DEFCONFIG" --disable CONFIG_LTO_CLANG || true
+        ./scripts/config --file "$DEFCONFIG" --disable CONFIG_LTO_CLANG_THIN || true
+        ./scripts/config --file "$DEFCONFIG" --disable CONFIG_CFI || true
+        ./scripts/config --file "$DEFCONFIG" --disable CONFIG_CFI_CLANG || true
+        ./scripts/config --file "$DEFCONFIG" --disable CONFIG_SHADOW_CALL_STACK || true
 
+        make O=out olddefconfig
+        
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
       shell: bash
@@ -508,17 +516,27 @@ runs:
           CC="ccache clang"
         )
 
+        JOBS=4
         mkdir -p "$OUT"
 
         echo "[*] Preparing kernel config"
-        make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
+        make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+        make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
         echo "[*] Building in-tree modules"
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
+        set +e
+        make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" modules 2>&1 | tee "$OUT/build-modules.log"
+        BUILD_RC=${PIPESTATUS[0]}
+        set -e
+
+        if [ "$BUILD_RC" -ne 0 ]; then
+          echo "==== FIRST 20 ERRORS ===="
+          grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-modules.log" || true
+          exit "$BUILD_RC"
+        fi
 
         echo "[*] Installing in-tree modules"
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
         echo "[*] Collecting modules"
         UNAME="$(find "$OUT/lib/modules" -mindepth 1 -maxdepth 1 -type d | head -n1 | xargs basename)"
@@ -533,8 +551,8 @@ runs:
           exit 1
         fi
 
-        echo "[+] mt7921u.ko detected successfully"
-
+        echo "[+] mt7921u.ko detected successfully"     
+ 
     - name: Filter modules
       shell: bash
       run: |
