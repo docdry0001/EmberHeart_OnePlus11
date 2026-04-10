@@ -505,9 +505,9 @@ runs:
           HOSTCXX=clang++
           CC="ccache clang"
         )
-        
-        export KCFLAGS="-Wno-error -Wno-frame-larger-than"
-        export KCPPFLAGS="-Wno-error -Wno-frame-larger-than"
+                
+        export KCFLAGS="-Wno-error -Wframe-larger-than=4096"
+        export KCPPFLAGS="-Wno-error"        
         
         JOBS=2     
         mkdir -p "$OUT"
