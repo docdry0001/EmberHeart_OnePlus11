@@ -528,7 +528,8 @@ runs:
         ./scripts/config --file "$OUT/.config" --module MT76_CONNAC_LIB
         ./scripts/config --file "$OUT/.config" --module MT7921_COMMON
         ./scripts/config --file "$OUT/.config" --module MT7921U
-
+        ./scripts/config --file "$OUT/.config" --enable SECTION_MISMATCH_WARN_ONLY || true
+        
         # important: choose NO LTO explicitly
         ./scripts/config --file "$OUT/.config" --disable LTO || true
         ./scripts/config --file "$OUT/.config" --disable LTO_CLANG || true
