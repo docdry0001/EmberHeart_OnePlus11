@@ -505,8 +505,11 @@ runs:
           HOSTCXX=clang++
           CC="ccache clang"
         )
-
-        JOBS=2
+        
+        export KCFLAGS="-Wno-error -Wno-frame-larger-than"
+        export KCPPFLAGS="-Wno-error -Wno-frame-larger-than"
+        
+        JOBS=2     
         mkdir -p "$OUT"
 
         echo "[*] System info:"
