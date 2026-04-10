@@ -514,8 +514,7 @@ runs:
         free -h || true
 
         echo "[*] Preparing kernel config"
-        make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-        make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
+        cp arch/arm64/configs/gki_defconfig "$OUT/.config"
 
         echo "[*] Forcing LTO/CFI OFF in active .config"
         ./scripts/config --file "$OUT/.config" --disable LTO || true
@@ -533,7 +532,7 @@ runs:
         sed -i 's/^CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/' "$OUT/.config" || true
 
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
-        
+
         echo "[*] Checking active config"
         grep -E 'CONFIG_(LTO|LTO_CLANG|LTO_CLANG_THIN|CFI|CFI_CLANG|SHADOW_CALL_STACK)' "$OUT/.config" || true
 
