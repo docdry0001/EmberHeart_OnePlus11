@@ -505,11 +505,11 @@ runs:
           HOSTCXX=clang++
           CC="ccache clang"
         )
-                
+
         export KCFLAGS="-Wno-error -Wframe-larger-than=4096"
-        export KCPPFLAGS="-Wno-error"        
-        
-        JOBS=2     
+        export KCPPFLAGS="-Wno-error"
+
+        JOBS=2
         mkdir -p "$OUT"
 
         echo "[*] System info:"
@@ -518,6 +518,13 @@ runs:
 
         echo "[*] Preparing active .config"
         cp arch/arm64/configs/gki_defconfig "$OUT/.config"
+
+        ./scripts/config --file "$OUT/.config" --set-str LOCALVERSION "-android12-EmberHeart"
+        ./scripts/config --file "$OUT/.config" --disable LOCALVERSION_AUTO || true
+
+        sed -i 's/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-android12-EmberHeart"/' "$OUT/.config" || true
+        grep -q '^CONFIG_LOCALVERSION=' "$OUT/.config" || echo 'CONFIG_LOCALVERSION="-android12-EmberHeart"' >> "$OUT/.config"
+        sed -i 's/^CONFIG_LOCALVERSION_AUTO=y/# CONFIG_LOCALVERSION_AUTO is not set/' "$OUT/.config" || true
 
         ./scripts/config --file "$OUT/.config" --enable WLAN
         ./scripts/config --file "$OUT/.config" --module CFG80211
@@ -529,8 +536,7 @@ runs:
         ./scripts/config --file "$OUT/.config" --module MT7921_COMMON
         ./scripts/config --file "$OUT/.config" --module MT7921U
         ./scripts/config --file "$OUT/.config" --enable SECTION_MISMATCH_WARN_ONLY || true
-        
-        # important: choose NO LTO explicitly
+
         ./scripts/config --file "$OUT/.config" --disable LTO || true
         ./scripts/config --file "$OUT/.config" --disable LTO_CLANG || true
         ./scripts/config --file "$OUT/.config" --disable LTO_CLANG_FULL || true
@@ -548,11 +554,12 @@ runs:
         sed -i 's/^CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/' "$OUT/.config" || true
         sed -i 's/^CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/' "$OUT/.config" || true
         grep -q '^CONFIG_LTO_NONE=y' "$OUT/.config" || echo 'CONFIG_LTO_NONE=y' >> "$OUT/.config"
+        grep -q '^CONFIG_SECTION_MISMATCH_WARN_ONLY=y' "$OUT/.config" || echo 'CONFIG_SECTION_MISMATCH_WARN_ONLY=y' >> "$OUT/.config"
 
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
         echo "[*] Checking active config"
-        grep -E 'CONFIG_(LTO|LTO_CLANG|LTO_CLANG_FULL|LTO_CLANG_THIN|LTO_NONE|CFI|CFI_CLANG|SHADOW_CALL_STACK|MT7921|MT76|CFG80211|MAC80211)' "$OUT/.config" || true
+        grep -E 'CONFIG_(LOCALVERSION|LOCALVERSION_AUTO|LTO|LTO_CLANG|LTO_CLANG_FULL|LTO_CLANG_THIN|LTO_NONE|CFI|CFI_CLANG|SHADOW_CALL_STACK|SECTION_MISMATCH_WARN_ONLY|MT7921|MT76|CFG80211|MAC80211)' "$OUT/.config" || true
 
         export KBUILD_BUILD_TIMESTAMP="$(date)"
 
@@ -582,7 +589,9 @@ runs:
           echo "::error::mt7921u.ko was not produced"
           exit 1
         fi
-        echo "[+] mt7921u.ko detected successfully"   
+
+        echo "[+] mt7921u.ko detected successfully"
+        
     - name: Filter modules
       shell: bash
       run: |
