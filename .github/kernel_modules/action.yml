@@ -516,19 +516,19 @@ runs:
         echo "[*] System info:"
         nproc || true
         free -h || true
-
+        
         echo "[*] Preparing active .config"
         cp arch/arm64/configs/gki_defconfig "$OUT/.config"
-
-        ./scripts/config --file "$OUT/.config" --set-str LOCALVERSION "-android12-EmberHeart"
+        
+        # keep existing LOCALVERSION from defconfig, only prevent auto-appended '+'
         ./scripts/config --file "$OUT/.config" --disable LOCALVERSION_AUTO || true
-
-        sed -i 's/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-android12-EmberHeart"/' "$OUT/.config" || true
-        grep -q '^CONFIG_LOCALVERSION=' "$OUT/.config" || echo 'CONFIG_LOCALVERSION="-android12-EmberHeart"' >> "$OUT/.config"
         sed -i 's/^CONFIG_LOCALVERSION_AUTO=y/# CONFIG_LOCALVERSION_AUTO is not set/' "$OUT/.config" || true
-
-        # kill trailing '+' from setlocalversion
+        
+        # prevent git/setlocalversion from appending '+'
         : > .scmversion
+        
+        echo "[*] LOCALVERSION before olddefconfig:"
+        grep -E '^CONFIG_LOCALVERSION=|^CONFIG_LOCALVERSION_AUTO' "$OUT/.config" || true
 
         ./scripts/config --file "$OUT/.config" --enable WLAN
         ./scripts/config --file "$OUT/.config" --module CFG80211
