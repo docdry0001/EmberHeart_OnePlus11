@@ -470,9 +470,7 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
 
-
-
-        - name: Build Kernel Modules
+    - name: Build Kernel Modules
       shell: bash
       run: |
         set -euo pipefail
@@ -580,8 +578,8 @@ runs:
           echo "::error::mt7921u.ko was not produced"
           exit 1
         fi
-
-        echo "[+] mt7921u.ko detected successfully"    - name: Filter modules
+        echo "[+] mt7921u.ko detected successfully"   
+    - name: Filter modules
       shell: bash
       run: |
         set -euo pipefail
