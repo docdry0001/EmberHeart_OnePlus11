@@ -472,7 +472,7 @@ runs:
 
 
 
-    - name: Build Kernel Modules
+        - name: Build Kernel Modules
       shell: bash
       run: |
         set -euo pipefail
@@ -528,45 +528,46 @@ runs:
         ./scripts/config --file "$OUT/.config" --module MT7921_COMMON
         ./scripts/config --file "$OUT/.config" --module MT7921U
 
+        # important: choose NO LTO explicitly
         ./scripts/config --file "$OUT/.config" --disable LTO || true
         ./scripts/config --file "$OUT/.config" --disable LTO_CLANG || true
+        ./scripts/config --file "$OUT/.config" --disable LTO_CLANG_FULL || true
         ./scripts/config --file "$OUT/.config" --disable LTO_CLANG_THIN || true
+        ./scripts/config --file "$OUT/.config" --enable LTO_NONE || true
         ./scripts/config --file "$OUT/.config" --disable CFI || true
         ./scripts/config --file "$OUT/.config" --disable CFI_CLANG || true
         ./scripts/config --file "$OUT/.config" --disable SHADOW_CALL_STACK || true
 
         sed -i 's/^CONFIG_LTO=y/# CONFIG_LTO is not set/' "$OUT/.config" || true
         sed -i 's/^CONFIG_LTO_CLANG=y/# CONFIG_LTO_CLANG is not set/' "$OUT/.config" || true
+        sed -i 's/^CONFIG_LTO_CLANG_FULL=y/# CONFIG_LTO_CLANG_FULL is not set/' "$OUT/.config" || true
         sed -i 's/^CONFIG_LTO_CLANG_THIN=y/# CONFIG_LTO_CLANG_THIN is not set/' "$OUT/.config" || true
         sed -i 's/^CONFIG_CFI=y/# CONFIG_CFI is not set/' "$OUT/.config" || true
         sed -i 's/^CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/' "$OUT/.config" || true
         sed -i 's/^CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/' "$OUT/.config" || true
+        grep -q '^CONFIG_LTO_NONE=y' "$OUT/.config" || echo 'CONFIG_LTO_NONE=y' >> "$OUT/.config"
 
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
         echo "[*] Checking active config"
-        grep -E 'CONFIG_(MT76|MT7921|CFG80211|MAC80211|LTO|CFI|SHADOW_CALL_STACK)' "$OUT/.config" || true
+        grep -E 'CONFIG_(LTO|LTO_CLANG|LTO_CLANG_FULL|LTO_CLANG_THIN|LTO_NONE|CFI|CFI_CLANG|SHADOW_CALL_STACK|MT7921|MT76|CFG80211|MAC80211)' "$OUT/.config" || true
 
-        echo "[*] modules_prepare"
-        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
+        export KBUILD_BUILD_TIMESTAMP="$(date)"
 
-        echo "[*] Building cfg80211 only"
-        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=net/wireless modules 2>&1 | tee "$OUT/build-cfg80211.log"
-        test ${PIPESTATUS[0]} -eq 0 || { grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-cfg80211.log" || true; exit 1; }
+        echo "[*] Building full-tree modules without LTO"
+        set +e
+        timeout 30m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" modules 2>&1 | tee "$OUT/build-modules.log"
+        BUILD_RC=${PIPESTATUS[0]}
+        set -e
 
-        echo "[*] Building mac80211 only"
-        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=net/mac80211 modules 2>&1 | tee "$OUT/build-mac80211.log"
-        test ${PIPESTATUS[0]} -eq 0 || { grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-mac80211.log" || true; exit 1; }
+        if [ "$BUILD_RC" -ne 0 ]; then
+          echo "==== FIRST 20 ERRORS ===="
+          grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-modules.log" || true
+          exit "$BUILD_RC"
+        fi
 
-        echo "[*] Building mt76/mt7921 only"
-        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=drivers/net/wireless/mediatek/mt76 modules 2>&1 | tee "$OUT/build-mt76.log"
-        test ${PIPESTATUS[0]} -eq 0 || { grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-mt76.log" || true; exit 1; }
-
-        echo "[*] Installing selected modules"
-        mkdir -p "$INSTALL_MOD_PATH"
-        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=net/wireless INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=net/mac80211 INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=drivers/net/wireless/mediatek/mt76 INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        echo "[*] Installing modules"
+        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
         echo "[*] Collecting modules"
         mkdir -p "$OUT/modules"
@@ -580,9 +581,7 @@ runs:
           exit 1
         fi
 
-        echo "[+] mt7921u.ko detected successfully"
-
-    - name: Filter modules
+        echo "[+] mt7921u.ko detected successfully"    - name: Filter modules
       shell: bash
       run: |
         set -euo pipefail
