@@ -470,6 +470,8 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
 
+
+
     - name: Build Kernel Modules
       shell: bash
       run: |
@@ -513,10 +515,19 @@ runs:
         nproc || true
         free -h || true
 
-        echo "[*] Preparing kernel config"
+        echo "[*] Preparing active .config"
         cp arch/arm64/configs/gki_defconfig "$OUT/.config"
 
-        echo "[*] Forcing LTO/CFI OFF in active .config"
+        ./scripts/config --file "$OUT/.config" --enable WLAN
+        ./scripts/config --file "$OUT/.config" --module CFG80211
+        ./scripts/config --file "$OUT/.config" --module MAC80211
+        ./scripts/config --file "$OUT/.config" --enable WLAN_VENDOR_MEDIATEK
+        ./scripts/config --file "$OUT/.config" --module MT76_CORE
+        ./scripts/config --file "$OUT/.config" --module MT76_USB
+        ./scripts/config --file "$OUT/.config" --module MT76_CONNAC_LIB
+        ./scripts/config --file "$OUT/.config" --module MT7921_COMMON
+        ./scripts/config --file "$OUT/.config" --module MT7921U
+
         ./scripts/config --file "$OUT/.config" --disable LTO || true
         ./scripts/config --file "$OUT/.config" --disable LTO_CLANG || true
         ./scripts/config --file "$OUT/.config" --disable LTO_CLANG_THIN || true
@@ -534,29 +545,32 @@ runs:
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
         echo "[*] Checking active config"
-        grep -E 'CONFIG_(LTO|LTO_CLANG|LTO_CLANG_THIN|CFI|CFI_CLANG|SHADOW_CALL_STACK)' "$OUT/.config" || true
+        grep -E 'CONFIG_(MT76|MT7921|CFG80211|MAC80211|LTO|CFI|SHADOW_CALL_STACK)' "$OUT/.config" || true
 
-        export KBUILD_BUILD_TIMESTAMP="$(date)"
+        echo "[*] modules_prepare"
+        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
 
-        echo "[*] Building in-tree modules"
-        set +e
-        timeout 30m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" modules 2>&1 | tee "$OUT/build-modules.log"
-        BUILD_RC=${PIPESTATUS[0]}
-        set -e
+        echo "[*] Building cfg80211 only"
+        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=net/wireless modules 2>&1 | tee "$OUT/build-cfg80211.log"
+        test ${PIPESTATUS[0]} -eq 0 || { grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-cfg80211.log" || true; exit 1; }
 
-        if [ "$BUILD_RC" -ne 0 ]; then
-          echo "==== FIRST 20 ERRORS ===="
-          grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-modules.log" || true
-          exit "$BUILD_RC"
-        fi
+        echo "[*] Building mac80211 only"
+        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=net/mac80211 modules 2>&1 | tee "$OUT/build-mac80211.log"
+        test ${PIPESTATUS[0]} -eq 0 || { grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-mac80211.log" || true; exit 1; }
 
-        echo "[*] Installing in-tree modules"
-        make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        echo "[*] Building mt76/mt7921 only"
+        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=drivers/net/wireless/mediatek/mt76 modules 2>&1 | tee "$OUT/build-mt76.log"
+        test ${PIPESTATUS[0]} -eq 0 || { grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-mt76.log" || true; exit 1; }
+
+        echo "[*] Installing selected modules"
+        mkdir -p "$INSTALL_MOD_PATH"
+        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=net/wireless INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=net/mac80211 INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" M=drivers/net/wireless/mediatek/mt76 INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
         echo "[*] Collecting modules"
-        UNAME="$(find "$OUT/lib/modules" -mindepth 1 -maxdepth 1 -type d | head -n1 | xargs basename)"
         mkdir -p "$OUT/modules"
-        find "$OUT/lib/modules/$UNAME" -type f -name '*.ko' -exec cp {} "$OUT/modules/" \;
+        find "$OUT/lib/modules" -type f -name '*.ko' -exec cp {} "$OUT/modules/" \;
 
         echo "[*] MT7921 check"
         find "$OUT/modules" -type f -name '*.ko' | sort | grep -E 'mt76|mt7921|cfg80211|mac80211' || true
