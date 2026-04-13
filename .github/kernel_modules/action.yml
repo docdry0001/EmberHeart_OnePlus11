@@ -258,47 +258,95 @@ runs:
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
+        DEFCONFIG="$MSM/arch/arm64/configs/gki_defconfig"
+
         cd "$MSM"
-        
-        # Realtek drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK
+        chmod +x ./scripts/config
 
-        # ATH drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_ATH \
-          --module CONFIG_ATH_COMMON \
-          --module CONFIG_ATH9K \
-          --module CONFIG_ATH9K_HW \
-          --module CONFIG_ATH9K_HTC \
-          --module CONFIG_ATH9K_COMMON \
-          --module CONFIG_ATH10K \
-          --module CONFIG_ATH10K_USB \
-          --module CONFIG_ATH11K
+        # helper: enable option only if it exists in this tree
+        has_cfg() {
+          local opt="${1#CONFIG_}"
+          grep -Rqs "^config ${opt}\b" \
+            arch/arm64/configs \
+            drivers/net/wireless \
+            net \
+            2>/dev/null
+        }
 
-        # Mediatek drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --module CONFIG_MT7601U \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
-          --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7921_COMMON \
-          --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E
-          --module CONFIG_MT7921U
-                    
-        # Other configs
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
-          --module CONFIG_CAN_SLCAN
+        set_m() {
+          local opt="$1"
+          if has_cfg "$opt"; then
+            ./scripts/config --file "$DEFCONFIG" --module "$opt"
+            echo "[OK] $opt=m"
+          else
+            echo "[SKIP] missing in tree: $opt"
+          fi
+        }
 
+        set_y() {
+          local opt="$1"
+          if has_cfg "$opt"; then
+            ./scripts/config --file "$DEFCONFIG" --enable "$opt"
+            echo "[OK] $opt=y"
+          else
+            echo "[SKIP] missing in tree: $opt"
+          fi
+        }
+
+        # Realtek
+        set_y CONFIG_WLAN_VENDOR_REALTEK
+
+        # Atheros
+        set_y CONFIG_WLAN_VENDOR_ATH
+        set_m CONFIG_ATH_COMMON
+        set_m CONFIG_ATH9K
+        set_m CONFIG_ATH9K_HW
+        set_m CONFIG_ATH9K_HTC
+        set_m CONFIG_ATH9K_COMMON
+        set_m CONFIG_ATH10K
+
+        # Ralink / RT2x00
+        set_y CONFIG_WLAN_VENDOR_RALINK
+        set_m CONFIG_RT2X00
+        set_m CONFIG_RT2X00_LIB
+        set_m CONFIG_RT2X00_LIB_FIRMWARE
+        set_m CONFIG_RT2X00_USB
+        set_m CONFIG_RT2800LIB
+        set_m CONFIG_RT2800USB
+        set_m CONFIG_RT2800USB_RT33XX
+        set_m CONFIG_RT2800USB_RT35XX
+        set_m CONFIG_RT2800USB_RT3573
+        set_m CONFIG_RT2800USB_RT53XX
+        set_m CONFIG_RT2800USB_RT55XX
+        set_m CONFIG_RT2800USB_UNKNOWN
+
+        # MediaTek / mt76
+        set_y CONFIG_WLAN_VENDOR_MEDIATEK
+        set_m CONFIG_MT76_CORE
+        set_m CONFIG_MT76_LEDS
+        set_m CONFIG_MT76_USB
+        set_m CONFIG_MT76x02_LIB
+        set_m CONFIG_MT76x02_USB
+        set_m CONFIG_MT7601U
+        set_m CONFIG_MT76x0_COMMON
+        set_m CONFIG_MT76x0U
+        set_m CONFIG_MT76x2_COMMON
+        set_m CONFIG_MT76x2U
+        set_m CONFIG_MT76_CONNAC_LIB
+        set_m CONFIG_MT792x_LIB
+        set_m CONFIG_MT792x_USB
+        set_m CONFIG_MT7921_COMMON
+        set_m CONFIG_MT7921U
+        set_m CONFIG_MT7921E
+
+        # misc useful NH configs
+        set_m CONFIG_MAC80211_LEDS
+        set_m CONFIG_CAN_SLCAN
+
+        yes "" | make O=out ARCH=arm64 olddefconfig
+
+        echo "===== FINAL MEDIATEK/USB CONFIG CHECK ====="
+        grep -E 'CONFIG_(WLAN_VENDOR_MEDIATEK|MT76_CORE|MT76_LEDS|MT76_USB|MT76x02_LIB|MT76x02_USB|MT7601U|MT76x0_COMMON|MT76x0U|MT76x2_COMMON|MT76x2U|MT76_CONNAC_LIB|MT792x_LIB|MT792x_USB|MT7921_COMMON|MT7921U|MT7921E|MAC80211_LEDS)=' out/.config || true
     - name: Add my kernel patches to msm kernel
       if: env.SOC == 'waipio'
       shell: bash
