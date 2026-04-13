@@ -1,4 +1,3 @@
-
 name: Build OnePlus kernel modules
 
 permissions:
@@ -55,15 +54,12 @@ runs:
         [[ -n "$manifest" ]] || { echo "Input 'manifest' cannot be empty"; exit 1; }
     
         # Basic format checks
-        # soc: allow letters, digits, underscores, dashes (e.g., sm8650)
         if ! [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]]; then
           echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"; exit 1
         fi    
-        # branch: allow common ref patterns; spaces not allowed
         if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
           echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"; exit 1
         fi    
-        # manifest: either HTTPS URL ending with .xml, or a filename ending with .xml (no spaces)
         if [[ "$manifest" == http*://* ]]; then
           if ! [[ "$manifest" =~ ^https:// ]]; then
             echo "Manifest URL must be HTTPS"; exit 1
@@ -79,7 +75,6 @@ runs:
             echo "Manifest filename cannot contain spaces"; exit 1
           fi
         fi
-        # Optimize level validation
         case "$optimize" in
           O2|O3) ;;
           *) echo "optimize_level must be O2 or O3; got '$optimize'"; exit 1 ;;
@@ -92,25 +87,15 @@ runs:
       run: |
         set -euo pipefail
         echo "::group::Cleanup space"
-        # Remove .NET SDKs
         sudo rm -rf /usr/share/dotnet
-        # Remove Swift toolchain
         sudo rm -rf /usr/share/swift
-        # Remove Haskell (GHC)
         sudo rm -rf /usr/local/.ghcup
-        # Remove Julia
         sudo rm -rf /usr/local/julia*
-        # Remove Android SDKs
         sudo rm -rf /usr/local/lib/android
-        # Remove Chromium (optional if not using for browser tests)
         sudo rm -rf /usr/local/share/chromium
-        # Remove Microsoft/Edge and Google Chrome builds
         sudo rm -rf /opt/microsoft /opt/google
-        # Remove Azure CLI
         sudo rm -rf /opt/az
-        # Remove PowerShell
         sudo rm -rf /usr/local/share/powershell
-        # Remove CodeQL and other toolcaches
         sudo rm -rf /opt/hostedtoolcache
         docker system prune -af || true
         docker builder prune -af || true
@@ -134,10 +119,8 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        # Derive a unique build directory name
         CONFIG="$MODEL"
         echo "CONFIG=$CONFIG" >> "$GITHUB_ENV"
-        # Install repo tool if missing
         REPO="/usr/local/bin/repo"
         if [ ! -x "$REPO" ]; then
           curl -s https://storage.googleapis.com/git-repo-downloads/repo -o "$REPO"
@@ -246,7 +229,6 @@ runs:
         make ARCH=arm64 mrproper
         mkdir -p "$OUT"
 
-        # Merge defconfig fragments from vendor/$SOC_GKI.config
         ./scripts/kconfig/merge_config.sh -O "$OUT" -m arch/arm64/configs/gki_defconfig arch/arm64/configs/vendor/${SOC}_GKI.config
 
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
@@ -277,7 +259,6 @@ runs:
         cd "$MSM"
         chmod +x ./scripts/config
 
-        # helper: enable option only if it exists in this tree
         has_cfg() {
           local opt="${1#CONFIG_}"
           grep -Rqs "^config ${opt}\b" \
@@ -334,7 +315,7 @@ runs:
         set_m CONFIG_RT2800USB_RT55XX
         set_m CONFIG_RT2800USB_UNKNOWN
 
-        # MediaTek / mt76
+        # MediaTek / mt76 (basic existing ones; full backport will add missing)
         set_y CONFIG_WLAN_VENDOR_MEDIATEK
         set_m CONFIG_MT76_CORE
         set_m CONFIG_MT76_LEDS
@@ -353,14 +334,42 @@ runs:
         set_m CONFIG_MT7921U
         set_m CONFIG_MT7921E
 
-        # misc useful NH configs
+        # misc
         set_m CONFIG_MAC80211_LEDS
         set_m CONFIG_CAN_SLCAN
 
-        yes "" | make O=out ARCH=arm64 olddefconfig
+        make O=out ARCH=arm64 olddefconfig
 
         echo "===== FINAL MEDIATEK/USB CONFIG CHECK ====="
         grep -E 'CONFIG_(WLAN_VENDOR_MEDIATEK|MT76_CORE|MT76_LEDS|MT76_USB|MT76x02_LIB|MT76x02_USB|MT7601U|MT76x0_COMMON|MT76x0U|MT76x2_COMMON|MT76x2U|MT76_CONNAC_LIB|MT792x_LIB|MT792x_USB|MT7921_COMMON|MT7921U|MT7921E|MAC80211_LEDS)=' out/.config || true
+
+    - name: Backport mt76 (mt7921u) for 5.10 kernel
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/mediatek"
+
+        # Remove old mt76 (lacks mt7921)
+        rm -rf mt76
+
+        # Clone backport from openwrt (works on 5.10)
+        git clone --depth=1 --branch master https://github.com/openwrt/mt76.git
+        cd ..
+
+        # Ensure Kconfig includes mt76
+        if ! grep -q "source \"drivers/net/wireless/mediatek/mt76/Kconfig\"" Kconfig; then
+          echo 'source "drivers/net/wireless/mediatek/mt76/Kconfig"' >> Kconfig
+        fi
+
+        # Ensure Makefile includes mt76
+        if ! grep -q "obj-\$(CONFIG_MT76_CORE) += mt76/" Makefile; then
+          echo 'obj-$(CONFIG_MT76_CORE) += mt76/' >> Makefile
+        fi
+
+        echo "mt76 backport (with mt7921u) added to kernel tree"
+
     - name: Add my kernel patches to msm kernel
       if: env.SOC == 'waipio'
       shell: bash
@@ -540,7 +549,11 @@ runs:
 
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
-        ./scripts/config --file "$OUT/.config"           --enable CONFIG_LTO_CLANG_THIN           --enable CONFIG_LTO_CLANG           --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE           --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+        ./scripts/config --file "$OUT/.config" \
+          --enable CONFIG_LTO_CLANG_THIN \
+          --enable CONFIG_LTO_CLANG \
+          --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
+          --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
 
         echo "Building in-tree kernel modules..."
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
@@ -617,12 +630,16 @@ runs:
             echo "Using mmrm Module.symvers for $module"
           fi
 
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" modules; then
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
+            "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
+            "${extra_syms[@]}" modules; then
             echo "Build failed, skipping module: $module"
             return 0
           fi
 
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
+            "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
+            "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
             echo "Install failed, skipping module: $module"
             return 0
           fi
@@ -654,9 +671,7 @@ runs:
 
         echo "Removing unnecessary modules..."
         cd modules
-        # Download default module list
         curl -L -o default_modules.txt https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/default_modules.txt
-        # Remove modules in the default list
 
         while IFS= read -r module; do
           if [ -e "$module" ]; then
