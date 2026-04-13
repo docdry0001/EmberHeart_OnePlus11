@@ -739,8 +739,27 @@ runs:
           --module CONFIG_RT2800USB_RT55XX \
           --module CONFIG_RT2800USB_UNKNOWN
 
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_LEDS \
+          --module CONFIG_MT76_USB \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT76x02_USB \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76x0_COMMON \
+          --module CONFIG_MT76x0U \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x2U \
+          --module CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT792x_LIB \
+          --module CONFIG_MT792x_USB \
+          --module CONFIG_MT7921_COMMON \
+          --module CONFIG_MT7921U
+  
         echo "Nethunter configs applied"
         echo "::endgroup::"
+        
     - name: Add TTL Target Support
       shell: bash
       run: |
@@ -782,6 +801,8 @@ runs:
           --enable CONFIG_IP_SET_HASH_NETPORT \
           --enable CONFIG_IP_SET_HASH_NETIFACE \
           --enable CONFIG_IP_SET_LIST_SET
+
+
 
         echo "IP  SET support added ✅"
         echo "::endgroup::"
@@ -955,80 +976,6 @@ runs:
         echo "Kernel built 😆"
         echo "::endgroup::"
 
-    - name: Build mt7921 modules from same kernel build
-      shell: bash
-      run: |
-        set -euo pipefail
-    
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        KP="$CONFIG_DIR/kernel_platform"
-        COMMON="$KP/common"
-        MSM="$KP/msm-kernel"
-        KDIR="${MSM:-$COMMON}"          # ավելի կարճ գրելաձև
-    
-        OUT="$KDIR/out"
-        ARTIFACTS_DIR="$CONFIG_DIR/artifacts"
-        INSTALL_MOD_PATH="$OUT/_mt7921_install"
-    
-        mkdir -p "$ARTIFACTS_DIR"
-        rm -rf "$INSTALL_MOD_PATH"
-        mkdir -p "$INSTALL_MOD_PATH"
-    
-        cd "$KDIR"
-    
-        # Միացնենք անհրաժեշտ մոդուլները, եթե defconfig-ը գոյություն ունի
-        if [ -f arch/arm64/configs/gki_defconfig ]; then
-          DEFCONFIG="arch/arm64/configs/gki_defconfig"
-    
-          ./scripts/config --file "$DEFCONFIG" --enable WLAN
-          ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_MEDIATEK
-          ./scripts/config --file "$DEFCONFIG" --module MT76_CORE
-          ./scripts/config --file "$DEFCONFIG" --module MT76_USB
-          ./scripts/config --file "$DEFCONFIG" --module MT76_CONNAC_LIB
-          ./scripts/config --file "$DEFCONFIG" --module MT7921_COMMON
-          ./scripts/config --file "$DEFCONFIG" --module MT7921U
-    
-          # Անջատենք ավելորդ mt76 դրայվերները, որպեսզի չկառուցվեն
-          for opt in MT7601U MT7615E MT7663_USB_SDIO_COMMON MT7663U MT7663S; do
-            ./scripts/config --file "$DEFCONFIG" --disable "$opt" || true
-          done
-    
-          make O="$OUT" olddefconfig
-        fi
-    
-        make O="$OUT" modules_prepare
-    
-        make -j"$(nproc --all)" O="$OUT" \
-          M=drivers/net/wireless/mediatek/mt76 \
-          modules
-    
-        make O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" \
-          M=drivers/net/wireless/mediatek/mt76 \
-          modules_install
-    
-        # Ստեղծենք modules.dep
-        /sbin/depmod -b "$INSTALL_MOD_PATH" -a -e \
-          "$(cat "$OUT/include/config/kernel.release")" 2>/dev/null || true
-    
-        # Փաթեթավորենք միայն մեզ հետաքրքրող .ko ֆայլերը
-        PKG="$ARTIFACTS_DIR/mt7921-modules-${MODEL}.zip"
-        TMP="$OUT/mt7921_pkg"
-        rm -rf "$TMP"
-        mkdir -p "$TMP"
-    
-        find "$INSTALL_MOD_PATH" -type f -name '*.ko' | while read -r ko; do
-          base="$(basename "$ko")"
-          case "$base" in
-            mt76.ko|mt76-usb.ko|mt76-connac-lib.ko|mt7921-common.ko|mt7921u.ko)
-              cp -f "$ko" "$TMP/"
-              ;;
-          esac
-        done
-    
-        cd "$TMP"
-        zip -r "$PKG" ./*
-        echo "✅ MT7921 modules package created: $PKG"
-
     - name: Collect Build Stats / Validate Image
       id: collect_stats
       shell: bash
@@ -1084,6 +1031,7 @@ runs:
 
         echo "Build stats collected ✅"
         echo "::endgroup::"
+        
     - name: Create Kernel ZIP
       id: create_zip
       shell: bash
