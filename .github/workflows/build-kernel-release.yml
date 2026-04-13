@@ -134,35 +134,35 @@ jobs:
           kernel_uname: ${{ inputs.kernel_uname }}
           manifest: ${{ inputs.manifest }}
 
-  # build-kernel-modules:
-  #   name: Build ${{ matrix.model }} Kernel Modules
-  #   needs: set-op-model
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #     CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-  #     CCACHE_NOHASHDIR: "true"
-  #     CCACHE_HARDLINK: "true"
-  #   strategy:
-  #     fail-fast: false
-  #     matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
-  #   steps:
-  #     - name: Checkout Code
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 1
+  build-kernel-modules:
+    name: Build ${{ matrix.model }} Kernel Modules
+    needs: set-op-model
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
           
-  #     - name: Fix missing Oplus modules list
-  #       run: |
-  #         mkdir -p OP11R/kernel_platform/oplus/config
-  #         touch OP11R/kernel_platform/oplus/config/modules.ext.5.10.oplus
-  #         echo "Fixed missing modules.ext.5.10.oplus"
+      - name: Fix missing Oplus modules list
+        run: |
+          mkdir -p OP11R/kernel_platform/oplus/config
+          touch OP11R/kernel_platform/oplus/config/modules.ext.5.10.oplus
+          echo "Fixed missing modules.ext.5.10.oplus"
           
-  #     - name: Build Kernel Modules
-  #       uses: ./.github/kernel_modules
-  #       with:
-  #         op_config_json: ${{ toJSON(matrix) }}
-  #         manifest: ${{ inputs.manifest }}
+      - name: Build Kernel Modules
+        uses: ./.github/kernel_modules
+        with:
+          op_config_json: ${{ toJSON(matrix) }}
+          manifest: ${{ inputs.manifest }}
 
   trigger-release:
     needs:
