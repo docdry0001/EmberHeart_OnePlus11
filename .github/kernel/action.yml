@@ -739,27 +739,82 @@ runs:
           --module CONFIG_RT2800USB_RT55XX \
           --module CONFIG_RT2800USB_UNKNOWN
 
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_LEDS \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
-          --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT7601U \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT76x0U \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x2U \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT792x_LIB \
-          --module CONFIG_MT792x_USB \
-          --module CONFIG_MT7921_COMMON \
-          --module CONFIG_MT7921U
+        # ./scripts/config --file arch/arm64/configs/gki_defconfig \
+        #   --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+        #   --module CONFIG_MT76_CORE \
+        #   --module CONFIG_MT76_LEDS \
+        #   --module CONFIG_MT76_USB \
+        #   --module CONFIG_MT76x02_LIB \
+        #   --module CONFIG_MT76x02_USB \
+        #   --module CONFIG_MT7601U \
+        #   --module CONFIG_MT76x0_COMMON \
+        #   --module CONFIG_MT76x0U \
+        #   --module CONFIG_MT76x2_COMMON \
+        #   --module CONFIG_MT76x2U \
+        #   --module CONFIG_MT76_CONNAC_LIB \
+        #   --module CONFIG_MT792x_LIB \
+        #   --module CONFIG_MT792x_USB \
+        #   --module CONFIG_MT7921_COMMON \
+        #   --module CONFIG_MT7921U
   
         echo "Nethunter configs applied"
         echo "::endgroup::"
         
+    - name: Add MediaTek mt76/mt7921 configs to common kernel
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "$CONFIG/kernel_platform/common"
+        chmod +x ./scripts/config
+
+        has_cfg() {
+          local opt="${1#CONFIG_}"
+          grep -Rqs "^config ${opt}\b" \
+            arch/arm64/configs \
+            drivers/net/wireless \
+            net \
+            2>/dev/null
+        }
+
+        set_m() {
+          local opt="$1"
+          if has_cfg "$opt"; then
+            ./scripts/config --file arch/arm64/configs/gki_defconfig --module "$opt"
+            echo "[OK] $opt=m"
+          else
+            echo "[SKIP] missing in tree: $opt"
+          fi
+        }
+
+        set_y() {
+          local opt="$1"
+          if has_cfg "$opt"; then
+            ./scripts/config --file arch/arm64/configs/gki_defconfig --enable "$opt"
+            echo "[OK] $opt=y"
+          else
+            echo "[SKIP] missing in tree: $opt"
+          fi
+        }
+
+        set_y CONFIG_WLAN_VENDOR_MEDIATEK
+        set_m CONFIG_MT76_CORE
+        set_m CONFIG_MT76_LEDS
+        set_m CONFIG_MT76_USB
+        set_m CONFIG_MT76x02_LIB
+        set_m CONFIG_MT76x02_USB
+        set_m CONFIG_MT7601U
+        set_m CONFIG_MT76x0_COMMON
+        set_m CONFIG_MT76x0U
+        set_m CONFIG_MT76x2_COMMON
+        set_m CONFIG_MT76x2U
+        set_m CONFIG_MT76_CONNAC_LIB
+        set_m CONFIG_MT792x_LIB
+        set_m CONFIG_MT792x_USB
+        set_m CONFIG_MT7921_COMMON
+        set_m CONFIG_MT7921U
+
+        echo "Nethunter MediaTek configs applied"    
+    
     - name: Add TTL Target Support
       shell: bash
       run: |
