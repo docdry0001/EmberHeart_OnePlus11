@@ -738,27 +738,23 @@ runs:
           --module CONFIG_RT2800USB_RT53XX \
           --module CONFIG_RT2800USB_RT55XX \
           --module CONFIG_RT2800USB_UNKNOWN
-
-        # ./scripts/config --file arch/arm64/configs/gki_defconfig \
-        #   --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-        #   --module CONFIG_MT76_CORE \
-        #   --module CONFIG_MT76_LEDS \
-        #   --module CONFIG_MT76_USB \
-        #   --module CONFIG_MT76x02_LIB \
-        #   --module CONFIG_MT76x02_USB \
-        #   --module CONFIG_MT7601U \
-        #   --module CONFIG_MT76x0_COMMON \
-        #   --module CONFIG_MT76x0U \
-        #   --module CONFIG_MT76x2_COMMON \
-        #   --module CONFIG_MT76x2U \
-        #   --module CONFIG_MT76_CONNAC_LIB \
-        #   --module CONFIG_MT792x_LIB \
-        #   --module CONFIG_MT792x_USB \
-        #   --module CONFIG_MT7921_COMMON \
-        #   --module CONFIG_MT7921U
-  
+ 
         echo "Nethunter configs applied"
         echo "::endgroup::"
+
+    - name: Probe mt7921 source presence
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        for BASE in "$CONFIG/kernel_platform/common" "$CONFIG/kernel_platform/msm-kernel"; do
+          [ -d "$BASE" ] || continue
+          echo "===== CHECKING: $BASE ====="
+          find "$BASE/drivers/net/wireless/mediatek" -maxdepth 4 -type f 2>/dev/null | grep -E 'mt7921|mt76' || true
+          grep -Rns "config MT7921U" "$BASE/drivers/net/wireless/mediatek" 2>/dev/null || true
+          grep -Rns "config MT792x_USB" "$BASE/drivers/net/wireless/mediatek" 2>/dev/null || true
+          grep -Rns "config MT7921_COMMON" "$BASE/drivers/net/wireless/mediatek" 2>/dev/null || true
+        done
         
     - name: Add MediaTek mt76/mt7921 configs to common kernel
       shell: bash
