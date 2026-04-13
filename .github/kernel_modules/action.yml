@@ -258,15 +258,16 @@ runs:
     
         cd "$MEDIATEK_DIR"
     
-        # Ջնջել հնարավոր հին mt76-ը (եթե մնացել է)
+        # Ջնջել հին mt76-ը
         rm -rf mt76
     
-        # Clone openwrt/mt76 backport
-        git clone --depth=1 --branch master https://github.com/openwrt/mt76.git
+        # Clone lwfinger/mt76 backport
+        git clone --depth=1 --branch master https://github.com/lwfinger/mt76.git
     
-        # Ստուգել, որ Kconfig-ը կա
+        # Ստուգել, որ Kconfig-ը գոյություն ունի
         if [ ! -f mt76/Kconfig ]; then
           echo "::error::mt76/Kconfig not found after clone!"
+          ls -la mt76/   # debug
           exit 1
         fi
     
@@ -279,7 +280,8 @@ runs:
           echo 'obj-$(CONFIG_MT76_CORE) += mt76/' >> Makefile
         fi
     
-        echo "mt76 backport (with mt7921u) added successfully"
+        echo "✅ mt76 backport (lwfinger) with mt7921u added"
+      
     
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
