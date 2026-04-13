@@ -52,44 +52,21 @@ runs:
         [[ -n "$branch" ]] || { echo "Input 'branch' cannot be empty"; exit 1; }
         [[ -n "$manifest" ]] || { echo "Input 'manifest' cannot be empty"; exit 1; }
 
-        if ! [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]]; then
-          echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"
-          exit 1
-        fi
-
-        if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-          echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"
-          exit 1
-        fi
+        [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "Invalid soc: $soc"; exit 1; }
+        [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "Invalid branch: $branch"; exit 1; }
 
         if [[ "$manifest" == http*://* ]]; then
-          if ! [[ "$manifest" =~ ^https:// ]]; then
-            echo "Manifest URL must be HTTPS"
-            exit 1
-          fi
-          if ! [[ "$manifest" =~ \.xml($|\?) ]]; then
-            echo "Manifest URL should point to an XML file (.xml)"
-            exit 1
-          fi
+          [[ "$manifest" =~ ^https:// ]] || { echo "Manifest URL must be HTTPS"; exit 1; }
+          [[ "$manifest" =~ \.xml($|\?) ]] || { echo "Manifest URL should point to an XML file"; exit 1; }
         else
-          if ! [[ "$manifest" =~ \.xml$ ]]; then
-            echo "Manifest filename must end with .xml"
-            exit 1
-          fi
-          if [[ "$manifest" =~ [[:space:]] ]]; then
-            echo "Manifest filename cannot contain spaces"
-            exit 1
-          fi
+          [[ "$manifest" =~ \.xml$ ]] || { echo "Manifest filename must end with .xml"; exit 1; }
+          [[ ! "$manifest" =~ [[:space:]] ]] || { echo "Manifest filename cannot contain spaces"; exit 1; }
         fi
 
         case "$optimize" in
           O2|O3) ;;
-          *)
-            echo "optimize_level must be O2 or O3; got '$optimize'"
-            exit 1
-            ;;
+          *) echo "optimize_level must be O2 or O3; got '$optimize'"; exit 1 ;;
         esac
-
         echo "Input validation OK."
         echo "::endgroup::"
 
@@ -144,10 +121,8 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        echo "Creating folder for configuration: $CONFIG"
         mkdir -p "$CONFIG"
         cd "$CONFIG"
-        echo "Initializing and syncing kernel source..."
 
         if [[ "$MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
@@ -157,7 +132,6 @@ runs:
           "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
 
-        "$REPO" --version
         success=false
         for i in 1 2 3; do
           if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
@@ -190,30 +164,20 @@ runs:
           fi
         done
 
-        if [ -z "$BRANCH_LINE" ]; then
-          echo "Error: No BRANCH= found"
-          exit 1
-        fi
+        [ -n "$BRANCH_LINE" ] || { echo "Error: No BRANCH= found"; exit 1; }
 
         BRANCH_VALUE="${BRANCH_LINE#*=}"
         ANDROID_VERSION="${BRANCH_VALUE%-*}"
-        if [ -z "$ANDROID_VERSION" ]; then
-          echo "Could not parse android version from BRANCH=$BRANCH_VALUE"
-          exit 1
-        fi
-
         VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
         PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
         SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
         FULL_VERSION="$VERSION.$PATCHLEVEL.$SUBLEVEL"
 
-        cd "$ARTIFACTS_DIR"
         echo "ANDROID_VER=$ANDROID_VERSION" >> "$GITHUB_ENV"
         echo "KERNEL_VER=$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
         echo "KERNEL_FULL_VER=$ANDROID_VERSION-$FULL_VERSION" >> "$GITHUB_ENV"
-        echo "SUSFS_KERNEL_BRANCH=gki-$ANDROID_VERSION-$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
 
-    - name: Setup ccache (manual)
+    - name: Setup ccache
       shell: bash
       run: |
         set -euo pipefail
@@ -229,7 +193,7 @@ runs:
         rm -f msm-kernel/android/abi_gki_protected_exports_* || true
         df -h
 
-    - name: Merge
+    - name: Merge vendor config
       shell: bash
       run: |
         set -euo pipefail
@@ -240,103 +204,11 @@ runs:
         cd "$MSM"
         make ARCH=arm64 mrproper
         mkdir -p "$OUT"
+        ./scripts/kconfig/merge_config.sh -O "$OUT" -m \
+          arch/arm64/configs/gki_defconfig \
+          arch/arm64/configs/vendor/${SOC}_GKI.config
 
-        ./scripts/kconfig/merge_config.sh -O "$OUT" -m arch/arm64/configs/gki_defconfig arch/arm64/configs/vendor/${SOC}_GKI.config
-        cp "$OUT/.config" arch/arm64/configs/gki_defconfig
-        rm "$OUT/.config"
-
-    - name: Enable mt7921u backport in kernel config
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        DEFCONFIG="$MSM/arch/arm64/configs/gki_defconfig"
-
-        cd "$MSM"
-        chmod +x ./scripts/config
-
-        ./scripts/config --file "$DEFCONFIG" --enable WLAN
-        ./scripts/config --file "$DEFCONFIG" --module CFG80211
-        ./scripts/config --file "$DEFCONFIG" --module MAC80211
-        ./scripts/config --file "$DEFCONFIG" --enable WLAN_VENDOR_MEDIATEK
-
-        ./scripts/config --file "$DEFCONFIG" --module MT76_CORE
-        ./scripts/config --file "$DEFCONFIG" --module MT76_USB
-        ./scripts/config --file "$DEFCONFIG" --module MT76_CONNAC_LIB
-        ./scripts/config --file "$DEFCONFIG" --module MT7921_COMMON
-        ./scripts/config --file "$DEFCONFIG" --module MT7921U
-
-        ./scripts/config --file "$DEFCONFIG" --module MT76_LEDS || true
-        ./scripts/config --file "$DEFCONFIG" --module MAC80211_LEDS || true
-
-        ./scripts/config --file "$DEFCONFIG" --disable LTO || true
-        ./scripts/config --file "$DEFCONFIG" --disable LTO_CLANG || true
-        ./scripts/config --file "$DEFCONFIG" --disable LTO_CLANG_THIN || true
-        ./scripts/config --file "$DEFCONFIG" --disable CFI || true
-        ./scripts/config --file "$DEFCONFIG" --disable CFI_CLANG || true
-        ./scripts/config --file "$DEFCONFIG" --disable SHADOW_CALL_STACK || true
-
-        make O=out olddefconfig
-
-    - name: FIX vmscan scan_adjusted (waipio)
-      if: env.SOC == 'waipio'
-      shell: bash
-      run: |
-        set -euo pipefail
-        cd "$CONFIG/kernel_platform/msm-kernel/mm"
-        sed -i '/bool scan_adjusted = false;/d' vmscan.c
-        perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
-        grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20
-        grep -n "scan_adjusted" vmscan.c | head -20
-
-    - name: FIX thermal kvzalloc kvfree (waipio)
-      if: env.SOC == 'waipio'
-      shell: bash
-      run: |
-        set -euo pipefail
-        export FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
-        python3 - <<'PY'
-        import os
-        from pathlib import Path
-        path = Path(os.environ["FILE"])
-        text = path.read_text()
-        if "#include <linux/mm.h>" not in text and "#include <linux/slab.h>" in text:
-            text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>\n#include <linux/mm.h>", 1)
-        if "#define kvzalloc(size, flags)" not in text:
-            shim = (
-                "\n#ifndef kvzalloc\n"
-                "#define kvzalloc(size, flags) kzalloc((size), (flags))\n"
-                "#endif\n"
-                "#ifndef kvfree\n"
-                "#define kvfree(ptr) kfree((ptr))\n"
-                "#endif\n"
-            )
-            if "#include <linux/mm.h>" in text:
-                text = text.replace("#include <linux/mm.h>", "#include <linux/mm.h>" + shim, 1)
-            elif "#include <linux/slab.h>" in text:
-                text = text.replace("#include <linux/slab.h>", "#include <linux/slab.h>" + shim, 1)
-        path.write_text(text)
-        PY
-        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20
-
-    - name: FIX binder mmget_still_valid compat (waipio)
-      if: env.SOC == 'waipio'
-      shell: bash
-      run: |
-        set -euo pipefail
-        FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
-        sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
-        sed -i '/HAVE_MMGET_STILL_VALID_COMPAT/,+5d' "$FILE"
-        sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE"
-        grep -q '^#include <linux/sched/mm.h>$' "$FILE" || \
-          sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
-        grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || \
-          perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$FILE"
-        grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
-        grep -n 'mmget_still_valid' "$FILE" | head -20
-
-    - name: Replace in-tree mt76 with 5.10 backport
+    - name: Replace in-tree mt76 with mt7921-capable backport
       shell: bash
       run: |
         set -euo pipefail
@@ -352,97 +224,107 @@ runs:
         mkdir -p "$(dirname "$MT76_DST")"
         cp -a "$TMP_DIR" "$MT76_DST"
 
-        echo "[+] Replaced in-tree mt76 with 5.10 backport"
         test -f "$MT76_DST/mt7921/usb.c"
+        echo "[+] mt76 backport imported"
 
-    - name: Patch mt76-backport for Snapdragon kernel (disable WED)
+    - name: Patch mt76 backport for Snapdragon vendor kernel
       shell: bash
       run: |
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         MT76_DIR="$MSM/drivers/net/wireless/mediatek/mt76"
-
-        echo "[*] Patching mt76-backport for non-MediaTek kernel..."
+        MCU_FILE="$MT76_DIR/mt76_connac_mcu.c"
 
         sed -i '/linux\/soc\/mediatek\/mtk_wed.h/d' "$MT76_DIR/mt76.h"
 
         python3 - <<PY
-        from pathlib import Path
+          from pathlib import Path
+          p = Path(r"$MT76_DIR/mt76.h")
+          txt = p.read_text()
+          marker = "#include <linux/etherdevice.h>\n"
+          stub = r'''
+          #ifndef __MT76_WED_STUBS_H
+          #define __MT76_WED_STUBS_H
+          struct mtk_wed_device { int dummy; };
+          struct mtk_wed_ops { int dummy; };
+          enum mtk_wed_bus_type {
+              MTK_WED_BUS_PCIE = 0,
+              MTK_WED_BUS_AXI = 1,
+              MTK_WED_BUS_USB = 2,
+          };
+          #define mtk_wed_device_active(...)            false
+          #define mtk_wed_get_rx_capa(...)              false
+          #define mtk_wed_device_attach(...)            (-1)
+          #define mtk_wed_device_detach(...)            do { } while (0)
+          #define mtk_wed_device_start(...)             do { } while (0)
+          #define mtk_wed_device_stop(...)              do { } while (0)
+          #define mtk_wed_device_tx_ring_setup(...)     0
+          #define mtk_wed_device_rx_ring_setup(...)     0
+          #define mtk_wed_device_dma_reset(...)         do { } while (0)
+          #define mtk_wed_device_ppe_check(...)         false
+          #define mtk_wed_device_irq_set_mask(...)      do { } while (0)
+          #define mtk_wed_device_update_msg(...)        do { } while (0)
+          #define mtk_wed_get_pci_bus(...)              NULL
+          #define mtk_wed_device_setup_tc(...)          0
+          #define mtk_wed_device_txfree(...)            false
+          #define mtk_wed_device_register(...)          0
+          #define mtk_wed_device_unregister(...)        do { } while (0)
+          #endif
+          '''
+          if "__MT76_WED_STUBS_H" not in txt:
+              txt = txt.replace(marker, marker + stub + "\n", 1) if marker in txt else stub + "\n" + txt
+          p.write_text(txt)
+         PY
 
-        p = Path(r"$MT76_DIR/mt76.h")
-        txt = p.read_text()
-
-        marker = "#include <linux/etherdevice.h>\n"
-        stub = r'''
-        #ifndef __MT76_WED_STUBS_H
-        #define __MT76_WED_STUBS_H
-
-        struct mtk_wed_device { int dummy; };
-        struct mtk_wed_ops { int dummy; };
-
-        enum mtk_wed_bus_type {
-            MTK_WED_BUS_PCIE = 0,
-            MTK_WED_BUS_AXI = 1,
-            MTK_WED_BUS_USB = 2,
-        };
-
-        #define mtk_wed_device_active(...)            false
-        #define mtk_wed_get_rx_capa(...)              false
-        #define mtk_wed_device_attach(...)            (-1)
-        #define mtk_wed_device_detach(...)            do { } while (0)
-        #define mtk_wed_device_start(...)             do { } while (0)
-        #define mtk_wed_device_stop(...)              do { } while (0)
-        #define mtk_wed_device_tx_ring_setup(...)     0
-        #define mtk_wed_device_rx_ring_setup(...)     0
-        #define mtk_wed_device_dma_reset(...)         do { } while (0)
-        #define mtk_wed_device_ppe_check(...)         false
-        #define mtk_wed_device_irq_set_mask(...)      do { } while (0)
-        #define mtk_wed_device_update_msg(...)        do { } while (0)
-        #define mtk_wed_get_pci_bus(...)              NULL
-        #define mtk_wed_device_setup_tc(...)          0
-        #define mtk_wed_device_txfree(...)            false
-        #define mtk_wed_device_register(...)          0
-        #define mtk_wed_device_unregister(...)        do { } while (0)
-
-        #endif
-        '''
-
-        if "__MT76_WED_STUBS_H" not in txt:
-            if marker in txt:
-                txt = txt.replace(marker, marker + stub + "\n", 1)
-            else:
-                txt = stub + "\n" + txt
-
-        p.write_text(txt)
-        PY
-
-        echo "[*] mt76-backport WED patch applied"
-        grep -n 'mtk_wed' "$MT76_DIR/mt76.h" || true
-
-    - name: Patch mt76-backport uninitialized sar_power
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        FILE="$MSM/drivers/net/wireless/mediatek/mt76/mt76_connac_mcu.c"
-
-        sed -i 's/s8 reg_power, sar_power;/s8 reg_power = 0, sar_power = 0;/' "$FILE"
-        grep -n "reg_power = 0, sar_power = 0" "$FILE"
-
-    - name: Disable -Werror for mt76 backport
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        MT76_DIR="$MSM/drivers/net/wireless/mediatek/mt76"
-
-        find "$MT76_DIR" -type f -name Makefile -exec sed -i 's/-Werror//g' {} +
+        sed -i 's/s8 reg_power, sar_power;/s8 reg_power = 0, sar_power = 0;/' "$MCU_FILE" || true
+        find "$MT76_DIR" -type f -name 'Makefile' -exec sed -i 's/-Werror//g' {} +
         find "$MT76_DIR" -type f -exec sed -i 's/-Werror//g' {} +
 
-    - name: Detect Clang (toolchain for build)
+    - name: Apply Qualcomm 5.10 compatibility fixes
+      if: env.SOC == 'waipio'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        VMSCAN="$CONFIG/kernel_platform/msm-kernel/mm/vmscan.c"
+        THERMAL="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
+        BINDER="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
+
+        sed -i '/bool scan_adjusted = false;/d' "$VMSCAN"
+        perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' "$VMSCAN"
+
+        FILE="$THERMAL" python3 - <<'PY'
+          import os
+          from pathlib import Path
+          path = Path(os.environ['FILE'])
+          text = path.read_text()
+          if '#include <linux/mm.h>' not in text and '#include <linux/slab.h>' in text:
+              text = text.replace('#include <linux/slab.h>', '#include <linux/slab.h>\n#include <linux/mm.h>', 1)
+          if '#define kvzalloc(size, flags)' not in text:
+              shim = (
+                  '\n#ifndef kvzalloc\n'
+                  '#define kvzalloc(size, flags) kzalloc((size), (flags))\n'
+                  '#endif\n'
+                  '#ifndef kvfree\n'
+                  '#define kvfree(ptr) kfree((ptr))\n'
+                  '#endif\n'
+              )
+              if '#include <linux/mm.h>' in text:
+                  text = text.replace('#include <linux/mm.h>', '#include <linux/mm.h>' + shim, 1)
+              elif '#include <linux/slab.h>' in text:
+                  text = text.replace('#include <linux/slab.h>', '#include <linux/slab.h>' + shim, 1)
+          path.write_text(text)
+          PY
+
+        sed -i '/^#include <linux\/mm.h>$/d' "$BINDER"
+        sed -i '/HAVE_MMGET_STILL_VALID_COMPAT/,+5d' "$BINDER"
+        sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$BINDER"
+        grep -q '^#include <linux/sched/mm.h>$' "$BINDER" || sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$BINDER"
+        grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$BINDER" || \
+          perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$BINDER"
+
+    - name: Detect Clang toolchain
       shell: bash
       run: |
         set -euo pipefail
@@ -461,26 +343,74 @@ runs:
         if ! $CLANG_FOUND && command -v clang >/dev/null 2>&1; then
           CLANG_BIN="$(dirname "$(command -v clang)")"
           CLANG_FOUND=true
-          echo "Using system clang."
         fi
 
         $CLANG_FOUND || { echo "No clang toolchain found"; exit 1; }
         echo "CLANG_BIN_PATH=$CLANG_BIN" >> "$GITHUB_ENV"
-        CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
-        echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
-        echo "Detected Clang: $CLANG_VERSION"
+        echo "CLANG_VERSION=$($CLANG_BIN/clang --version | head -n1)" >> "$GITHUB_ENV"
 
-    - name: Build Kernel Modules
+    - name: Configure only MT7921U stack
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        OUT="$MSM/out"
+
+        cd "$MSM"
+        : > .scmversion
+
+        ./scripts/config --file "$OUT/.config" --disable LOCALVERSION_AUTO || true
+        ./scripts/config --file "$OUT/.config" --enable WLAN
+        ./scripts/config --file "$OUT/.config" --module CFG80211
+        ./scripts/config --file "$OUT/.config" --module MAC80211
+        ./scripts/config --file "$OUT/.config" --enable WLAN_VENDOR_MEDIATEK
+
+        ./scripts/config --file "$OUT/.config" --module MT76_CORE
+        ./scripts/config --file "$OUT/.config" --module MT76_USB
+        ./scripts/config --file "$OUT/.config" --module MT76_CONNAC_LIB
+        ./scripts/config --file "$OUT/.config" --module MT7921_COMMON
+        ./scripts/config --file "$OUT/.config" --module MT7921U
+        ./scripts/config --file "$OUT/.config" --module MT76_LEDS || true
+        ./scripts/config --file "$OUT/.config" --module MAC80211_LEDS || true
+        ./scripts/config --file "$OUT/.config" --enable SECTION_MISMATCH_WARN_ONLY || true
+
+        # Strip unrelated wireless families so the artifact only contains the MT7921U path.
+        for sym in \
+          WLAN_VENDOR_ATH WLAN_VENDOR_ATMEL WLAN_VENDOR_BROADCOM WLAN_VENDOR_CISCO \
+          WLAN_VENDOR_INTEL WLAN_VENDOR_INTERSIL WLAN_VENDOR_MARVELL WLAN_VENDOR_QUANTENNA \
+          WLAN_VENDOR_RALINK WLAN_VENDOR_REALTEK WLAN_VENDOR_RSI WLAN_VENDOR_ST \
+          WLAN_VENDOR_TI WLAN_VENDOR_ZYDAS RT2X00 RTL8187 RTL_CARDS RTW88 RTW89 ATH_CARDS \
+          ATH9K ATH10K ATH11K BRCMFMAC MWIFIEX LIBERTAS_IWLAGN PRISM54 HOSTAP_P54_USB \
+          MT7601U MT76x0_COMMON MT76x2_COMMON MT7615_COMMON MT7615E MT7663_USB_SDIO_COMMON \
+          MT7663U MT7663S MT7915E MT7921E MT7925_COMMON MT7925E MT7996E; do
+          ./scripts/config --file "$OUT/.config" --disable "$sym" || true
+        done
+
+        ./scripts/config --file "$OUT/.config" --disable LTO || true
+        ./scripts/config --file "$OUT/.config" --disable LTO_CLANG || true
+        ./scripts/config --file "$OUT/.config" --disable LTO_CLANG_FULL || true
+        ./scripts/config --file "$OUT/.config" --disable LTO_CLANG_THIN || true
+        ./scripts/config --file "$OUT/.config" --enable LTO_NONE || true
+        ./scripts/config --file "$OUT/.config" --disable CFI || true
+        ./scripts/config --file "$OUT/.config" --disable CFI_CLANG || true
+        ./scripts/config --file "$OUT/.config" --disable SHADOW_CALL_STACK || true
+
+        grep -q '^CONFIG_LTO_NONE=y' "$OUT/.config" || echo 'CONFIG_LTO_NONE=y' >> "$OUT/.config"
+        grep -q '^CONFIG_SECTION_MISMATCH_WARN_ONLY=y' "$OUT/.config" || echo 'CONFIG_SECTION_MISMATCH_WARN_ONLY=y' >> "$OUT/.config"
+
+        make O="$OUT" olddefconfig
+        echo "[*] Active MT7921 config:"
+        grep -E 'CONFIG_(MT76|MT7921|CFG80211|MAC80211|LOCALVERSION)' "$OUT/.config" || true
+
+    - name: Build modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
         OUT="$MSM/out"
         INSTALL_MOD_PATH="$OUT"
 
         cd "$MSM"
-
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
 
@@ -506,137 +436,56 @@ runs:
           CC="ccache clang"
         )
 
-        export KCFLAGS="-Wno-error -Wframe-larger-than=4096"
-        export KCPPFLAGS="-Wno-error"
-
-        JOBS=2
-        mkdir -p "$OUT"
-
-        echo "[*] System info:"
-        nproc || true
-        free -h || true
-
-        echo "[*] Preparing merged active .config"
-        rm -f "$OUT/.config"
-
-        ./scripts/kconfig/merge_config.sh -O "$OUT" -m \
-          arch/arm64/configs/gki_defconfig \
-          arch/arm64/configs/vendor/${SOC}_GKI.config
-
-        # keep vendor/local kernel localversion from merged config, only prevent auto-appended '+'
-        ./scripts/config --file "$OUT/.config" --disable LOCALVERSION_AUTO || true
-        sed -i 's/^CONFIG_LOCALVERSION_AUTO=y/# CONFIG_LOCALVERSION_AUTO is not set/' "$OUT/.config" || true
-        : > .scmversion
-
-        echo "[*] LOCALVERSION before olddefconfig:"
-        grep -E '^CONFIG_LOCALVERSION=|^CONFIG_LOCALVERSION_AUTO' "$OUT/.config" || true
-
-        ./scripts/config --file "$OUT/.config" --enable WLAN
-        ./scripts/config --file "$OUT/.config" --module CFG80211
-        ./scripts/config --file "$OUT/.config" --module MAC80211
-        ./scripts/config --file "$OUT/.config" --enable WLAN_VENDOR_MEDIATEK
-        ./scripts/config --file "$OUT/.config" --module MT76_CORE
-        ./scripts/config --file "$OUT/.config" --module MT76_USB
-        ./scripts/config --file "$OUT/.config" --module MT76_CONNAC_LIB
-        ./scripts/config --file "$OUT/.config" --module MT7921_COMMON
-        ./scripts/config --file "$OUT/.config" --module MT7921U
-        ./scripts/config --file "$OUT/.config" --enable SECTION_MISMATCH_WARN_ONLY || true
-
-        ./scripts/config --file "$OUT/.config" --disable LTO || true
-        ./scripts/config --file "$OUT/.config" --disable LTO_CLANG || true
-        ./scripts/config --file "$OUT/.config" --disable LTO_CLANG_FULL || true
-        ./scripts/config --file "$OUT/.config" --disable LTO_CLANG_THIN || true
-        ./scripts/config --file "$OUT/.config" --enable LTO_NONE || true
-        ./scripts/config --file "$OUT/.config" --disable CFI || true
-        ./scripts/config --file "$OUT/.config" --disable CFI_CLANG || true
-        ./scripts/config --file "$OUT/.config" --disable SHADOW_CALL_STACK || true
-
-        sed -i 's/^CONFIG_LTO=y/# CONFIG_LTO is not set/' "$OUT/.config" || true
-        sed -i 's/^CONFIG_LTO_CLANG=y/# CONFIG_LTO_CLANG is not set/' "$OUT/.config" || true
-        sed -i 's/^CONFIG_LTO_CLANG_FULL=y/# CONFIG_LTO_CLANG_FULL is not set/' "$OUT/.config" || true
-        sed -i 's/^CONFIG_LTO_CLANG_THIN=y/# CONFIG_LTO_CLANG_THIN is not set/' "$OUT/.config" || true
-        sed -i 's/^CONFIG_CFI=y/# CONFIG_CFI is not set/' "$OUT/.config" || true
-        sed -i 's/^CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/' "$OUT/.config" || true
-        sed -i 's/^CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/' "$OUT/.config" || true
-        grep -q '^CONFIG_LTO_NONE=y' "$OUT/.config" || echo 'CONFIG_LTO_NONE=y' >> "$OUT/.config"
-        grep -q '^CONFIG_SECTION_MISMATCH_WARN_ONLY=y' "$OUT/.config" || echo 'CONFIG_SECTION_MISMATCH_WARN_ONLY=y' >> "$OUT/.config"
-
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
-
-        echo "[*] LOCALVERSION after olddefconfig:"
-        grep -E '^CONFIG_LOCALVERSION=|^CONFIG_LOCALVERSION_AUTO' "$OUT/.config" || true
-
-        echo "[*] Checking active config"
-        grep -E 'CONFIG_(LOCALVERSION|LOCALVERSION_AUTO|LTO|LTO_CLANG|LTO_CLANG_FULL|LTO_CLANG_THIN|LTO_NONE|CFI|CFI_CLANG|SHADOW_CALL_STACK|SECTION_MISMATCH_WARN_ONLY|MT7921|MT76|CFG80211|MAC80211)' "$OUT/.config" || true
-
+        if [ '${{ inputs.optimize_level }}' = 'O3' ]; then
+          export KCFLAGS='-Wno-error -Wframe-larger-than=4096 -O3'
+        else
+          export KCFLAGS='-Wno-error -Wframe-larger-than=4096 -O2'
+        fi
+        export KCPPFLAGS='-Wno-error'
         export KBUILD_BUILD_TIMESTAMP="$(date)"
 
-        echo "[*] Building full-tree modules without LTO"
-        set +e
-        timeout 30m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" modules 2>&1 | tee "$OUT/build-modules.log"
-        BUILD_RC=${PIPESTATUS[0]}
-        set -e
-
-        if [ "$BUILD_RC" -ne 0 ]; then
-          echo "==== FIRST 20 ERRORS ===="
-          grep -n -m 20 -E 'error:|fatal error:|undefined reference|No rule to make target' "$OUT/build-modules.log" || true
-          exit "$BUILD_RC"
-        fi
-
-        echo "[*] Installing modules"
+        JOBS=2
+        timeout 35m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" modules 2>&1 | tee "$OUT/build-modules.log"
         timeout 20m make -j"$JOBS" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
 
-        echo "[*] Collecting modules"
-        mkdir -p "$OUT/modules"
-        find "$OUT/lib/modules" -type f -name '*.ko' -exec cp {} "$OUT/modules/" \;
-
-        echo "[*] MT7921 check"
-        find "$OUT/modules" -type f -name '*.ko' | sort | grep -E 'mt76|mt7921|cfg80211|mac80211' || true
-
-        if ! find "$OUT/modules" -type f -name 'mt7921u*.ko' | grep -q .; then
-          echo "::error::mt7921u.ko was not produced"
-          exit 1
-        fi
-
-        echo "[+] mt7921u.ko detected successfully"
-        
-    - name: Filter modules
+    - name: Collect only MT7921U dependency chain
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
         OUT="$MSM/out"
+        PKG="$OUT/modules_mt7921u"
 
-        cd "$OUT"
-        mkdir -p modules
-        find lib/modules -type f -name '*.ko' -exec cp {} modules/ \;
+        mkdir -p "$PKG"
+        find "$OUT/lib/modules" -type f -name '*.ko' -exec cp {} "$PKG/" \;
 
-        cd modules
-        find . -type f -name '*.ko' \
-          ! -name 'mt*.ko' \
-          ! -name 'cfg80211*.ko' \
-          ! -name 'mac80211*.ko' \
-          -delete
+        cd "$PKG"
+        find . -maxdepth 1 -type f -name '*.ko' | while read -r f; do
+          base="$(basename "$f")"
+          case "$base" in
+            cfg80211*.ko|mac80211*.ko|mt76*.ko|mt792*.ko)
+              ;;
+            *)
+              rm -f "$f"
+              ;;
+          esac
+        done
 
         echo "Remaining modules:"
-        find . -type f -name '*.ko' | sort
+        ls -1 *.ko | sort
 
-    - name: Verify expected MT7921 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        OUT="$MSM/out/modules"
+        ls -1 *.ko | grep -Eq '^mt7921u.*\.ko$' || { echo '::error::mt7921u.ko was not produced'; exit 1; }
+        ls -1 *.ko | grep -Eq '^cfg80211.*\.ko$' || { echo '::error::cfg80211.ko missing'; exit 1; }
+        ls -1 *.ko | grep -Eq '^mac80211.*\.ko$' || { echo '::error::mac80211.ko missing'; exit 1; }
 
-        echo "Checking for mt7921 artifacts..."
-        find "$OUT" -type f -name '*.ko' | sort | grep -E 'mt76|mt7921|cfg80211|mac80211' || true
+        {
+          printf '%s\n' cfg80211.ko
+          printf '%s\n' mac80211.ko
+          ls -1 mt76*.ko 2>/dev/null | sort
+          ls -1 mt792*.ko 2>/dev/null | sort
+        } | awk '!seen[$0]++' > modules.load.order
 
-        if ! find "$OUT" -type f -name 'mt7921u*.ko' | grep -q .; then
-          echo "::error::mt7921u.ko was not produced"
-          exit 1
-        fi
+        cat modules.load.order
 
     - name: Create Kernel Modules zip
       id: create_zip
@@ -644,14 +493,12 @@ runs:
       run: |
         set -euo pipefail
         CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        KERNEL_PLATFORM="$CONFIG_DIR/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        OUT="$MSM/out"
-        MODULES_SRC="$OUT/modules"
-        MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
+        MSM="$CONFIG_DIR/kernel_platform/msm-kernel"
+        MODULES_SRC="$MSM/out/modules_mt7921u"
+        MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}_mt7921u_only.zip"
 
         mkdir -p "$CONFIG_DIR/artifacts"
-        find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
+        (cd "$MODULES_SRC" && zip -r "$MODULES_ZIP" ./* >/dev/null)
         echo "Packaged kernel modules to $MODULES_ZIP"
 
     - name: Final Build Summary
@@ -659,14 +506,14 @@ runs:
       run: |
         set -euo pipefail
         {
-          echo "CCache Statistics :"
-          echo "$(/usr/bin/ccache -s)"
-        } | tee summary.txt
-        {
           echo "### Kernel Modules Build Summary"
           echo ""
-          echo "CCache Statistics :"
-          echo "$(ccache -s -v)"
+          echo "Model: $MODEL"
+          echo "Kernel: $KERNEL_FULL_VER"
+          echo "Manifest: $MANIFEST"
+          echo ""
+          echo "CCache Statistics:"
+          ccache -s -v || true
         } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Upload Kernel Modules zip
