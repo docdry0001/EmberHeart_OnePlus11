@@ -247,7 +247,40 @@ runs:
           grep -Rns "config MT792x_USB" "$BASE/drivers/net/wireless/mediatek" 2>/dev/null || true
           grep -Rns "config MT7921_COMMON" "$BASE/drivers/net/wireless/mediatek" 2>/dev/null || true
         done
-        
+
+    - name: Backport mt76 (mt7921u) for 5.10 kernel
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        MEDIATEK_DIR="$MSM/drivers/net/wireless/mediatek"
+    
+        cd "$MEDIATEK_DIR"
+    
+        # Ջնջել հնարավոր հին mt76-ը (եթե մնացել է)
+        rm -rf mt76
+    
+        # Clone openwrt/mt76 backport
+        git clone --depth=1 --branch master https://github.com/openwrt/mt76.git
+    
+        # Ստուգել, որ Kconfig-ը կա
+        if [ ! -f mt76/Kconfig ]; then
+          echo "::error::mt76/Kconfig not found after clone!"
+          exit 1
+        fi
+    
+        # Մաքրել mediatek/Kconfig-ը հին source-ից, ապա ավելացնել նորը
+        sed -i '/source.*mt76\/Kconfig/d' Kconfig
+        echo 'source "drivers/net/wireless/mediatek/mt76/Kconfig"' >> Kconfig
+    
+        # Makefile-ում ապահովել mt76-ի ընդգրկումը
+        if ! grep -q "obj-\$(CONFIG_MT76_CORE) += mt76/" Makefile; then
+          echo 'obj-$(CONFIG_MT76_CORE) += mt76/' >> Makefile
+        fi
+    
+        echo "mt76 backport (with mt7921u) added successfully"
+    
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -343,32 +376,6 @@ runs:
         echo "===== FINAL MEDIATEK/USB CONFIG CHECK ====="
         grep -E 'CONFIG_(WLAN_VENDOR_MEDIATEK|MT76_CORE|MT76_LEDS|MT76_USB|MT76x02_LIB|MT76x02_USB|MT7601U|MT76x0_COMMON|MT76x0U|MT76x2_COMMON|MT76x2U|MT76_CONNAC_LIB|MT792x_LIB|MT792x_USB|MT7921_COMMON|MT7921U|MT7921E|MAC80211_LEDS)=' out/.config || true
 
-    - name: Backport mt76 (mt7921u) for 5.10 kernel
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/mediatek"
-
-        # Remove old mt76 (lacks mt7921)
-        rm -rf mt76
-
-        # Clone backport from openwrt (works on 5.10)
-        git clone --depth=1 --branch master https://github.com/openwrt/mt76.git
-        cd ..
-
-        # Ensure Kconfig includes mt76
-        if ! grep -q "source \"drivers/net/wireless/mediatek/mt76/Kconfig\"" Kconfig; then
-          echo 'source "drivers/net/wireless/mediatek/mt76/Kconfig"' >> Kconfig
-        fi
-
-        # Ensure Makefile includes mt76
-        if ! grep -q "obj-\$(CONFIG_MT76_CORE) += mt76/" Makefile; then
-          echo 'obj-$(CONFIG_MT76_CORE) += mt76/' >> Makefile
-        fi
-
-        echo "mt76 backport (with mt7921u) added to kernel tree"
 
     - name: Add my kernel patches to msm kernel
       if: env.SOC == 'waipio'
