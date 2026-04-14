@@ -166,12 +166,12 @@ jobs:
           set -euo pipefail
           MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
           OUT="$MSM/out"
-      
+
           if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
             export PATH="${CLANG_BIN}:$PATH"
           fi
           export PATH="/usr/lib/ccache:$PATH"
-      
+
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -193,19 +193,19 @@ jobs:
             HOSTCXX=clang++
             CC=ccache\ clang
           )
-      
+
           cd "$MSM"
           mkdir -p "$OUT"
-      
+
           make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
           make "${MAKE_FLAGS[@]}" O="$OUT" prepare
           make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
-      
+
           echo "===== PREPARED KERNEL TREE CHECK ====="
           ls -l "$OUT/include/generated/autoconf.h" || true
           ls -l "$OUT/include/config/auto.conf" || true
-          ls -l "$OUT/arch/arm64/include/generated" || true
+          ls -ld "$OUT/arch/arm64/include/generated" || true
           find "$OUT" -path '*asm/compiler.h' | head -20 || true
 
       - name: Download stable backports release
@@ -231,17 +231,17 @@ jobs:
           echo "===== RELEVANT CONFIG ENTRIES ====="
           grep -Rns "config .*MT7921\|config .*MT76\|config .*CFG80211\|config .*MAC80211" . || true
 
-      - name: Configure stable backports for Wi-Fi
+      - name: Configure stable backports for MT7921U only
         shell: bash
         run: |
           set -euo pipefail
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-      
+
           if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
             export PATH="${CLANG_BIN}:$PATH"
           fi
           export PATH="/usr/lib/ccache:$PATH"
-      
+
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -263,22 +263,40 @@ jobs:
             HOSTCXX=clang++
             CC=clang
           )
-      
+
           cd "$GITHUB_WORKSPACE/backports-stable"
-      
+
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
             defconfig-wifi
-      
+
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
             olddefconfig </dev/null || true
-      
+
           if [ -x ./scripts/config ]; then
+            # Disable broad wireless families to reduce noise
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_ADMTEK || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_ATH || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_ATMEL || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_BROADCOM || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_CISCO || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_INTEL || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_INTERSIL || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_MARVELL || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_QUANTENNA || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_RALINK || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_REALTEK || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_ST || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_TI || true
+            ./scripts/config --disable CPTCFG_WLAN_VENDOR_ZYDAS || true
+
+            # Keep only MT7921 stack
             ./scripts/config --enable CPTCFG_CFG80211 || true
             ./scripts/config --enable CPTCFG_MAC80211 || true
+            ./scripts/config --enable CPTCFG_WLAN_VENDOR_MEDIATEK || true
             ./scripts/config --module CPTCFG_MT76_CORE || true
             ./scripts/config --module CPTCFG_MT76_USB || true
             ./scripts/config --module CPTCFG_MT76_CONNAC_LIB || true
@@ -286,27 +304,33 @@ jobs:
             ./scripts/config --module CPTCFG_MT792x_USB || true
             ./scripts/config --module CPTCFG_MT7921_COMMON || true
             ./scripts/config --module CPTCFG_MT7921U || true
-      
+
             make "${MAKE_FLAGS[@]}" \
               KLIB="$KERNEL_BUILD" \
               KLIB_BUILD="$KERNEL_BUILD" \
               olddefconfig </dev/null || true
           fi
-      
+
+          echo "===== MT7921 SYMBOL PROOF ====="
+          grep -E 'CPTCFG_MT7921U|CPTCFG_MT7921_COMMON|CPTCFG_MT792x_USB|CPTCFG_MT792x_LIB|CPTCFG_MT76_USB|CPTCFG_MT76_CORE|CPTCFG_CFG80211|CPTCFG_MAC80211|CPTCFG_WLAN_VENDOR_MEDIATEK' .config || true
+
+          echo "===== MT7921 SOURCE FILES ====="
+          find drivers -type f | grep -E 'mt7921|mt76' | sort || true
+
           echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
           grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
-    
+
       - name: Build stable backports against OP11R kernel tree
         shell: bash
         run: |
           set -euo pipefail
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-      
+
           if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
             export PATH="${CLANG_BIN}:$PATH"
           fi
           export PATH="/usr/lib/ccache:$PATH"
-      
+
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -328,29 +352,29 @@ jobs:
             HOSTCXX=clang++
             CC=clang
           )
-      
+
           cd "$GITHUB_WORKSPACE/backports-stable"
-      
+
           make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
             V=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log"
-            
+
       - name: Collect artifacts
         if: always()
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
-      
+
           cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
           cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
           cp -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" artifacts/ || true
-      
+
           find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
           find "$GITHUB_WORKSPACE/backports-stable" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
-      
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
