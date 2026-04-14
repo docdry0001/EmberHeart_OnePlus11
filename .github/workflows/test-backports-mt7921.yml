@@ -328,6 +328,25 @@ jobs:
           echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
           grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
 
+      - name: Patch backports compat for OnePlus CFI macros
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          FILE="backport-include/linux/module.h"
+
+          echo "===== BEFORE PATCH ====="
+          grep -n "__CFI_ADDRESSABLE" "$FILE" || true
+
+          # Target kernel's __CFI_ADDRESSABLE() takes one arg, not two.
+          sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
+          sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+
+          echo "===== AFTER PATCH ====="
+          grep -n "__CFI_ADDRESSABLE" "$FILE" || true
+
+
       - name: Build stable backports against OP11R kernel tree
         shell: bash
         run: |
