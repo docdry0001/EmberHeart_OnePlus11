@@ -15,10 +15,10 @@ on:
       backports_release:
         description: "Stable backports release"
         required: true
-        default: "backports-5.10.157-1"
+        default: "backports-v6.18"
         type: choice
         options:
-          - backports-5.10.157-1
+          - backports-v6.18
       optimize_level:
         description: "Optimization level"
         required: true
@@ -213,11 +213,11 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE="${{ github.event.inputs.backports_release }}"
-          URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v5.10.157/${RELEASE}.tar.xz"
+          URL="https://github.com/openwrt/backports/releases/download/${RELEASE}/backports-6.18.tar.zst"
 
-          wget -O backports.tar.xz "$URL"
-          tar -xf backports.tar.xz
-          mv "$RELEASE" backports-stable
+          wget -O backports.tar.zst "$URL"
+          tar --zstd -xf backports.tar.zst
+          mv backports-6.18 backports-stable
 
       - name: Inspect stable backports package
         shell: bash
