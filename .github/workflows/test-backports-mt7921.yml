@@ -266,10 +266,26 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/backports-stable"
 
-          make "${MAKE_FLAGS[@]}" \
-            KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_BUILD" \
-            defconfig-wifi
+          echo "===== DEFCONFIG FILES ====="
+          find defconfigs -maxdepth 2 -type f | sort || true
+
+          if [ -f defconfigs/wifi ]; then
+            make "${MAKE_FLAGS[@]}" \
+              KLIB="$KERNEL_BUILD" \
+              KLIB_BUILD="$KERNEL_BUILD" \
+              defconfig-wifi
+          elif [ -f defconfigs/wifi-all ]; then
+            make "${MAKE_FLAGS[@]}" \
+              KLIB="$KERNEL_BUILD" \
+              KLIB_BUILD="$KERNEL_BUILD" \
+              defconfig-wifi-all
+          else
+            echo "No wifi defconfig preset found, falling back to defconfig"
+            make "${MAKE_FLAGS[@]}" \
+              KLIB="$KERNEL_BUILD" \
+              KLIB_BUILD="$KERNEL_BUILD" \
+              defconfig
+          fi
 
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
@@ -277,7 +293,6 @@ jobs:
             olddefconfig </dev/null || true
 
           if [ -x ./scripts/config ]; then
-            # Disable broad wireless families to reduce noise
             ./scripts/config --disable CPTCFG_WLAN_VENDOR_ADMTEK || true
             ./scripts/config --disable CPTCFG_WLAN_VENDOR_ATH || true
             ./scripts/config --disable CPTCFG_WLAN_VENDOR_ATMEL || true
@@ -293,7 +308,6 @@ jobs:
             ./scripts/config --disable CPTCFG_WLAN_VENDOR_TI || true
             ./scripts/config --disable CPTCFG_WLAN_VENDOR_ZYDAS || true
 
-            # Keep only MT7921 stack
             ./scripts/config --enable CPTCFG_CFG80211 || true
             ./scripts/config --enable CPTCFG_MAC80211 || true
             ./scripts/config --enable CPTCFG_WLAN_VENDOR_MEDIATEK || true
@@ -319,7 +333,7 @@ jobs:
 
           echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
           grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
-
+    
       - name: Build stable backports against OP11R kernel tree
         shell: bash
         run: |
