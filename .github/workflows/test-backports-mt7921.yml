@@ -426,3 +426,10 @@ jobs:
 
           echo "===== ARTIFACT CONTENTS ====="
           find artifacts -maxdepth 5 -type f | sort || true
+
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: op11r-backports-mt7921-stable
+          path: artifacts
