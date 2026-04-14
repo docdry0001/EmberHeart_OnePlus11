@@ -212,10 +212,23 @@ jobs:
           set -euo pipefail
           BRANCH_NAME="${{ github.event.inputs.linux_source_branch }}"
           git clone --depth=1 --branch "$BRANCH_NAME" https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-stable-src
-          test -d linux-stable-src/drivers/net/wireless/purelifi
-          test -d linux-stable-src/drivers/net/wireless/mediatek
-          test -d linux-stable-src/net/mac80211
-          test -d linux-stable-src/net/wireless
+
+          echo "===== DIRECTORY CHECK ====="
+          for d in \
+            drivers/net/wireless/purelifi \
+            drivers/net/wireless/mediatek \
+            net/mac80211 \
+            net/wireless
+          do
+            if [ -d "linux-stable-src/$d" ]; then
+              echo "[OK] $d"
+            else
+              echo "[MISS] $d"
+            fi
+          done
+
+          echo "===== WIRELESS TREE TOP LEVEL ====="
+          find linux-stable-src/drivers/net/wireless -maxdepth 2 -mindepth 1 -type d | sort | head -200 || true
 
       - name: Generate backports package
         shell: bash
