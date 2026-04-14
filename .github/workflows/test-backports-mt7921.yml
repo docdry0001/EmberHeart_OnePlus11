@@ -304,26 +304,59 @@ jobs:
           echo "===== MT7921 SOURCE FILES ====="
           find drivers -type f | grep -E 'mt7921|mt76' | sort || true
 
-          echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
-          grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
-        
+          if ! grep -q '^CPTCFG_MT7921U=m' .config && ! grep -q '^CPTCFG_MT7921U=y' .config; then
+            echo "MT7921U symbol is NOT enabled."
+            exit 1
+          fi
 
-      - name: Collect artifacts
-        if: always()
+      - name: Build stable backports against OP11R kernel tree
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
 
-          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
-          [ -f "$GITHUB_WORKSPACE/backports-build.log" ] && cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
-          [ -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" artifacts/ || true
+          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+            export PATH="${CLANG_BIN}:$PATH"
+          fi
+          export PATH="/usr/lib/ccache:$PATH"
 
-          find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
-          find "$GITHUB_WORKSPACE/backports-stable" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
+          MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=clang
+          )
 
-          echo "===== ARTIFACT CONTENTS ====="
-          find artifacts -maxdepth 4 -type f | sort || true
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            V=1 \
+            2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log"
+
+          KO_COUNT=$(find . -type f -name '*.ko' | wc -l || true)
+          echo "KO_COUNT=$KO_COUNT"
+
+          if [ "$KO_COUNT" -eq 0 ]; then
+            echo "Build completed without producing any .ko modules."
+            exit 1
+          fi
           
       - name: Verify useful outputs exist
         if: always()
@@ -339,9 +372,19 @@ jobs:
             exit 1
           fi
       
-      - name: Upload artifacts
+      - name: Collect artifacts
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: op11r-backports-mt7921-stable
-          path: artifacts/
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+
+          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
+          [ -f "$GITHUB_WORKSPACE/backports-build.log" ] && cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
+          [ -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" artifacts/ || true
+
+          find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
+          find "$GITHUB_WORKSPACE/backports-stable" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
+
+          echo "===== ARTIFACT CONTENTS ====="
+          find artifacts -maxdepth 5 -type f | sort || true
