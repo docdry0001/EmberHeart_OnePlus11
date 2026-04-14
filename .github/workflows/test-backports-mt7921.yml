@@ -160,16 +160,18 @@ jobs:
             echo "CLANG_BIN=$(dirname "$(command -v clang)")" >> "$GITHUB_ENV"
           fi
 
-      - name: Build kernel modules_prepare target
+      - name: Build kernel prepare targets for backports
         shell: bash
         run: |
           set -euo pipefail
           MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
           OUT="$MSM/out"
-
-          export PATH="$CLANG_BIN:$PATH"
+      
+          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+            export PATH="${CLANG_BIN}:$PATH"
+          fi
           export PATH="/usr/lib/ccache:$PATH"
-
+      
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -191,11 +193,20 @@ jobs:
             HOSTCXX=clang++
             CC=ccache\ clang
           )
-
+      
           cd "$MSM"
+          mkdir -p "$OUT"
+      
           make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
+          make "${MAKE_FLAGS[@]}" O="$OUT" prepare
+          make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
+      
+          echo "===== PREPARED KERNEL TREE CHECK ====="
+          ls -l "$OUT/include/generated/autoconf.h" || true
+          ls -l "$OUT/include/config/auto.conf" || true
+          ls -l "$OUT/arch/arm64/include/generated" || true
+          find "$OUT" -path '*asm/compiler.h' | head -20 || true
 
       - name: Download stable backports release
         shell: bash
@@ -226,21 +237,44 @@ jobs:
           set -euo pipefail
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
       
-          export PATH="$CLANG_BIN:$PATH"
-          export CC=clang
-          export HOSTCC=clang
-          export HOSTCXX=clang++
-          export LD=ld.lld
-          export AR=llvm-ar
-          export NM=llvm-nm
-          export OBJCOPY=llvm-objcopy
-          export OBJDUMP=llvm-objdump
-          export STRIP=llvm-strip
+          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+            export PATH="${CLANG_BIN}:$PATH"
+          fi
+          export PATH="/usr/lib/ccache:$PATH"
+      
+          MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=clang
+          )
       
           cd "$GITHUB_WORKSPACE/backports-stable"
       
-          make KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" CC=clang HOSTCC=clang HOSTCXX=clang++ defconfig-wifi
-          make KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" CC=clang HOSTCC=clang HOSTCXX=clang++ olddefconfig </dev/null || true
+          make "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            defconfig-wifi
+      
+          make "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            olddefconfig </dev/null || true
       
           if [ -x ./scripts/config ]; then
             ./scripts/config --enable CPTCFG_CFG80211 || true
@@ -252,12 +286,16 @@ jobs:
             ./scripts/config --module CPTCFG_MT792x_USB || true
             ./scripts/config --module CPTCFG_MT7921_COMMON || true
             ./scripts/config --module CPTCFG_MT7921U || true
-            make KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" CC=clang HOSTCC=clang HOSTCXX=clang++ olddefconfig </dev/null || true
+      
+            make "${MAKE_FLAGS[@]}" \
+              KLIB="$KERNEL_BUILD" \
+              KLIB_BUILD="$KERNEL_BUILD" \
+              olddefconfig </dev/null || true
           fi
       
           echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
           grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
-      
+    
       - name: Build stable backports against OP11R kernel tree
         shell: bash
         run: |
