@@ -224,11 +224,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+      
           cd "$GITHUB_WORKSPACE/backports-stable"
-
-          make defconfig-wifi
-          make olddefconfig </dev/null || true
-
+      
+          make KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" defconfig-wifi
+          make KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig </dev/null || true
+      
           if [ -x ./scripts/config ]; then
             ./scripts/config --enable CPTCFG_CFG80211 || true
             ./scripts/config --enable CPTCFG_MAC80211 || true
@@ -239,9 +241,9 @@ jobs:
             ./scripts/config --module CPTCFG_MT792x_USB || true
             ./scripts/config --module CPTCFG_MT7921_COMMON || true
             ./scripts/config --module CPTCFG_MT7921U || true
-            make olddefconfig </dev/null || true
+            make KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig </dev/null || true
           fi
-
+      
           echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
           grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
 
