@@ -1,4 +1,4 @@
-name: Test OpenWrt Backports MT7921U on OP11R
+name: Test Stable Backports MT7921U on OP11R
 
 on:
   workflow_dispatch:
@@ -12,14 +12,13 @@ on:
           - OOS14
           - OOS15
           - OOS16
-      linux_source_branch:
-        description: "Linux stable branch for gentree source"
+      backports_release:
+        description: "Stable backports release"
         required: true
-        default: "linux-5.10.y"
+        default: "backports-5.10.157-1"
         type: choice
         options:
-          - linux-5.10.y
-          - linux-5.15.y
+          - backports-5.10.157-1
       optimize_level:
         description: "Optimization level"
         required: true
@@ -30,7 +29,7 @@ on:
           - O3
 
 jobs:
-  backports-mt7921:
+  backports-mt7921-stable:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -198,113 +197,37 @@ jobs:
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
           make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
 
-      - name: Clone OpenWrt backports
+      - name: Download stable backports release
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth=1 https://github.com/openwrt/backports.git backports
-          cd backports
-          git rev-parse HEAD
-      
-      - name: Clone matching Linux source for gentree
-        shell: bash
-        run: |
-          set -euo pipefail
-          BRANCH_NAME="${{ github.event.inputs.linux_source_branch }}"
-          git clone --depth=1 --branch "$BRANCH_NAME" https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-stable-src
-      
-          echo "===== DIRECTORY CHECK ====="
-          for d in \
-            drivers/net/wireless/purelifi \
-            drivers/net/wireless/mediatek \
-            net/mac80211 \
-            net/wireless
-          do
-            if [ -d "linux-stable-src/$d" ]; then
-              echo "[OK] $d"
-            else
-              echo "[MISS] $d"
-            fi
-          done
-      
-      - name: Patch backports copy-list for missing source paths
-        shell: bash
-        env:
-          LINUX_SRC: ${{ github.workspace }}/linux-stable-src
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE/backports"
-      
-          cp copy-list copy-list.bak
-      
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          
-          kernel_src = Path(os.environ["LINUX_SRC"])
-          copy_list = Path("copy-list")
-          
-          lines = copy_list.read_text().splitlines()
-          kept = []
-          dropped = []
-          
-          for line in lines:
-              stripped = line.strip()
-          
-              if not stripped or stripped.startswith("#"):
-                  kept.append(line)
-                  continue
-          
-              src = stripped.split(" -> ", 1)[0].strip()
-          
-              if (kernel_src / src).exists():
-                  kept.append(line)
-              else:
-                  dropped.append(src)
-          
-          copy_list.write_text("\n".join(kept) + "\n")
-          
-          print("===== DROPPED COPY-LIST ENTRIES =====")
-          for item in dropped:
-              print(item)
-          print(f"Total dropped: {len(dropped)}")
-          PY
-      
-          echo "===== COPY-LIST DIFF ====="
-          diff -u copy-list.bak copy-list || true
-      
-      - name: Generate backports package
-        shell: bash
-        run: |
-          set -euo pipefail
-          OUTDIR="$GITHUB_WORKSPACE/backports-generated"
-          cd "$GITHUB_WORKSPACE/backports"
-          python3 ./gentree.py "$GITHUB_WORKSPACE/linux-stable-src" "$OUTDIR"
-      - name: Inspect generated package
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE/backports-generated"
+          RELEASE="${{ github.event.inputs.backports_release }}"
+          URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v5.10.157/${RELEASE}.tar.xz"
 
-          echo "===== RELEVANT MT7921 / MT76 / MAC80211 FILES ====="
-          find . -type f | grep -E 'mt7921|mt76|mac80211|cfg80211' | head -300 || true
+          wget -O backports.tar.xz "$URL"
+          tar -xf backports.tar.xz
+          mv "$RELEASE" backports-stable
+
+      - name: Inspect stable backports package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          echo "===== RELEVANT FILES ====="
+          find . -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' | head -300 || true
 
           echo "===== RELEVANT CONFIG ENTRIES ====="
           grep -Rns "config .*MT7921\|config .*MT76\|config .*CFG80211\|config .*MAC80211" . || true
 
-      - name: Configure backports for Wi-Fi
+      - name: Configure stable backports for Wi-Fi
         shell: bash
         run: |
           set -euo pipefail
-          cd "$GITHUB_WORKSPACE/backports-generated"
-          make defconfig-wifi
-          make olddefconfig </dev/null
+          cd "$GITHUB_WORKSPACE/backports-stable"
 
-      - name: Try to narrow to mt76/mt7921u if symbols exist
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE/backports-generated"
+          make defconfig-wifi
+          make olddefconfig </dev/null || true
 
           if [ -x ./scripts/config ]; then
             ./scripts/config --enable CPTCFG_CFG80211 || true
@@ -322,13 +245,13 @@ jobs:
           echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
           grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
 
-      - name: Build backports against OP11R kernel tree
+      - name: Build stable backports against OP11R kernel tree
         shell: bash
         run: |
           set -euo pipefail
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
 
-          cd "$GITHUB_WORKSPACE/backports-generated"
+          cd "$GITHUB_WORKSPACE/backports-stable"
 
           make -j"$(nproc --all)" \
             KLIB="$KERNEL_BUILD" \
@@ -344,15 +267,15 @@ jobs:
           mkdir -p artifacts
 
           cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
-          cp -f "$GITHUB_WORKSPACE/backports-generated/.config" artifacts/backports.config || true
-          cp -f "$GITHUB_WORKSPACE/backports-generated/Module.symvers" artifacts/ || true
+          cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
+          cp -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" artifacts/ || true
 
-          find "$GITHUB_WORKSPACE/backports-generated" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
-          find "$GITHUB_WORKSPACE/backports-generated" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
+          find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
+          find "$GITHUB_WORKSPACE/backports-stable" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: op11r-backports-mt7921
+          name: op11r-backports-mt7921-stable
           path: artifacts/
