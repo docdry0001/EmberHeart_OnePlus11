@@ -315,13 +315,30 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts
 
-          cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
-          cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
-          cp -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" artifacts/ || true
+          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
+          [ -f "$GITHUB_WORKSPACE/backports-build.log" ] && cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
+          [ -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" artifacts/ || true
 
           find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
           find "$GITHUB_WORKSPACE/backports-stable" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
 
+          echo "===== ARTIFACT CONTENTS ====="
+          find artifacts -maxdepth 4 -type f | sort || true
+          
+      - name: Verify useful outputs exist
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          KO_COUNT=$(find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' | wc -l || true)
+          echo "KO_COUNT=$KO_COUNT"
+
+          if [ "$KO_COUNT" -eq 0 ]; then
+            echo "No .ko files were produced."
+            exit 1
+          fi
+      
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
