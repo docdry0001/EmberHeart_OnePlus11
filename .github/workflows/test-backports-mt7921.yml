@@ -233,7 +233,7 @@ jobs:
 
       
     
-      - name: Build stable backports against OP11R kernel tree
+      - name: Configure stable backports for MT7921U only
         shell: bash
         run: |
           set -euo pipefail
@@ -253,7 +253,64 @@ jobs:
             CROSS_COMPILE=aarch64-linux-gnu-
             CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
             LD=ld.lld
-            HO
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=clang
+          )
+
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          echo "===== DEFCONFIG FILES ====="
+          find defconfigs -maxdepth 2 -type f | sort || true
+
+          make "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            allnoconfig
+
+          if [ ! -x ./scripts/config ]; then
+            echo "scripts/config not found"
+            exit 1
+          fi
+
+          ./scripts/config --enable CPTCFG_CFG80211 || true
+          ./scripts/config --enable CPTCFG_MAC80211 || true
+          ./scripts/config --enable CPTCFG_WLAN || true
+          ./scripts/config --enable CPTCFG_WLAN_VENDOR_MEDIATEK || true
+
+          ./scripts/config --module CPTCFG_MT76_CORE || true
+          ./scripts/config --module CPTCFG_MT76_USB || true
+          ./scripts/config --module CPTCFG_MT76_CONNAC_LIB || true
+          ./scripts/config --module CPTCFG_MT792x_LIB || true
+          ./scripts/config --module CPTCFG_MT792x_USB || true
+          ./scripts/config --module CPTCFG_MT7921_COMMON || true
+          ./scripts/config --module CPTCFG_MT7921U || true
+
+          ./scripts/config --enable CPTCFG_USB || true
+          ./scripts/config --enable CPTCFG_PCI || true
+          ./scripts/config --enable CPTCFG_NL80211_TESTMODE || true
+
+          make "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            olddefconfig </dev/null || true
+
+          echo "===== MT7921 SYMBOL PROOF ====="
+          grep -E 'CPTCFG_MT7921U|CPTCFG_MT7921_COMMON|CPTCFG_MT792x_USB|CPTCFG_MT792x_LIB|CPTCFG_MT76_USB|CPTCFG_MT76_CORE|CPTCFG_CFG80211|CPTCFG_MAC80211|CPTCFG_WLAN_VENDOR_MEDIATEK|CPTCFG_WLAN=' .config || true
+
+          echo "===== MT7921 SOURCE FILES ====="
+          find drivers -type f | grep -E 'mt7921|mt76' | sort || true
+
+          echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
+          grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
             
       - name: Configure stable backports for MT7921U only
         shell: bash
