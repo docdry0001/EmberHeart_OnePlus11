@@ -205,14 +205,14 @@ jobs:
           git clone --depth=1 https://github.com/openwrt/backports.git backports
           cd backports
           git rev-parse HEAD
-
+      
       - name: Clone matching Linux source for gentree
         shell: bash
         run: |
           set -euo pipefail
           BRANCH_NAME="${{ github.event.inputs.linux_source_branch }}"
           git clone --depth=1 --branch "$BRANCH_NAME" https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-stable-src
-
+      
           echo "===== DIRECTORY CHECK ====="
           for d in \
             drivers/net/wireless/purelifi \
@@ -226,10 +226,53 @@ jobs:
               echo "[MISS] $d"
             fi
           done
-
-          echo "===== WIRELESS TREE TOP LEVEL ====="
-          find linux-stable-src/drivers/net/wireless -maxdepth 2 -mindepth 1 -type d | sort | head -200 || true
-
+      
+      - name: Patch backports copy-list for missing source paths
+        shell: bash
+        env:
+          LINUX_SRC: ${{ github.workspace }}/linux-stable-src
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports"
+      
+          cp copy-list copy-list.bak
+      
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          
+          kernel_src = Path(os.environ["LINUX_SRC"])
+          copy_list = Path("copy-list")
+          
+          lines = copy_list.read_text().splitlines()
+          kept = []
+          dropped = []
+          
+          for line in lines:
+              stripped = line.strip()
+          
+              if not stripped or stripped.startswith("#"):
+                  kept.append(line)
+                  continue
+          
+              src = stripped.split(" -> ", 1)[0].strip()
+          
+              if (kernel_src / src).exists():
+                  kept.append(line)
+              else:
+                  dropped.append(src)
+          
+          copy_list.write_text("\n".join(kept) + "\n")
+          
+          print("===== DROPPED COPY-LIST ENTRIES =====")
+          for item in dropped:
+              print(item)
+          print(f"Total dropped: {len(dropped)}")
+          PY
+      
+          echo "===== COPY-LIST DIFF ====="
+          diff -u copy-list.bak copy-list || true
+      
       - name: Generate backports package
         shell: bash
         run: |
@@ -237,7 +280,6 @@ jobs:
           OUTDIR="$GITHUB_WORKSPACE/backports-generated"
           cd "$GITHUB_WORKSPACE/backports"
           python3 ./gentree.py "$GITHUB_WORKSPACE/linux-stable-src" "$OUTDIR"
-
       - name: Inspect generated package
         shell: bash
         run: |
