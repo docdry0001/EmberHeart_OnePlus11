@@ -198,6 +198,22 @@ jobs:
           mkdir -p "$OUT"
 
           make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+
+          # Disable hardening features temporarily for external backports build
+          if [ -x ./scripts/config ]; then
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI_CLANG || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG_THIN || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_SHADOW_CALL_STACK || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_SW_TAGS || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_HW_TAGS || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_TRAP || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_BOUNDS || true
+          fi
+
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
           make "${MAKE_FLAGS[@]}" O="$OUT" prepare
           make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
@@ -208,6 +224,9 @@ jobs:
           ls -ld "$OUT/arch/arm64/include/generated" || true
           find "$OUT" -path '*asm/compiler.h' | head -20 || true
 
+          echo "===== TEMP HARDENING CONFIG CHECK ====="
+          grep -E 'CONFIG_(CFI|CFI_CLANG|LTO_CLANG|LTO_CLANG_THIN|SHADOW_CALL_STACK|KASAN|UBSAN)=' "$OUT/.config" || true
+    
       - name: Download stable backports release
         shell: bash
         run: |
@@ -231,8 +250,6 @@ jobs:
           echo "===== RELEVANT CONFIG ENTRIES ====="
           grep -Rns "config .*MT7921\|config .*MT76\|config .*CFG80211\|config .*MAC80211" . || true
 
-      
-    
       - name: Configure stable backports for MT7921U only
         shell: bash
         run: |
@@ -276,22 +293,21 @@ jobs:
             KLIB_BUILD="$KERNEL_BUILD" \
             allnoconfig
 
-          cat >> .config <<'EOF'
-            CPTCFG_WLAN=y
-            CPTCFG_CFG80211=y
-            CPTCFG_MAC80211=y
-            CPTCFG_WLAN_VENDOR_MEDIATEK=y
-            CPTCFG_MT76_CORE=m
-            CPTCFG_MT76_USB=m
-            CPTCFG_MT76_CONNAC_LIB=m
-            CPTCFG_MT792x_LIB=m
-            CPTCFG_MT792x_USB=m
-            CPTCFG_MT7921_COMMON=m
-            CPTCFG_MT7921U=m
-            CPTCFG_USB=y
-            CPTCFG_PCI=y
-            CPTCFG_NL80211_TESTMODE=y
-            EOF
+          printf '%s\n' \
+          'CPTCFG_WLAN=y' \
+          'CPTCFG_CFG80211=y' \
+          'CPTCFG_MAC80211=y' \
+          'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
+          'CPTCFG_MT76_CORE=m' \
+          'CPTCFG_MT76_USB=m' \
+          'CPTCFG_MT76_CONNAC_LIB=m' \
+          'CPTCFG_MT792x_LIB=m' \
+          'CPTCFG_MT792x_USB=m' \
+          'CPTCFG_MT7921_COMMON=m' \
+          'CPTCFG_MT7921U=m' \
+          'CPTCFG_USB=y' \
+          'CPTCFG_PCI=y' \
+          'CPTCFG_NL80211_TESTMODE=y' >> .config
 
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
@@ -308,6 +324,9 @@ jobs:
             echo "MT7921U symbol is NOT enabled."
             exit 1
           fi
+
+          echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
+          grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
 
       - name: Build stable backports against OP11R kernel tree
         shell: bash
