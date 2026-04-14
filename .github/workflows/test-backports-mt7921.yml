@@ -112,20 +112,21 @@ jobs:
           set -euo pipefail
           MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
           cd "$MSM"
-
+          
           VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
           PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
           SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
           echo "KERNEL_VER=$VERSION.$PATCHLEVEL.$SUBLEVEL" >> "$GITHUB_ENV"
-
+          
           make ARCH=arm64 mrproper
           mkdir -p out
+          
           ./scripts/kconfig/merge_config.sh -O out -m \
             arch/arm64/configs/gki_defconfig \
             arch/arm64/configs/vendor/${SOC}_GKI.config
-
+          
           cp out/.config arch/arm64/configs/gki_defconfig
-          yes "" | make O=out ARCH=arm64 olddefconfig
+          make O=out ARCH=arm64 olddefconfig </dev/null
 
       - name: Detect clang
         shell: bash
