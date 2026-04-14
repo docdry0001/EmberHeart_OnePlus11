@@ -12,6 +12,14 @@ on:
           - OOS14
           - OOS15
           - OOS16
+      linux_source_branch:
+        description: "Linux stable branch for gentree source"
+        required: true
+        default: "linux-5.10.y"
+        type: choice
+        options:
+          - linux-5.10.y
+          - linux-5.15.y
       optimize_level:
         description: "Optimization level"
         required: true
@@ -38,6 +46,13 @@ jobs:
       MANIFEST_OOS16_MODULES: oneplus_11r_b.xml
 
     steps:
+      - name: Validate OP11R target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$MODEL" = "OP11R" ] || { echo "Expected MODEL=OP11R, got $MODEL"; exit 1; }
+          [ "$SOC" = "waipio" ] || { echo "Expected SOC=waipio, got $SOC"; exit 1; }
+
       - name: Cleanup runner
         shell: bash
         run: |
@@ -58,7 +73,7 @@ jobs:
             git curl ca-certificates build-essential clang lld flex bison \
             libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
             libxml2-utils rsync unzip dwarves file python3 ccache wget patch jq \
-            coccinelle kmod bc
+            coccinelle kmod bc perl xz-utils
           sudo apt-get clean
 
       - name: Set manifest
@@ -112,19 +127,19 @@ jobs:
           set -euo pipefail
           MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
           cd "$MSM"
-          
+
           VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
           PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
           SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
           echo "KERNEL_VER=$VERSION.$PATCHLEVEL.$SUBLEVEL" >> "$GITHUB_ENV"
-          
+
           make ARCH=arm64 mrproper
           mkdir -p out
-          
+
           ./scripts/kconfig/merge_config.sh -O out -m \
             arch/arm64/configs/gki_defconfig \
             arch/arm64/configs/vendor/${SOC}_GKI.config
-          
+
           cp out/.config arch/arm64/configs/gki_defconfig
           make O=out ARCH=arm64 olddefconfig </dev/null
 
@@ -180,7 +195,7 @@ jobs:
 
           cd "$MSM"
           make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
+          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
           make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
 
       - name: Clone OpenWrt backports
@@ -191,26 +206,66 @@ jobs:
           cd backports
           git rev-parse HEAD
 
-      - name: Generate backports package from matching source tree
+      - name: Clone matching Linux source for gentree
         shell: bash
         run: |
           set -euo pipefail
-          KERNEL_SRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+          BRANCH_NAME="${{ github.event.inputs.linux_source_branch }}"
+          git clone --depth=1 --branch "$BRANCH_NAME" https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-stable-src
+          test -d linux-stable-src/drivers/net/wireless/purelifi
+          test -d linux-stable-src/drivers/net/wireless/mediatek
+          test -d linux-stable-src/net/mac80211
+          test -d linux-stable-src/net/wireless
+
+      - name: Generate backports package
+        shell: bash
+        run: |
+          set -euo pipefail
           OUTDIR="$GITHUB_WORKSPACE/backports-generated"
-
           cd "$GITHUB_WORKSPACE/backports"
-          python3 ./gentree.py "$KERNEL_SRC" "$OUTDIR"
+          python3 ./gentree.py "$GITHUB_WORKSPACE/linux-stable-src" "$OUTDIR"
 
-      - name: Configure backports for Wi-Fi and inspect MT7921U
+      - name: Inspect generated package
         shell: bash
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/backports-generated"
 
-          make defconfig-wifi || true
+          echo "===== RELEVANT MT7921 / MT76 / MAC80211 FILES ====="
+          find . -type f | grep -E 'mt7921|mt76|mac80211|cfg80211' | head -300 || true
 
-          grep -Rns "config BACKPORTED_MT7921U\|config MT7921U\|mt7921u" . || true
-          find . -type f | grep -E 'mt7921|mt76|mac80211|cfg80211' | head -200 || true
+          echo "===== RELEVANT CONFIG ENTRIES ====="
+          grep -Rns "config .*MT7921\|config .*MT76\|config .*CFG80211\|config .*MAC80211" . || true
+
+      - name: Configure backports for Wi-Fi
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports-generated"
+          make defconfig-wifi
+          make olddefconfig </dev/null
+
+      - name: Try to narrow to mt76/mt7921u if symbols exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports-generated"
+
+          if [ -x ./scripts/config ]; then
+            ./scripts/config --enable CPTCFG_CFG80211 || true
+            ./scripts/config --enable CPTCFG_MAC80211 || true
+            ./scripts/config --module CPTCFG_MT76_CORE || true
+            ./scripts/config --module CPTCFG_MT76_USB || true
+            ./scripts/config --module CPTCFG_MT76_CONNAC_LIB || true
+            ./scripts/config --module CPTCFG_MT792x_LIB || true
+            ./scripts/config --module CPTCFG_MT792x_USB || true
+            ./scripts/config --module CPTCFG_MT7921_COMMON || true
+            ./scripts/config --module CPTCFG_MT7921U || true
+            make olddefconfig </dev/null || true
+          fi
+
+          echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
+          grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
 
       - name: Build backports against OP11R kernel tree
         shell: bash
@@ -220,9 +275,11 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/backports-generated"
 
-          make KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" defconfig-wifi
-          yes "" | make KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
-          make -j"$(nproc --all)" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" V=1 2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log"
+          make -j"$(nproc --all)" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            V=1 \
+            2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log"
 
       - name: Collect artifacts
         if: always()
@@ -230,8 +287,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
+
           cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
-          find "$GITHUB_WORKSPACE/backports-generated" -type f \( -name '*.ko' -o -name '.config' -o -name 'Module.symvers' \) -exec cp --parents {} artifacts/ \; || true
+          cp -f "$GITHUB_WORKSPACE/backports-generated/.config" artifacts/backports.config || true
+          cp -f "$GITHUB_WORKSPACE/backports-generated/Module.symvers" artifacts/ || true
+
+          find "$GITHUB_WORKSPACE/backports-generated" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
           find "$GITHUB_WORKSPACE/backports-generated" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
 
       - name: Upload artifacts
