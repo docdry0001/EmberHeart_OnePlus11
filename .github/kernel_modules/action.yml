@@ -297,56 +297,56 @@ runs:
         grep -E 'CONFIG_(WLAN_VENDOR_MEDIATEK|MT76_CORE|MT76_USB|MT76_CONNAC_LIB|MT792x_LIB|MT792x_USB|MT7921_COMMON|MT7921U)=' "$OUT/.config" || true
 
     - name: Build Kernel Modules
-  shell: bash
-  run: |
-    set -euo pipefail
-    KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-    MSM="$KERNEL_PLATFORM/msm-kernel"
-    OUT="$MSM/out"
-
-    cd "$MSM"
-
-    export PATH="${CLANG_BIN_PATH}:$PATH"
-    export PATH="/usr/lib/ccache:$PATH"
-
-    MAKE_FLAGS=(
-      LLVM=1
-      LLVM_IAS=1
-      ARCH=arm64
-      SUBARCH=arm64
-      CLANG_TRIPLE=aarch64-linux-gnu-
-      CROSS_COMPILE=aarch64-linux-gnu-
-      CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-      LD=ld.lld
-      HOSTLD=ld.lld
-      AR=llvm-ar
-      NM=llvm-nm
-      OBJCOPY=llvm-objcopy
-      OBJDUMP=llvm-objdump
-      DEPMOD=depmod
-      DTC=dtc
-      STRIP=llvm-strip
-      HOSTCC=clang
-      HOSTCXX=clang++
-      CC=ccache\ clang
-    )
-
-    INSTALL_MOD_PATH="$OUT"
-    KCFLAGS="-Wno-error -Wno-error=frame-larger-than -Wno-frame-larger-than"
-
-    mkdir -p "$OUT"
-
-    make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-
-    # make the frame-size warning much less aggressive in active config
-    if [ -x ./scripts/config ]; then
-      ./scripts/config --file "$OUT/.config" --set-val CONFIG_FRAME_WARN 4096 || true
-    fi
-
-    make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-
-    make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" KCPPFLAGS="-Wno-error" O="$OUT" modules
-    make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" KCPPFLAGS="-Wno-error" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PLATFORM/msm-kernel"
+        OUT="$MSM/out"
+    
+        cd "$MSM"
+    
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export PATH="/usr/lib/ccache:$PATH"
+    
+        MAKE_FLAGS=(
+          LLVM=1
+          LLVM_IAS=1
+          ARCH=arm64
+          SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          LD=ld.lld
+          HOSTLD=ld.lld
+          AR=llvm-ar
+          NM=llvm-nm
+          OBJCOPY=llvm-objcopy
+          OBJDUMP=llvm-objdump
+          DEPMOD=depmod
+          DTC=dtc
+          STRIP=llvm-strip
+          HOSTCC=clang
+          HOSTCXX=clang++
+          CC=ccache\ clang
+        )
+    
+        INSTALL_MOD_PATH="$OUT"
+        KCFLAGS="-Wno-error -Wno-error=frame-larger-than -Wno-frame-larger-than"
+    
+        mkdir -p "$OUT"
+    
+        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+    
+        # make the frame-size warning much less aggressive in active config
+        if [ -x ./scripts/config ]; then
+          ./scripts/config --file "$OUT/.config" --set-val CONFIG_FRAME_WARN 4096 || true
+        fi
+    
+        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+    
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" KCPPFLAGS="-Wno-error" O="$OUT" modules
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" KCPPFLAGS="-Wno-error" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
    
     - name: Filter modules
       shell: bash
