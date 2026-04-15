@@ -196,7 +196,7 @@ runs:
       run: |
         set -euo pipefail
 
-        BUNDLE_URL="https://github.com/docdry0001/EmberHeart_OnePlus11/actions/runs/24432399950/artifacts/6441678879"
+        BUNDLE_URL="https://raw.githubusercontent.com/docdry0001/EmberHeart_OnePlus11/main/.github/op11r-mt76-port-bundle.zip"
         TMP="$GITHUB_WORKSPACE/_mt76_bundle"
         MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
         DEST_PARENT="$MSM/drivers/net/wireless/mediatek"
