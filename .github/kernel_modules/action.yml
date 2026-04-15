@@ -204,11 +204,12 @@ runs:
         SRC="$(dirname "$SRC")"
 
         echo "Resolved SRC=$SRC"
-
         echo "Replacing kernel mt76 tree..."
         rm -rf "$DEST"
         cp -a "$SRC" "$DEST"
-
+        echo "Normalizing mt76 file timestamps..."
+        find "$DEST" -exec touch -c {} +
+        find "$DEST" -type d -exec touch -c {} +
         echo "Removing build artifacts from imported mt76 tree..."
         find "$DEST" -type f \
           \( -name '*.o' -o -name '*.ko' -o -name '*.mod' -o -name '*.mod.c' -o -name '*.mod.o' \
