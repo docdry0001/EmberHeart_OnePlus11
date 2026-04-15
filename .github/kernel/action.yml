@@ -244,59 +244,58 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-
+    
         BUNDLE_URL="https://raw.githubusercontent.com/docdry0001/EmberHeart_OnePlus11/main/.github/op11r-mt76-port-bundle.zip"
         TMP="$GITHUB_WORKSPACE/_mt76_bundle"
         MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
         DEST_PARENT="$MSM/drivers/net/wireless/mediatek"
         DEST="$DEST_PARENT/mt76"
-
+    
         rm -rf "$TMP"
         mkdir -p "$TMP"
         mkdir -p "$DEST_PARENT"
-
+    
         echo "Downloading bundle..."
         curl -L --fail "$BUNDLE_URL" -o "$TMP/bundle.zip"
-
+    
         echo "Unpacking bundle..."
         unzip -q "$TMP/bundle.zip" -d "$TMP/unpacked"
-
+    
         SRC="$TMP/unpacked/mt76-port-bundle/drivers/net/wireless/mediatek/mt76"
         [ -d "$SRC" ] || { echo "Source mt76 path not found: $SRC"; exit 1; }
-
+    
         echo "Replacing kernel mt76 tree..."
         rm -rf "$DEST"
         cp -a "$SRC" "$DEST"
-
+    
         echo "Removing build artifacts from imported mt76 tree..."
         find "$DEST" -type f \
           \( -name '*.o' -o -name '*.ko' -o -name '*.mod' -o -name '*.mod.c' -o -name '*.mod.o' \
              -o -name '*.symversions' -o -name '*.lto.o' -o -name 'modules.order' -o -name 'Module.symvers' \) \
           -delete
-
+    
         echo "===== IMPORTED MT76 TREE CHECK ====="
         find "$DEST" -maxdepth 2 -type f | sort | head -200 || true
-
+    
         echo "===== IMPORTED MT7921 CHECK ====="
         find "$DEST/mt7921" -maxdepth 2 -type f | sort || true
-
-    - name: Set Build Identity
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Set build user/host"
-
-        BUILD_USER="EmberHeart"
-        BUILD_HOST="OnePlus"
-
-        echo "KBUILD_BUILD_USER=$BUILD_USER" >> "$GITHUB_ENV"
-        echo "KBUILD_BUILD_HOST=$BUILD_HOST" >> "$GITHUB_ENV"
-
-        echo ""
-        echo "✅ Build identity configured:"
-        echo "   User: $BUILD_USER"
-        echo "   Host: $BUILD_HOST"
-        echo "::endgroup::"
+        - name: Set Build Identity
+          shell: bash
+          run: |
+            set -euo pipefail
+            echo "::group::Set build user/host"
+    
+            BUILD_USER="EmberHeart"
+            BUILD_HOST="OnePlus"
+    
+            echo "KBUILD_BUILD_USER=$BUILD_USER" >> "$GITHUB_ENV"
+            echo "KBUILD_BUILD_HOST=$BUILD_HOST" >> "$GITHUB_ENV"
+    
+            echo ""
+            echo "✅ Build identity configured:"
+            echo "   User: $BUILD_USER"
+            echo "   Host: $BUILD_HOST"
+            echo "::endgroup::"
 
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2.19
