@@ -303,12 +303,12 @@ runs:
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         OUT="$MSM/out"
-
+    
         cd "$MSM"
-
+    
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
-
+    
         MAKE_FLAGS=(
           LLVM=1
           LLVM_IAS=1
@@ -330,13 +330,14 @@ runs:
           HOSTCXX=clang++
           CC=ccache\ clang
         )
-
+    
         INSTALL_MOD_PATH="$OUT"
-
+        KCFLAGS="-Wno-error=frame-larger-than"
+    
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" modules
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+   
     - name: Filter modules
       shell: bash
       run: |
