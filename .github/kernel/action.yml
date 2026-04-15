@@ -604,9 +604,13 @@ runs:
 
         echo "Resolved SRC=$SRC"
 
-        echo "Replacing common kernel mt76 tree..."
+        echo "Replacing msm kernel mt76 tree..."
         rm -rf "$DEST"
         cp -a "$SRC" "$DEST"
+
+        echo "Normalizing mt76 file timestamps..."
+        find "$DEST" -exec touch -c {} +
+        find "$DEST" -type d -exec touch -c {} +
 
         echo "Removing build artifacts from imported tree..."
         find "$DEST" -type f | grep -E '\.(o|ko|mod|mod\.c|mod\.o|symversions|lto\.o)$|(^|/)modules\.order$|(^|/)Module\.symvers$' | while read -r f; do
