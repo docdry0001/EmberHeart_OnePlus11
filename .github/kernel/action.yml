@@ -1057,10 +1057,11 @@ runs:
         fi
 
         # Consistent flags; include -pipe and disable stack protector
-        KCFLAGS="-Wno-error -pipe -fno-stack-protector ${KCFLAGS_EXTRA}"
+#        KCFLAGS="-Wno-error -pipe -fno-stack-protector ${KCFLAGS_EXTRA}"
         KCPPFLAGS="-DCONFIG_OPTIMIZE_INLINING"
 
         echo "Starting build with $(nproc --all) threads..."
+        export KCFLAGS="-Wno-error"
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
         make -j$(nproc --all) "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" O="$OUT" Image modules
         make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
