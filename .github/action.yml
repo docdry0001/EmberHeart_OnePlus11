@@ -206,7 +206,57 @@ runs:
         echo "KERNEL_VER=$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
         echo "KERNEL_FULL_VER=$ANDROID_VERSION-$FULL_VERSION" >> "$GITHUB_ENV"
         echo "SUSFS_KERNEL_BRANCH=gki-$ANDROID_VERSION-$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
+        
+    - name: Import MT76 backport source into msm kernel
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Importing MT76 backport source into msm kernel"
 
+        BUNDLE_URL="https://raw.githubusercontent.com/docdry0001/EmberHeart_OnePlus11/main/.github/mt76.zip"
+        TMP="$GITHUB_WORKSPACE/_mt76_bundle"
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        DEST_PARENT="$MSM/drivers/net/wireless/mediatek"
+        DEST="$DEST_PARENT/mt76"
+
+        rm -rf "$TMP"
+        mkdir -p "$TMP"
+        mkdir -p "$DEST_PARENT"
+
+        echo "Downloading mt76.zip..."
+        curl -L --fail "$BUNDLE_URL" -o "$TMP/mt76.zip"
+
+        echo "Inspecting zip..."
+        zipinfo -1 "$TMP/mt76.zip" | sed -n '1,200p'
+
+        echo "Unpacking mt76.zip..."
+        unzip -q "$TMP/mt76.zip" -d "$TMP/unpacked"
+
+        SRC="$(find "$TMP/unpacked" -type f -path '*/mt76/Kconfig' | head -n 1)"
+        [ -n "$SRC" ] || { echo "mt76/Kconfig not found inside zip"; exit 1; }
+        SRC="$(dirname "$SRC")"
+
+        echo "Resolved SRC=$SRC"
+
+        echo "Replacing msm kernel mt76 tree..."
+        rm -rf "$DEST"
+        cp -a "$SRC" "$DEST"
+
+        echo "Removing build artifacts from imported tree..."
+        find "$DEST" -type f \
+          \( -name '*.o' -o -name '*.ko' -o -name '*.mod' -o -name '*.mod.c' -o -name '*.mod.o' \
+             -o -name '*.symversions' -o -name '*.lto.o' -o -name 'modules.order' -o -name 'Module.symvers' \) \
+          -delete
+
+        echo "===== IMPORTED MT76 TREE CHECK ====="
+        find "$DEST" -maxdepth 2 -type f | sort | head -200 || true
+
+        echo "===== IMPORTED MT7921 CHECK ====="
+        find "$DEST/mt7921" -maxdepth 2 -type f | sort || true
+
+        echo "::endgroup::"
+
+        
     - name: Setup ccache
       uses: hendrikmuhs/ccache-action@v1.2.19
       with:
