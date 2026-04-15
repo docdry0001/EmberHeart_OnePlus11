@@ -261,8 +261,13 @@ runs:
         echo "Unpacking bundle..."
         unzip -q "$TMP/bundle.zip" -d "$TMP/unpacked"
     
-        SRC="$TMP/unpacked/mt76-port-bundle/drivers/net/wireless/mediatek/mt76"
-        [ -d "$SRC" ] || { echo "Source mt76 path not found: $SRC"; exit 1; }
+        echo "Locating extracted mt76 source path..."
+        find "$TMP/unpacked" -type d | sort | sed -n '1,200p'
+    
+        SRC="$(find "$TMP/unpacked" -type d -path '*/drivers/net/wireless/mediatek/mt76' | head -n 1)"
+        [ -n "$SRC" ] || { echo "Source mt76 path not found inside bundle"; exit 1; }
+    
+        echo "Resolved SRC=$SRC"
     
         echo "Replacing kernel mt76 tree..."
         rm -rf "$DEST"
@@ -279,6 +284,7 @@ runs:
     
         echo "===== IMPORTED MT7921 CHECK ====="
         find "$DEST/mt7921" -maxdepth 2 -type f | sort || true
+      
         - name: Set Build Identity
           shell: bash
           run: |
