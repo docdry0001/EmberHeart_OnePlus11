@@ -212,8 +212,13 @@ runs:
         echo "Unpacking bundle..."
         unzip -q "$TMP/bundle.zip" -d "$TMP/unpacked"
     
-        SRC="$TMP/unpacked/mt76-port-bundle/drivers/net/wireless/mediatek/mt76"
-        [ -d "$SRC" ] || { echo "Source mt76 path not found: $SRC"; exit 1; }
+        echo "Locating extracted mt76 source path..."
+        find "$TMP/unpacked" -type d | sort | sed -n '1,200p'
+    
+        SRC="$(find "$TMP/unpacked" -type d -path '*/drivers/net/wireless/mediatek/mt76' | head -n 1)"
+        [ -n "$SRC" ] || { echo "Source mt76 path not found inside bundle"; exit 1; }
+    
+        echo "Resolved SRC=$SRC"
     
         echo "Replacing kernel mt76 tree..."
         rm -rf "$DEST"
@@ -318,39 +323,7 @@ runs:
 
         echo "Ralink rt2x00 subtree imported"
 
-    - name: Backport mt76 (mt7921u) for 5.10 kernel
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        MEDIATEK_DIR="$MSM/drivers/net/wireless/mediatek"
-
-        cd "$MEDIATEK_DIR"
-
-        # Remove old mt76 (lacks mt7921u)
-        rm -rf mt76
-
-        # Clone shengliangd's backport (Kconfig at root)
-        git clone --depth=1 --branch master https://github.com/shengliangd/mt76-backport.git mt76
-
-        # Verify Kconfig exists
-        if [ ! -f mt76/Kconfig ]; then
-          echo "::error::mt76/Kconfig not found after clone!"
-          ls -la mt76/
-          exit 1
-        fi
-
-        # Clean old source line and add new one
-        sed -i '/source.*mt76\/Kconfig/d' Kconfig
-        echo 'source "drivers/net/wireless/mediatek/mt76/Kconfig"' >> Kconfig
-
-        # Ensure Makefile includes mt76
-        if ! grep -q "obj-\$(CONFIG_MT76_CORE) += mt76/" Makefile; then
-          echo 'obj-$(CONFIG_MT76_CORE) += mt76/' >> Makefile
-        fi
-
-        echo "✅ mt76 backport (shengliangd) with mt7921u added"
+   
         
     - name: Probe mt7921 source presence
       shell: bash
