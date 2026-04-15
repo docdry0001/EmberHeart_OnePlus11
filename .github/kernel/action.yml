@@ -1061,7 +1061,7 @@ runs:
         fi
 
         # Consistent flags; include -pipe and disable stack protector
-#        KCFLAGS="-Wno-error -pipe -fno-stack-protector ${KCFLAGS_EXTRA}"
+        KCFLAGS="-Wno-error -pipe -fno-stack-protector ${KCFLAGS_EXTRA}"
         KCPPFLAGS="-DCONFIG_OPTIMIZE_INLINING"
 
         echo "Starting build with $(nproc --all) threads..."
