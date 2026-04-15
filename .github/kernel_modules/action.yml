@@ -196,7 +196,7 @@ runs:
       run: |
         set -euo pipefail
     
-        BUNDLE_URL="https://raw.githubusercontent.com/docdry0001/EmberHeart_OnePlus11/main/.github/op11r-mt76-port-bundle.zip"
+        BUNDLE_URL="https://raw.githubusercontent.com/docdry0001/EmberHeart_OnePlus11/main/.github/mt76.zip"
         TMP="$GITHUB_WORKSPACE/_mt76_bundle"
         MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
         DEST_PARENT="$MSM/drivers/net/wireless/mediatek"
@@ -206,17 +206,18 @@ runs:
         mkdir -p "$TMP"
         mkdir -p "$DEST_PARENT"
     
-        echo "Downloading bundle..."
-        curl -L --fail "$BUNDLE_URL" -o "$TMP/bundle.zip"
+        echo "Downloading mt76.zip..."
+        curl -L --fail "$BUNDLE_URL" -o "$TMP/mt76.zip"
     
-        echo "Unpacking bundle..."
-        unzip -q "$TMP/bundle.zip" -d "$TMP/unpacked"
+        echo "Zip contents:"
+        zipinfo -1 "$TMP/mt76.zip" | sed -n '1,200p'
     
-        echo "Locating extracted mt76 source path..."
-        find "$TMP/unpacked" -type d | sort | sed -n '1,200p'
+        echo "Unpacking mt76.zip..."
+        unzip -q "$TMP/mt76.zip" -d "$TMP/unpacked"
     
-        SRC="$(find "$TMP/unpacked" -type d -path '*/drivers/net/wireless/mediatek/mt76' | head -n 1)"
-        [ -n "$SRC" ] || { echo "Source mt76 path not found inside bundle"; exit 1; }
+        SRC="$(find "$TMP/unpacked" -type f -path '*/mt76/Kconfig' | head -n 1)"
+        [ -n "$SRC" ] || { echo "mt76/Kconfig not found inside zip"; exit 1; }
+        SRC="$(dirname "$SRC")"
     
         echo "Resolved SRC=$SRC"
     
