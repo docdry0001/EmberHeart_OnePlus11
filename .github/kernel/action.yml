@@ -620,7 +620,7 @@ runs:
         echo "::endgroup::"
 
     - name: Add my kernel patches to common kernel
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'kalama'
       shell: bash
       run: |
         set -euo pipefail
@@ -636,7 +636,7 @@ runs:
         echo "::endgroup::"
 
     - name: Add other kernel patches to common kernel
-      if: env.SOC == 'wwaipio'
+      if: env.SOC == 'kalama'
       shell: bash
       run: |
         set -euo pipefail
