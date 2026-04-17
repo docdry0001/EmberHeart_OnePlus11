@@ -355,150 +355,72 @@ runs:
     - name: Build Kernel Modules
       shell: bash
       run: |
-        set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        cd "$MSM"
-    
-        export PATH="${CLANG_BIN_PATH}:$PATH"
-        export PATH="/usr/lib/ccache:$PATH"
-    
-        MAKE_FLAGS=(
-          LLVM=1
-          LLVM_IAS=1
-          ARCH=arm64
-          SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld
-          HOSTLD=ld.lld
-          AR=llvm-ar
-          NM=llvm-nm
-          OBJCOPY=llvm-objcopy
-          OBJDUMP=llvm-objdump
-          DEPMOD=depmod
-          DTC=dtc
-          STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC=ccache\ clang
-        )
-    
-        OUT=out
-        INSTALL_MOD_PATH="$OUT"
-        KCFLAGS="-Wno-error -Wframe-larger-than=4096"
-        mkdir -p "$OUT"
-    
-        echo "Building in-tree kernel modules..."
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-    
-        if [ -x ./scripts/config ]; then
-          ./scripts/config --file "$OUT/.config" --set-val CONFIG_FRAME_WARN 4096 || true
-          ./scripts/config --file "$OUT/.config" --enable CONFIG_SECTION_MISMATCH_WARN_ONLY || true
-        fi
-    
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" modules
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-    
-        cd "$KERNEL_PLATFORM"
-    
-        mkdir -p "$KERNEL_PLATFORM/oplus/config"
-        touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
-    
-        mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
-        printf 'obj-m :=\n' > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile"
-    
-        MAKE_FLAGS+=(KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel")
-    
-        mapfile -t EXT_OPLUS < "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" || true
-    
-        OPLUS_FLAGS=(
-          CHIPSET_COMPANY=QCOM
-          OPLUS_VND_BUILD_PLATFORM="$SOC"
-        )
-    
-        EXT_QCOM=(
-          ../vendor/qcom/opensource/mmrm-driver
-          ../vendor/qcom/opensource/mm-drivers/hw_fence
-          ../vendor/qcom/opensource/mm-drivers/sync_fence
-          ../vendor/qcom/opensource/mm-drivers/msm_ext_display
-          ../vendor/qcom/opensource/securemsm-kernel
-          ../vendor/qcom/opensource/display-drivers/msm
-          ../vendor/qcom/opensource/audio-kernel
-          ../vendor/qcom/opensource/camera-kernel
-          ../vendor/oplus/kernel/explorer
-          ../vendor/qcom/opensource/video-driver
-          ../vendor/qcom/opensource/graphics-kernel
-          ../vendor/qcom/opensource/dataipa/drivers/platform/msm
-          ../vendor/qcom/opensource/datarmnet/core
-          ../vendor/qcom/opensource/datarmnet-ext/aps
-          ../vendor/qcom/opensource/datarmnet-ext/offload
-          ../vendor/qcom/opensource/datarmnet-ext/shs
-          ../vendor/qcom/opensource/datarmnet-ext/sch
-          ../vendor/qcom/opensource/datarmnet-ext/perf
-          ../vendor/qcom/opensource/datarmnet-ext/perf_tether
-          ../vendor/qcom/opensource/datarmnet-ext/wlan
-          ../vendor/qcom/opensource/eva-kernel
-          ../vendor/qcom/opensource/wlan/platform
-          ../vendor/qcom/opensource/bt-kernel
-          ../vendor/nxp/opensource/driver
-          ../vendor/st/opensource/driver
-          ../vendor/st/opensource/eSE-driver
-          ../vendor/qcom/opensource/wlan/qcacld-3.0
-        )
-    
-        MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
-    
-        build_external_module() {
-          local module="$1"
-          local extra_syms=()
-    
-          echo "==== Processing module: $module ===="
-    
-          if [ ! -d "$module" ]; then
-            echo "Skipping missing module dir: $module"
-            return 0
+          set -euo pipefail
+          KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+          MSM="$KERNEL_PLATFORM/msm-kernel"
+          cd "$MSM"
+      
+          export PATH="${CLANG_BIN_PATH}:$PATH"
+          export PATH="/usr/lib/ccache:$PATH"
+      
+          MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=ccache\ clang
+          )
+      
+          OUT=out
+          INSTALL_MOD_PATH="$OUT"
+          KCFLAGS="-Wno-error -Wframe-larger-than=4096"
+          mkdir -p "$OUT"
+      
+          echo "[+] Prepare config"
+          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+      
+          if [ -x ./scripts/config ]; then
+            ./scripts/config --file "$OUT/.config" --set-val CONFIG_FRAME_WARN 4096 || true
+            ./scripts/config --file "$OUT/.config" --enable CONFIG_SECTION_MISMATCH_WARN_ONLY || true
           fi
+      
+          # hard-force in case scripts/config silently fails
+          grep -q '^CONFIG_SECTION_MISMATCH_WARN_ONLY=y$' "$OUT/.config" || \
+            echo 'CONFIG_SECTION_MISMATCH_WARN_ONLY=y' >> "$OUT/.config"
+      
+          grep -q '^CONFIG_FRAME_WARN=4096$' "$OUT/.config" || \
+            sed -i '/^CONFIG_FRAME_WARN=/d' "$OUT/.config"
+          grep -q '^CONFIG_FRAME_WARN=4096$' "$OUT/.config" || \
+            echo 'CONFIG_FRAME_WARN=4096' >> "$OUT/.config"
+      
+          echo "[+] Verify config before build"
+          grep -E '^CONFIG_SECTION_MISMATCH_WARN_ONLY=|^CONFIG_FRAME_WARN=' "$OUT/.config" || true
+      
+          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+      
+          echo "[+] Verify config after olddefconfig"
+          grep -E '^CONFIG_SECTION_MISMATCH_WARN_ONLY=|^CONFIG_FRAME_WARN=' "$OUT/.config" || true
+      
+          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" modules
+          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
     
-          if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
-            echo "Skipping module without Makefile/Kbuild: $module"
-            return 0
-          fi
-    
-          if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
-            extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
-            echo "Using mmrm Module.symvers for $module"
-          fi
-    
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
-            "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
-            KCFLAGS="$KCFLAGS" "${extra_syms[@]}" modules; then
-            echo "Build failed, skipping module: $module"
-            return 0
-          fi
-    
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
-            "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
-            KCFLAGS="$KCFLAGS" "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
-            echo "Install failed, skipping module: $module"
-            return 0
-          fi
-        }
-    
-        for MODULE in "${EXT_OPLUS[@]}"; do
-          [ -n "$MODULE" ] || continue
-          build_external_module "$MODULE"
-        done
-    
-        for MODULE in "${EXT_QCOM[@]}"; do
-          build_external_module "$MODULE"
-        done
-    
-        - name: Filter modules
-          shell: bash
-          run: |
+    - name: Filter modules
+      shell: bash
+      run: |
             set -euo pipefail
             MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
             OUT="$MSM/out"
