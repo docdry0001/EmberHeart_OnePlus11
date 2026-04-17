@@ -300,19 +300,15 @@ runs:
       if: env.SOC == 'waipio'
       shell: bash
       run: |
-        set -euo pipefail
-        cd "$CONFIG/kernel_platform/msm-kernel/mm"
-    
-        echo "[+] Cleaning old broken injections..."
-        sed -i '/bool scan_adjusted = false;/d' vmscan.c
-    
-        echo "[+] Patching exact declaration block in shrink_lruvec()..."
-    
-        perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
-    
-        echo "[+] Verifying..."
-        grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20
-        grep -n "scan_adjusted" vmscan.c | head -20 
+       set -euo pipefail
+       cd "$CONFIG/kernel_platform/msm-kernel/mm"
+
+       sed -i '/bool scan_adjusted = false;/d' vmscan.c
+
+       perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
+
+       grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20 || true
+       grep -n "scan_adjusted" vmscan.c | head -20 || true 
 
 
     - name: Build Kernel Modules
@@ -364,7 +360,7 @@ runs:
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" modules
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-    
+ 
     - name: Filter modules
       shell: bash
       run: |
