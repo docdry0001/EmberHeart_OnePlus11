@@ -311,41 +311,22 @@ runs:
        grep -n "scan_adjusted" vmscan.c | head -20 || true 
 
     - name: Restore thermal_sysfs.c clean copy
+    - name: FIX thermal_sysfs for old kernel API
       shell: bash
       run: |
-        set -euo pipefail
-      
-        REPO_ROOT="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-        FILE="drivers/thermal/thermal_sysfs.c"
-      
-        cd "$REPO_ROOT"
-      
-        # restore from git checkout state
-        git checkout -- "$FILE"
-      
-        echo "[+] Restored clean $FILE"
-        head -n 20 "$FILE"
-    
-    - name: FIX thermal kvzalloc kvfree (safe)
-      shell: bash
-      run: |
-        set -euo pipefail
-    
-        FILE="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
-    
-        echo "[+] Safely patching $FILE"
-    
-        # add headers only if missing
-        grep -q '^#include <linux/slab.h>$' "$FILE" || \
-          sed -i '/^#include <linux\/device.h>$/a #include <linux/slab.h>' "$FILE"
-    
-        grep -q '^#include <linux/vmalloc.h>$' "$FILE" || \
-          sed -i '/^#include <linux\/slab.h>$/a #include <linux/vmalloc.h>' "$FILE"
-    
-        echo "[+] Verify headers:"
-        grep -n '^#include <linux/slab.h>$' "$FILE" || true
-        grep -n '^#include <linux/vmalloc.h>$' "$FILE" || true
-        head -n 25 "$FILE"    
+       set -euo pipefail
+
+       REPO_ROOT="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+       FILE="$REPO_ROOT/drivers/thermal/thermal_sysfs.c"
+
+       cd "$REPO_ROOT"
+       git checkout -- "$FILE"
+
+       sed -i 's/\<kvzalloc(/kzalloc(/g' "$FILE"
+       sed -i 's/\<kvfree(/kfree(/g' "$FILE"
+
+       echo "[+] Verify thermal replacements:"
+       grep -n -E 'kvzalloc|kvfree|kzalloc|kfree' "$FILE" | head -20 || true
         
     - name: Build Kernel Modules
       shell: bash
