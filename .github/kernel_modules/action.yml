@@ -296,29 +296,6 @@ runs:
         echo "===== MT7921 CONFIG CHECK ====="
         grep -E 'CONFIG_(WLAN_VENDOR_MEDIATEK|MT76_CORE|MT76_USB|MT76_CONNAC_LIB|MT792x_LIB|MT792x_USB|MT7921_COMMON|MT7921U)=' "$OUT/.config" || true
 
-    name: Build OnePlus kernel modules
-
-permissions:
-  contents: write
-  actions: write
-
-inputs:
-  op_config_json:
-    description: 'JSON string containing full device config'
-    required: true
-    type: string
-  optimize_level:
-    required: false
-    type: string
-    default: O2
-  manifest:
-    required: true
-    type: string
-    default: OOS16
-
-runs:
-  using: composite
-  steps:
     - name: Parse op_config_json
       shell: bash
       run: |
