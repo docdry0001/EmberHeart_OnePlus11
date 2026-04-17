@@ -311,41 +311,41 @@ runs:
        grep -n "scan_adjusted" vmscan.c | head -20 || true 
 
     - name: FIX thermal kvzalloc kvfree (waipio)
-  if: env.SOC == 'waipio'
-  shell: bash
-  run: |
-    set -euo pipefail
-
-    FILE="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
-
-    echo "[+] Patching $FILE"
-
-    # remove old duplicates if they exist
-    sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
-    sed -i '/^#define kvzalloc(size, flags) kzalloc((size), (flags))$/d' "$FILE"
-    sed -i '/^#define kvfree(ptr) kfree((ptr))$/d' "$FILE"
-    sed -i '/^#ifndef kvzalloc$/d' "$FILE"
-    sed -i '/^#ifndef kvfree$/d' "$FILE"
-    sed -i '/^#endif$/d' "$FILE"
-
-    # ensure linux/mm.h is present right after linux/slab.h
-    if grep -q '^#include <linux/slab.h>$' "$FILE"; then
-      sed -i '/^#include <linux\/slab.h>$/a #include <linux/mm.h>' "$FILE"
-    else
-      sed -i '1i #include <linux/mm.h>' "$FILE"
-    fi
-
-    # add tiny compat shim after linux/mm.h
-    sed -i '/^#include <linux\/mm.h>$/a \
-#ifndef kvzalloc\
-#define kvzalloc(size, flags) kzalloc((size), (flags))\
-#endif\
-#ifndef kvfree\
-#define kvfree(ptr) kfree((ptr))\
-#endif' "$FILE"
-
-    echo "[+] Verify thermal fix:"
-    grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20 || true
+      if: env.SOC == 'waipio'
+      shell: bash
+      run: |
+        set -euo pipefail
+    
+        FILE="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
+    
+        echo "[+] Patching $FILE"
+    
+        # remove old duplicates if they exist
+        sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
+        sed -i '/^#define kvzalloc(size, flags) kzalloc((size), (flags))$/d' "$FILE"
+        sed -i '/^#define kvfree(ptr) kfree((ptr))$/d' "$FILE"
+        sed -i '/^#ifndef kvzalloc$/d' "$FILE"
+        sed -i '/^#ifndef kvfree$/d' "$FILE"
+        sed -i '/^#endif$/d' "$FILE"
+    
+        # ensure linux/mm.h is present right after linux/slab.h
+        if grep -q '^#include <linux/slab.h>$' "$FILE"; then
+          sed -i '/^#include <linux\/slab.h>$/a #include <linux/mm.h>' "$FILE"
+        else
+          sed -i '1i #include <linux/mm.h>' "$FILE"
+        fi
+    
+        # add tiny compat shim after linux/mm.h
+        sed -i '/^#include <linux\/mm.h>$/a \
+          #ifndef kvzalloc\
+          #define kvzalloc(size, flags) kzalloc((size), (flags))\
+          #endif\
+          #ifndef kvfree\
+          #define kvfree(ptr) kfree((ptr))\
+          #endif' "$FILE"
+    
+        echo "[+] Verify thermal fix:"
+        grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20 || true
 
         
     - name: Build Kernel Modules
