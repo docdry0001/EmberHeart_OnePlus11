@@ -315,19 +315,24 @@ runs:
       run: |
         set -euo pipefail
     
-        FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
+        FILE="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
     
-        echo "[+] Patching thermal_sysfs.c..."
+        echo "[+] Patching $FILE ..."
     
-        # already patched?
-        if grep -q "linux/slab.h" "$FILE"; then
+        if grep -q '^#include <linux/slab.h>$' "$FILE"; then
           echo "[+] Already patched"
         else
-          sed -i '1i #include <linux/slab.h>' "$FILE
+          tmp="$(mktemp)"
+          {
+            echo '#include <linux/slab.h>'
+            cat "$FILE"
+          } > "$tmp"
+          mv "$tmp" "$FILE"
         fi
-    
+
         echo "[+] Verify:"
-        head -n 10 "$FILE"
+        head -n 12 "$FILE"
+
         
     - name: Build Kernel Modules
       shell: bash
