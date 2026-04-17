@@ -301,19 +301,19 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-        FILE="$MSM/mm/vmscan.c"
+        cd "$CONFIG/kernel_platform/msm-kernel/mm"
     
-        echo "[+] Patching $FILE"
+        echo "[+] Cleaning old broken injections..."
+        sed -i '/bool scan_adjusted = false;/d' vmscan.c
     
-        # clean possible previous broken injections
-        sed -i '/bool scan_adjusted = false;/d' "$FILE"
+        echo "[+] Patching exact declaration block in shrink_lruvec()..."
     
-        perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n)/$1\tbool scan_adjusted = false;\n/s' "$FILE"
+        perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
     
         echo "[+] Verifying..."
-        grep -n -A5 -B5 "nr_to_reclaim = sc->nr_to_reclaim" "$FILE" | head -20 || true
-        grep -n "scan_adjusted" "$FILE" | head -20 || true
+        grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20
+        grep -n "scan_adjusted" vmscan.c | head -20  բան
+
 
     - name: Build Kernel Modules
       shell: bash
@@ -362,9 +362,9 @@ runs:
         fi
     
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-    
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" modules
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+    
     - name: Filter modules
       shell: bash
       run: |
