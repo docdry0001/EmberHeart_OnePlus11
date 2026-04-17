@@ -395,6 +395,7 @@ runs:
     
         if [ -x ./scripts/config ]; then
           ./scripts/config --file "$OUT/.config" --set-val CONFIG_FRAME_WARN 4096 || true
+          ./scripts/config --file "$OUT/.config" --enable CONFIG_SECTION_MISMATCH_WARN_ONLY || true
         fi
     
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
@@ -494,6 +495,7 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
+    
         - name: Filter modules
           shell: bash
           run: |
