@@ -437,38 +437,38 @@ runs:
          -name 'mt7921*.ko' \
        \) | sort || true
 
-- name: Create Kernel Modules zip
-  id: create_zip
-  shell: bash
-  run: |
-    set -euo pipefail
-
-    CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-    MSM="$CONFIG_DIR/kernel_platform/msm-kernel"
-    MODULES_ROOT="$MSM/out-modules"
-    MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${MODEL}.zip"
-
-    mkdir -p "$CONFIG_DIR/artifacts"
-
-    echo "[+] Module root:"
-    find "$MODULES_ROOT" -maxdepth 4 -type d | sort || true
-
-    echo "[+] Collecting .ko files..."
-
-    mapfile -t KO_FILES < <(find "$MODULES_ROOT" -type f -name '*.ko' | sort)
-
-    if [ "${#KO_FILES[@]}" -eq 0 ]; then
-      echo "❌ No modules found!"
-      exit 1
-    fi
-
-    printf '%s\n' "${KO_FILES[@]}" > "$CONFIG_DIR/artifacts/modules.list.txt"
-
-    zip -j "$MODULES_ZIP" "${KO_FILES[@]}"
-
-    echo "✅ Packaged modules: $MODULES_ZIP"
-    echo "📦 Total modules: ${#KO_FILES[@]}"
-
+    - name: Create Kernel Modules zip
+        id: create_zip
+     shell: bash
+       run: |
+         set -euo pipefail
+      
+         CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
+         MSM="$CONFIG_DIR/kernel_platform/msm-kernel"
+         MODULES_ROOT="$MSM/out-modules"
+         MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${MODEL}.zip"
+      
+         mkdir -p "$CONFIG_DIR/artifacts"
+      
+         echo "[+] Module root:"
+         find "$MODULES_ROOT" -maxdepth 4 -type d | sort || true
+      
+         echo "[+] Collecting .ko files..."
+      
+         mapfile -t KO_FILES < <(find "$MODULES_ROOT" -type f -name '*.ko' | sort)
+      
+         if [ "${#KO_FILES[@]}" -eq 0 ]; then
+           echo "❌ No modules found!"
+           exit 1
+         fi
+      
+         printf '%s\n' "${KO_FILES[@]}" > "$CONFIG_DIR/artifacts/modules.list.txt"
+      
+         zip -j "$MODULES_ZIP" "${KO_FILES[@]}"
+      
+         echo "✅ Packaged modules: $MODULES_ZIP"
+         echo "📦 Total modules: ${#KO_FILES[@]}"
+      
     - name: Final Build Summary
       shell: bash
       run: |
@@ -490,4 +490,4 @@ runs:
       with:
         name: kernel-modules-${{ env.CONFIG }}
         path: ${{ env.CONFIG }}/artifacts/
-        բ
+        
