@@ -326,57 +326,174 @@ runs:
 
        echo "[+] Verify thermal replacements:"
        grep -n -E 'kvzalloc|kvfree|kzalloc|kfree' "$FILE" | head -20 || true
+
+    - name: FIX binder mmget_still_valid compat (waipio)
+  if: env.SOC == 'waipio'
+  shell: bash
+  run: |
+    set -euo pipefail
+    FILE="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
+
+    echo "[+] Cleaning previous broken binder edits..."
+    sed -i '/^#include <linux\/mm.h>$/d' "$FILE" || true
+    sed -i '/HAVE_MMGET_STILL_VALID_COMPAT/,+6d' "$FILE" || true
+    sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE" || true
+
+    echo "[+] Ensuring correct mm header..."
+    grep -q '^#include <linux/sched/mm.h>$' "$FILE" || \
+      sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
+
+    echo "[+] Adding local compat shim only for mmget_still_valid()..."
+    grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || \
+      perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$FILE"
+
+    echo "[+] Verifying binder fix..."
+    grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5 || true
+    grep -n 'mmget_still_valid' "$FILE" | head -20 || true
+    
         
     - name: Build Kernel Modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        OUT="$MSM/out"
-    
-        cd "$MSM"
-    
-        export PATH="${CLANG_BIN_PATH}:$PATH"
-        export PATH="/usr/lib/ccache:$PATH"
-    
-        MAKE_FLAGS=(
-          LLVM=1
-          LLVM_IAS=1
-          ARCH=arm64
-          SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld
-          HOSTLD=ld.lld
-          AR=llvm-ar
-          NM=llvm-nm
-          OBJCOPY=llvm-objcopy
-          OBJDUMP=llvm-objdump
-          DEPMOD=depmod
-          DTC=dtc
-          STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC=ccache\ clang
-        )
-    
-        INSTALL_MOD_PATH="$OUT"
-        KCFLAGS="-Wno-error -Wframe-larger-than=4096"
-    
-        mkdir -p "$OUT"
-    
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-    
-        if [ -x ./scripts/config ]; then
-          ./scripts/config --file "$OUT/.config" --set-val CONFIG_FRAME_WARN 4096 || true
-        fi
-    
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" modules
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
- 
+  shell: bash
+  run: |
+    set -euo pipefail
+    KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+    MSM="$KERNEL_PLATFORM/msm-kernel"
+    cd "$MSM"
+
+    export PATH="${CLANG_BIN_PATH}:$PATH"
+    export PATH="/usr/lib/ccache:$PATH"
+
+    MAKE_FLAGS=(
+      LLVM=1
+      LLVM_IAS=1
+      ARCH=arm64
+      SUBARCH=arm64
+      CLANG_TRIPLE=aarch64-linux-gnu-
+      CROSS_COMPILE=aarch64-linux-gnu-
+      CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+      LD=ld.lld
+      HOSTLD=ld.lld
+      AR=llvm-ar
+      NM=llvm-nm
+      OBJCOPY=llvm-objcopy
+      OBJDUMP=llvm-objdump
+      DEPMOD=depmod
+      DTC=dtc
+      STRIP=llvm-strip
+      HOSTCC=clang
+      HOSTCXX=clang++
+      CC=ccache\ clang
+    )
+
+    OUT=out
+    INSTALL_MOD_PATH="$OUT"
+    KCFLAGS="-Wno-error -Wframe-larger-than=4096"
+    mkdir -p "$OUT"
+
+    echo "Building in-tree kernel modules..."
+    make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+
+    if [ -x ./scripts/config ]; then
+      ./scripts/config --file "$OUT/.config" --set-val CONFIG_FRAME_WARN 4096 || true
+    fi
+
+    make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+    make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" modules
+    make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+
+    cd "$KERNEL_PLATFORM"
+
+    mkdir -p "$KERNEL_PLATFORM/oplus/config"
+    touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
+
+    mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
+    printf 'obj-m :=\n' > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile"
+
+    MAKE_FLAGS+=(KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel")
+
+    mapfile -t EXT_OPLUS < "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" || true
+
+    OPLUS_FLAGS=(
+      CHIPSET_COMPANY=QCOM
+      OPLUS_VND_BUILD_PLATFORM="$SOC"
+    )
+
+    EXT_QCOM=(
+      ../vendor/qcom/opensource/mmrm-driver
+      ../vendor/qcom/opensource/mm-drivers/hw_fence
+      ../vendor/qcom/opensource/mm-drivers/sync_fence
+      ../vendor/qcom/opensource/mm-drivers/msm_ext_display
+      ../vendor/qcom/opensource/securemsm-kernel
+      ../vendor/qcom/opensource/display-drivers/msm
+      ../vendor/qcom/opensource/audio-kernel
+      ../vendor/qcom/opensource/camera-kernel
+      ../vendor/oplus/kernel/explorer
+      ../vendor/qcom/opensource/video-driver
+      ../vendor/qcom/opensource/graphics-kernel
+      ../vendor/qcom/opensource/dataipa/drivers/platform/msm
+      ../vendor/qcom/opensource/datarmnet/core
+      ../vendor/qcom/opensource/datarmnet-ext/aps
+      ../vendor/qcom/opensource/datarmnet-ext/offload
+      ../vendor/qcom/opensource/datarmnet-ext/shs
+      ../vendor/qcom/opensource/datarmnet-ext/sch
+      ../vendor/qcom/opensource/datarmnet-ext/perf
+      ../vendor/qcom/opensource/datarmnet-ext/perf_tether
+      ../vendor/qcom/opensource/datarmnet-ext/wlan
+      ../vendor/qcom/opensource/eva-kernel
+      ../vendor/qcom/opensource/wlan/platform
+      ../vendor/qcom/opensource/bt-kernel
+      ../vendor/nxp/opensource/driver
+      ../vendor/st/opensource/driver
+      ../vendor/st/opensource/eSE-driver
+      ../vendor/qcom/opensource/wlan/qcacld-3.0
+    )
+
+    MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
+
+    build_external_module() {
+      local module="$1"
+      local extra_syms=()
+
+      echo "==== Processing module: $module ===="
+
+      if [ ! -d "$module" ]; then
+        echo "Skipping missing module dir: $module"
+        return 0
+      fi
+
+      if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
+        echo "Skipping module without Makefile/Kbuild: $module"
+        return 0
+      fi
+
+      if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
+        extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
+        echo "Using mmrm Module.symvers for $module"
+      fi
+
+      if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
+        "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
+        KCFLAGS="$KCFLAGS" "${extra_syms[@]}" modules; then
+        echo "Build failed, skipping module: $module"
+        return 0
+      fi
+
+      if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
+        "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
+        KCFLAGS="$KCFLAGS" "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
+        echo "Install failed, skipping module: $module"
+        return 0
+      fi
+    }
+
+    for MODULE in "${EXT_OPLUS[@]}"; do
+      [ -n "$MODULE" ] || continue
+      build_external_module "$MODULE"
+    done
+
+    for MODULE in "${EXT_QCOM[@]}"; do
+      build_external_module "$MODULE"
+    done
     - name: Filter modules
       shell: bash
       run: |
