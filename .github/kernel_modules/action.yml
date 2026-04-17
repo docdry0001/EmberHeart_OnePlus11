@@ -296,6 +296,40 @@ runs:
         echo "===== MT7921 CONFIG CHECK ====="
         grep -E 'CONFIG_(WLAN_VENDOR_MEDIATEK|MT76_CORE|MT76_USB|MT76_CONNAC_LIB|MT792x_LIB|MT792x_USB|MT7921_COMMON|MT7921U)=' "$OUT/.config" || true
 
+    - name: FIX vmscan scan_adjusted (waipio)
+      if: env.SOC == 'waipio'
+      shell: bash
+      run: |
+        set -euo pipefail
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        FILE="$MSM/mm/vmscan.c"
+    
+        echo "[+] Patching $FILE"
+    
+        # remove broken/duplicate previous injections
+        sed -i '/bool scan_adjusted = false;/d' "$FILE"
+    
+        python3 - <<'PY'
+          from pathlib import Path
+          path = Path(r"""'"$FILE"'" """)
+          text = path.read_text()
+          
+          needle = "unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n"
+          insert = needle + "\tbool scan_adjusted = false;\n"
+          
+          if "bool scan_adjusted = false;" not in text:
+              if needle in text:
+                  text = text.replace(needle, insert, 1)
+              else:
+                  raise SystemExit("needle not found in vmscan.c")
+          
+          path.write_text(text)
+          PY
+    
+        echo "[+] Verifying..."
+        grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" "$FILE" | head -20
+        grep -n "scan_adjusted" "$FILE" | head -20
+
     - name: Build Kernel Modules
       shell: bash
       run: |
