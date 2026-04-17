@@ -312,7 +312,7 @@ runs:
     
         echo "[+] Verifying..."
         grep -n -A4 -B4 "nr_to_reclaim = sc->nr_to_reclaim" vmscan.c | head -20
-        grep -n "scan_adjusted" vmscan.c | head -20  բան
+        grep -n "scan_adjusted" vmscan.c | head -20 
 
 
     - name: Build Kernel Modules
