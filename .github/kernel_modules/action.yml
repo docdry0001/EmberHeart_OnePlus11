@@ -386,7 +386,7 @@ runs:
           )
       
           OUT=out
-          INSTALL_MOD_PATH="$OUT"
+          INSTALL_MOD_PATH="$MSM/out-modules"
           KCFLAGS="-Wno-error -Wframe-larger-than=4096"
           mkdir -p "$OUT"
       
@@ -418,20 +418,24 @@ runs:
           make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" modules
           make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
     
-    - name: Filter modules
+    - name: Inspect installed modules
       shell: bash
       run: |
-            set -euo pipefail
-            MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-            OUT="$MSM/out"
-            UNAME=$(ls "$OUT/lib/modules/" | head -n1)
-    
-            cd "$OUT"
-            mkdir -p modules
-            find "lib/modules/$UNAME" -type f -name '*.ko' -exec cp {} modules/ \;
-    
-            echo "===== BUILT MEDIATEK MODULES ====="
-            find modules -type f | grep -E 'mt76|mt7921|cfg80211|mac80211' || true
+       set -euo pipefail
+       KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+       MSM="$KERNEL_PLATFORM/msm-kernel"
+       MODROOT="$MSM/out-modules"
+
+       echo "[+] Module root:"
+       find "$MODROOT" -maxdepth 4 -type d | sort || true
+
+       echo "[+] Interesting modules:"
+       find "$MODROOT" -type f \( \
+         -name 'cfg80211.ko' -o \
+         -name 'mac80211.ko' -o \
+         -name 'mt76*.ko' -o \
+         -name 'mt7921*.ko' \
+       \) | sort || true
 
     - name: Create Kernel Modules zip
       id: create_zip
