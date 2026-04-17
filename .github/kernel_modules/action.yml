@@ -317,21 +317,37 @@ runs:
     
         FILE="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
     
-        echo "[+] Patching $FILE ..."
+        echo "[+] Patching $FILE"
     
-        if grep -q '^#include <linux/slab.h>$' "$FILE"; then
-          echo "[+] Already patched"
-        else
-          tmp="$(mktemp)"
-          {
-            echo '#include <linux/slab.h>'
-            cat "$FILE"
-          } > "$tmp"
-          mv "$tmp" "$FILE"
-        fi
-
-        echo "[+] Verify:"
-        head -n 12 "$FILE"
+        sed -i '/^#include <linux\/slab.h>$/d' "$FILE"
+        sed -i '/^#include <linux\/vmalloc.h>$/d' "$FILE"
+    
+        python3 - "$FILE" <<'PY'
+          import sys
+          from pathlib import Path
+          
+          path = Path(sys.argv[1])
+          text = path.read_text()
+          lines = text.splitlines()
+          
+          insert_at = None
+          for i, line in enumerate(lines):
+              if line.startswith("#include <linux/"):
+                  insert_at = i + 1
+          
+          if insert_at is None:
+              insert_at = 0
+          
+          lines.insert(insert_at, "#include <linux/slab.h>")
+          lines.insert(insert_at + 1, "#include <linux/vmalloc.h>")
+          
+          path.write_text("\n".join(lines) + "\n")
+          PY
+    
+        echo "[+] Verify includes:"
+        grep -n '^#include <linux/slab.h>$' "$FILE"
+        grep -n '^#include <linux/vmalloc.h>$' "$FILE"
+        head -n 25 "$FILE"
 
         
     - name: Build Kernel Modules
