@@ -15,10 +15,10 @@ on:
       backports_release:
         description: "Stable backports release"
         required: true
-        default: "backports-6.1.97-1"
+        default: "backports-6.1.145"
         type: choice
         options:
-          - backports-6.1.97-1
+          - backports-6.1.145
 
 jobs:
   build-wireless-modules:
