@@ -326,20 +326,23 @@ jobs:
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
           zip -r mediatek-mt76-port-op11r-5.10.zip mt76-port-bundle >/dev/null
-      - name: Collect artifacts
+      
+      - name: Collect KO modules
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts
-          [ -f "$GITHUB_WORKSPACE/mediatek-mt76-port-op11r-5.10.zip" ] && \
-            cp -f "$GITHUB_WORKSPACE/mediatek-mt76-port-op11r-5.10.zip" artifacts/ || true
-          [ -f "$GITHUB_WORKSPACE/backports-build.log" ] && \
-            cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
-          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && \
-            cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
-          echo "===== ARTIFACT CONTENTS ====="
-          find artifacts -maxdepth 3 -type f | sort || true
+          mkdir -p artifacts/modules
+
+          # Փնտրում և հավաքում է բոլոր .ko ֆայլերը backports թղթապանակից
+          find "$GITHUB_WORKSPACE/backports-stable" -name "*.ko" -exec cp {} artifacts/modules/ \;
+
+          # Նաև պահպանում ենք լոգերը և կոնֆիգը
+          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && cp "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
+          
+          echo "===== GENERATED MODULES ====="
+          ls -R artifacts/modules
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
