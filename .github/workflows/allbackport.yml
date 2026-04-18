@@ -358,7 +358,6 @@ jobs:
           set -euo pipefail
           cd backports-stable
           find . -name "*.o" -delete || true
-          find . -name "*.ko" -delete || true
           find . -name ".tmp_versions" -type d -exec rm -rf {} + 2>/dev/null || true
           find . -name "modules.order" -delete || true
           echo "✓ Build directory cleaned"
