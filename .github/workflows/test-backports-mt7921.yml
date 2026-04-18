@@ -152,45 +152,6 @@ jobs:
             echo "CLANG_BIN=$(dirname "$(command -v clang)")" >> "$GITHUB_ENV"
           fi
 
-      - name: Build backports modules
-        shell: bash
-        run: |
-          set -euo pipefail
-          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-
-          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
-            export PATH="${CLANG_BIN}:$PATH"
-          fi
-          export PATH="/usr/lib/ccache:$PATH"
-
-          MAKE_FLAGS=(
-            LLVM=1
-            LLVM_IAS=1
-            ARCH=arm64
-            SUBARCH=arm64
-            CLANG_TRIPLE=aarch64-linux-gnu-
-            CROSS_COMPILE=aarch64-linux-gnu-
-            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-            LD=ld.lld
-            HOSTLD=ld.lld
-            AR=llvm-ar
-            NM=llvm-nm
-            OBJCOPY=llvm-objcopy
-            OBJDUMP=llvm-objdump
-            STRIP=llvm-strip
-            HOSTCC=clang
-            HOSTCXX=clang++
-            CC=clang
-          )
-
-          cd "$GITHUB_WORKSPACE/backports-stable"
-
-          # Այս հրամանը կատարում է բուն կոմպիլյացիան
-          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
-            KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_BUILD" \
-            modules
-
       - name: Download stable backports release
         shell: bash
         run: |
@@ -319,7 +280,45 @@ jobs:
             KLIB_BUILD="$KERNEL_BUILD" \
             V=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log" || true
+            
+      - name: Build backports modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
 
+          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+            export PATH="${CLANG_BIN}:$PATH"
+          fi
+          export PATH="/usr/lib/ccache:$PATH"
+
+          MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=clang
+          )
+
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          # Այս հրամանը կատարում է բուն կոմպիլյացիան
+          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            modules
       - name: Prepare MT76 transplant bundle
         shell: bash
         run: |
