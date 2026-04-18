@@ -225,6 +225,21 @@ jobs:
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/backports-stable"
+
+          echo "===== MEDIATEK TREE ====="
+          find drivers/net/wireless/mediatek/mt76 -maxdepth 3 -type f | sort || true
+
+          echo "===== MEDIATEK KCONFIG SYMBOLS ====="
+          grep -RnsE "^[[:space:]]*config[[:space:]]+MT|^[[:space:]]*config[[:space:]]+WLAN_VENDOR_MEDIATEK" \
+            drivers/net/wireless/mediatek \
+            drivers/net/wireless/mediatek/mt76 \
+            . || true
+
+      - name: Inspect backports MediaTek tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports-stable"
           echo "===== MEDIATEK TREE ====="
           find drivers/net/wireless/mediatek/mt76 -maxdepth 2 -type f | sort || true
           echo "===== MEDIATEK CONFIG ENTRIES ====="
