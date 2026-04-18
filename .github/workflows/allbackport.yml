@@ -135,7 +135,6 @@ jobs:
           if [ -x ./scripts/config ]; then
             # ... (մյուս disable հրամանները)
       
-            # ⚠️ Սա է կարևորը. cfg80211-ը և mac80211-ը դարձնել մոդուլ, որպեսզի backports-ը կարողանա դրանք փոխարինել
             ./scripts/config --file "$OUT/.config" --set-val CONFIG_CFG80211 m || true
             ./scripts/config --file "$OUT/.config" --set-val CONFIG_MAC80211 m || true
           fi
@@ -210,12 +209,28 @@ jobs:
 
       - name: Prepare modules-only archive
         run: |
+          echo "=== Searching for .ko files in backports-stable ==="
+          find backports-stable -name "*.ko" -type f -print
+          
+          KO_COUNT=$(find backports-stable -name "*.ko" -type f | wc -l)
+          echo "Total .ko files found: $KO_COUNT"
+          
+          if [ "$KO_COUNT" -eq 0 ]; then
+            echo "ERROR: No .ko files were built!"
+            echo "Listing top-level backports-stable contents:"
+            ls -la backports-stable/
+            echo "Check build.log for compilation errors."
+            exit 1
+          fi
+          
           mkdir -p modules-out
-          find backports-stable -name "*.ko" -type f -exec cp {} modules-out/ \;
-          # Optional: if you want to preserve subfolders, use cp --parents, but here we want flat
+          find backports-stable -name "*.ko" -type f -exec cp -v {} modules-out/ \;
+          
+          echo "=== Files copied to modules-out ==="
+          ls -la modules-out/
+          
           cd modules-out
           zip -r "$GITHUB_WORKSPACE/wireless-modules-op11r.zip" *.ko
-
       - name: Collect artifacts
         if: always()
         run: |
