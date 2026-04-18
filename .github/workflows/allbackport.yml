@@ -459,80 +459,80 @@ jobs:
           # Find the latest archive
           if [ -f "$GITHUB_WORKSPACE"/wireless-modules-op11r-*.zip ]; then
             cp "$GITHUB_WORKSPACE"/wireless-modules-op11r-*.zip artifacts/ || true
-            echo "вњ“ Wireless modules archive copied"
+            echo "✓ Wireless modules archive copied"
           fi
           
           # Copy logs
           if [ -f "$GITHUB_WORKSPACE/build.log" ]; then
             cp "$GITHUB_WORKSPACE/build.log" artifacts/build-full.log || true
-            echo "вњ“ Build log copied"
+            echo "✓ Build log copied"
           fi
           
           # Copy configs
           if [ -f backports-stable/.config ]; then
             cp backports-stable/.config artifacts/backports.config || true
-            echo "вњ“ Backports config copied"
+            echo "✓ Backports config copied"
           fi
           
           if [ -f backports-stable/backports-config.log ]; then
             cp backports-stable/backports-config.log artifacts/ || true
-            echo "вњ“ Config generation log copied"
+            echo "✓ Config generation log copied"
           fi
           
           # Create summary
           cat > artifacts/BUILD_SUMMARY.txt <<EOF
-          Build Summary
-          =============
-          Date: $(date)
-          Kernel Version: ${KERNEL_VER:-unknown}
-          Manifest: ${MANIFEST:-unknown}
-          Backports Release: ${{ github.event.inputs.backports_release }}
-          SOC: ${SOC}
-          Model: ${MODEL}
-          Build Output: See artifacts/
-          EOF
-                    
-                    echo ""
-                    echo "=== Artifacts collected ==="
-                    ls -lhR artifacts/
+            Build Summary
+            =============
+            Date: $(date)
+            Kernel Version: ${KERNEL_VER:-unknown}
+            Manifest: ${MANIFEST:-unknown}
+            Backports Release: ${{ github.event.inputs.backports_release }}
+            SOC: ${SOC}
+            Model: ${MODEL}
+            Build Output: See artifacts/
+            EOF
           
+          echo ""
+          echo "=== Artifacts collected ==="
+          ls -lhR artifacts/
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-        name: op11r-wireless-modules-${{ github.run_number }}
-        path: artifacts/
-        retention-days: 30
-        if-no-files-found: error
-          
+          name: op11r-wireless-modules-${{ github.run_number }}
+          path: artifacts/
+          retention-days: 30
+          if-no-files-found: error
+
       - name: Create release notes
         if: success()
         run: |
           cat > RELEASE_NOTES.md <<EOF
-          # OP11R Wireless Backports Modules Build ${{ github.run_number }}
-          
-          ## Build Information
-          - **Date**: $(date)
-          - **Kernel Version**: ${KERNEL_VER}
-          - **Manifest**: ${MANIFEST}
-          - **Backports Release**: ${{ github.event.inputs.backports_release }}
-          - **Build Status**: вњ… SUCCESS
-          
-          ## Artifacts
-          - **wireless-modules-op11r-${{ github.run_number }}.zip** - Contains all compiled .ko modules
-          
-          ## Contents
-          All WiFi-related .ko files compiled from the backports package:
-          - cfg80211 (if present: bp_cfg80211.ko)
-          - mac80211 (if present: bp_mac80211.ko)
-          - Various WiFi driver modules
-          
-          ## Installation
-          1. Extract the zip file
-          2. Copy .ko files to your kernel modules directory
-          3. Run `depmod` to update module dependencies
-          4. Reboot
-          
-          ## Build Logs
-          See artifacts for complete build logs and configuration files.
-          EOF
-                    cat RELEASE_NOTES.md
+# OP11R Wireless Backports Modules Build ${{ github.run_number }}
+
+## Build Information
+- **Date**: $(date)
+- **Kernel Version**: ${KERNEL_VER}
+- **Manifest**: ${MANIFEST}
+- **Backports Release**: ${{ github.event.inputs.backports_release }}
+- **Build Status**: ✅ SUCCESS
+
+## Artifacts
+- **wireless-modules-op11r-${{ github.run_number }}.zip** - Contains all compiled .ko modules
+
+## Contents
+All WiFi-related .ko files compiled from the backports package:
+- cfg80211 (if present: bp_cfg80211.ko)
+- mac80211 (if present: bp_mac80211.ko)
+- Various WiFi driver modules
+
+## Installation
+1. Extract the zip file
+2. Copy .ko files to your kernel modules directory
+3. Run `depmod` to update module dependencies
+4. Reboot
+
+## Build Logs
+See artifacts for complete build logs and configuration files.
+EOF
+          cat RELEASE_NOTES.md
