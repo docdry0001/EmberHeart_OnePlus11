@@ -225,10 +225,10 @@ jobs:
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/backports-stable"
-
           echo "===== MEDIATEK TREE ====="
           find drivers/net/wireless/mediatek/mt76 -maxdepth 2 -type f | sort || true
-
+          echo "===== MEDIATEK CONFIG ENTRIES ====="
+          grep -Rns "config .*MT7921\|config .*MT792x\|config .*MT76" drivers/net/wireless/mediatek/mt76 || true
           
           
 
@@ -296,17 +296,12 @@ jobs:
           'CPTCFG_PCI=y' \
           'CPTCFG_NL80211_TESTMODE=y' >> .config
           
-          ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
-          --module CONFIG_CAN_SLCAN
-          
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
             olddefconfig </dev/null || true
-
           echo "===== FINAL CONFIG CHECK ====="
-          grep -E 'CPTCFG_(CFG80211|MAC80211|MT76|MT792|WLAN_VENDOR_MEDIATEK)' .config || true
+          grep -E 'CPTCFG_(CFG80211|MAC80211|MT76|MT792|WLAN_VENDOR_MEDIATEK)' .config || true' .config || true
 
       - name: Patch backports compat for OnePlus CFI macros
         shell: bash
