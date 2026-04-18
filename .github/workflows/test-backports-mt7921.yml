@@ -175,7 +175,7 @@ jobs:
           echo "===== MEDIATEK CONFIG ENTRIES ====="
           grep -Rns "config .*MT7921\|config .*MT792x\|config .*MT76" drivers/net/wireless/mediatek/mt76 || true
 
-      - name: Configure backports for MT76/MT7921 only
+      - name: Build backports modules
         shell: bash
         run: |
           set -euo pipefail
@@ -185,7 +185,13 @@ jobs:
             export PATH="${CLANG_BIN}:$PATH"
           fi
           export PATH="/usr/lib/ccache:$PATH"
-
+          export EXTRA_CFLAGS="-Dbackport_prefix=bp_ -Dbackport_ns=bp"
+          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            EXTRA_CFLAGS="$EXTRA_CFLAGS" \
+            modules
+            
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -200,8 +206,6 @@ jobs:
             NM=llvm-nm
             OBJCOPY=llvm-objcopy
             OBJDUMP=llvm-objdump
-            DEPMOD=depmod
-            DTC=dtc
             STRIP=llvm-strip
             HOSTCC=clang
             HOSTCXX=clang++
@@ -210,34 +214,43 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/backports-stable"
 
-          make "${MAKE_FLAGS[@]}" \
+          # Այս հրամանը կատարում է բուն կոմպիլյացիան
+          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
-            allnoconfig
+            modules
 
+      - name: Configure backports for MT76/MT7921 only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          # 1. Փոխում ենք մոդուլների ներքին անունները Makefile-ներում, 
+          # որպեսզի միջուկը դրանք տեսնի որպես 'bp_cfg80211' և այլն:
+          find . -name "Makefile" -type f -exec sed -i 's/cfg80211-/bp_cfg80211-/g' {} +
+          find . -name "Makefile" -type f -exec sed -i 's/mac80211-/bp_mac80211-/g' {} +
+          sed -i 's/obj-$(CPTCFG_CFG80211) += cfg80211.o/obj-$(CPTCFG_CFG80211) += bp_cfg80211.o/' net/wireless/Makefile
+          sed -i 's/obj-$(CPTCFG_MAC80211) += mac80211.o/obj-$(CPTCFG_MAC80211) += bp_mac80211.o/' net/mac80211/Makefile
+
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+          
+          # [Նախկին MAKE_FLAGS-ը այստեղ...]
+          MAKE_FLAGS=(
+            LLVM=1 ARCH=arm64 SUBARCH=arm64
+            # [span_1](start_span)... մնացած դրոշակները[span_1](end_span)
+          )
+
+          make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
+
+          # [span_2](start_span)Ավելացնում ենք կոնֆիգուրացիան[span_2](end_span)
           printf '%s\n' \
           'CPTCFG_WLAN=y' \
-          'CPTCFG_CFG80211=y' \
-          'CPTCFG_MAC80211=y' \
-          'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
-          'CPTCFG_MT76_CORE=m' \
-          'CPTCFG_MT76_USB=m' \
-          'CPTCFG_MT76_CONNAC_LIB=m' \
-          'CPTCFG_MT792x_LIB=m' \
-          'CPTCFG_MT792x_USB=m' \
-          'CPTCFG_MT7921_COMMON=m' \
-          'CPTCFG_MT7921U=m' \
-          'CPTCFG_USB=y' \
-          'CPTCFG_PCI=y' \
-          'CPTCFG_NL80211_TESTMODE=y' >> .config
+          'CPTCFG_CFG80211=m' \
+          'CPTCFG_MAC80211=m' \
+          'CPTCFG_BACKPORT_OPTION_UNUSED=y' >> .config
 
-          make "${MAKE_FLAGS[@]}" \
-            KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_BUILD" \
-            olddefconfig </dev/null || true
-
-          echo "===== FINAL CONFIG CHECK ====="
-          grep -E 'CPTCFG_(CFG80211|MAC80211|MT76|MT792|WLAN_VENDOR_MEDIATEK)' .config || true
+          make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig </dev/null
 
       
       - name: Build backports tree for source adaptation validation
@@ -281,44 +294,7 @@ jobs:
             V=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log" || true
             
-      - name: Build backports modules
-        shell: bash
-        run: |
-          set -euo pipefail
-          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-
-          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
-            export PATH="${CLANG_BIN}:$PATH"
-          fi
-          export PATH="/usr/lib/ccache:$PATH"
-
-          MAKE_FLAGS=(
-            LLVM=1
-            LLVM_IAS=1
-            ARCH=arm64
-            SUBARCH=arm64
-            CLANG_TRIPLE=aarch64-linux-gnu-
-            CROSS_COMPILE=aarch64-linux-gnu-
-            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-            LD=ld.lld
-            HOSTLD=ld.lld
-            AR=llvm-ar
-            NM=llvm-nm
-            OBJCOPY=llvm-objcopy
-            OBJDUMP=llvm-objdump
-            STRIP=llvm-strip
-            HOSTCC=clang
-            HOSTCXX=clang++
-            CC=clang
-          )
-
-          cd "$GITHUB_WORKSPACE/backports-stable"
-
-          # Այս հրամանը կատարում է բուն կոմպիլյացիան
-          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
-            KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_BUILD" \
-            modules
+      
       - name: Prepare MT76 transplant bundle
         shell: bash
         run: |
