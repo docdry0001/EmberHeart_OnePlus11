@@ -42,7 +42,7 @@ jobs:
           set -e
           [ "$MODEL" = "OP11R" ] || exit 1
           [ "$SOC" = "waipio" ] || exit 1
-          echo "вњ“ Target validation passed"
+          echo "✓ Target validation passed"
 
       - name: Cleanup runner
         run: |
@@ -65,7 +65,7 @@ jobs:
             libxml2-utils rsync unzip dwarves file python3 ccache wget patch jq \
             coccinelle kmod bc perl xz-utils zip device-tree-compiler
           sudo apt-get clean
-          echo "вњ“ Dependencies installed"
+          echo "✓ Dependencies installed"
 
       - name: Set manifest
         run: |
@@ -74,9 +74,9 @@ jobs:
             OOS14) echo "MANIFEST=$MANIFEST_OOS14_MODULES" >> "$GITHUB_ENV" ;;
             OOS15) echo "MANIFEST=$MANIFEST_OOS15_MODULES" >> "$GITHUB_ENV" ;;
             OOS16) echo "MANIFEST=$MANIFEST_OOS16_MODULES" >> "$GITHUB_ENV" ;;
-            *) echo "вќЊ Unknown manifest"; exit 1 ;;
+            *) echo "✗ Unknown manifest"; exit 1 ;;
           esac
-          echo "вњ“ Manifest set to: $MANIFEST"
+          echo "✓ Manifest set to: $MANIFEST"
 
       - name: Install repo
         run: |
@@ -84,7 +84,7 @@ jobs:
           sudo curl -L https://storage.googleapis.com/git-repo-downloads/repo -o /usr/local/bin/repo
           sudo chmod +x /usr/local/bin/repo
           repo --version
-          echo "вњ“ Repo tool installed"
+          echo "✓ Repo tool installed"
 
       - name: Sync OP11R kernel source
         run: |
@@ -99,14 +99,14 @@ jobs:
           for i in 1 2 3; do
             echo "Attempt $i..."
             if repo sync -c --no-clone-bundle --no-tags --optimized-fetch -j$(nproc) --fail-fast; then
-              echo "вњ“ Sync successful"
+              echo "✓ Sync successful"
               break
             fi
             if [ $i -lt 3 ]; then
-              echo "вљ  Sync failed, retrying in 20 seconds..."
+              echo "⟳ Sync failed, retrying in 20 seconds..."
               sleep 20
             else
-              echo "вќЊ Sync failed after 3 attempts"
+              echo "✗ Sync failed after 3 attempts"
               exit 1
             fi
           done
@@ -123,7 +123,7 @@ jobs:
           SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
           KERNEL_VER="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
           echo "KERNEL_VER=$KERNEL_VER" >> "$GITHUB_ENV"
-          echo "вњ“ Kernel version: $KERNEL_VER"
+          echo "✓ Kernel version: $KERNEL_VER"
           
           echo "Cleaning kernel tree..."
           make ARCH=arm64 mrproper
@@ -133,7 +133,7 @@ jobs:
           ./scripts/kconfig/merge_config.sh -O out -m \
             arch/arm64/configs/gki_defconfig \
             arch/arm64/configs/vendor/${SOC}_GKI.config || {
-            echo "вљ  Config merge warning, continuing..."
+            echo "⟳ Config merge warning, continuing..."
           }
           
           cp out/.config arch/arm64/configs/gki_defconfig
@@ -153,7 +153,7 @@ jobs:
             if [ -n "$latest" ] && [ -x "$latest/bin/clang" ]; then
               echo "CLANG_BIN=$latest/bin" >> "$GITHUB_ENV"
               FOUND=true
-              echo "вњ“ Found prebuilt clang at: $latest/bin"
+              echo "✓ Found prebuilt clang at: $latest/bin"
               break
             fi
           done
@@ -161,7 +161,7 @@ jobs:
           if ! $FOUND; then
             SYSTEM_CLANG=$(dirname "$(command -v clang)")
             echo "CLANG_BIN=$SYSTEM_CLANG" >> "$GITHUB_ENV"
-            echo "вњ“ Using system clang at: $SYSTEM_CLANG"
+            echo "✓ Using system clang at: $SYSTEM_CLANG"
           fi
 
       - name: Kernel prepare
@@ -227,7 +227,7 @@ jobs:
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
           make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare 2>&1 | tail -20
           
-          echo "вњ“ Kernel preparation complete"
+          echo "✓ Kernel preparation complete"
           echo "Kernel build output location: $OUT"
           ls -la "$OUT" | head -20
 
@@ -237,17 +237,14 @@ jobs:
           RELEASE="${{ github.event.inputs.backports_release }}"
           echo "Downloading backports: $RELEASE"
           
-          # Correct URL format for kernel.org backports
-          wget -v -O backports.tar.xz \
-            "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz" || \
           wget -v -O backports.tar.xz \
             "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz"
           
-          echo "вњ“ Downloaded, extracting..."
+          echo "✓ Downloaded, extracting..."
           tar -xf backports.tar.xz
           mv "$RELEASE" backports-stable
           
-          echo "вњ“ Backports extracted"
+          echo "✓ Backports extracted"
           ls -la backports-stable/ | head -10
 
       - name: Patch compat for CFI
@@ -260,12 +257,12 @@ jobs:
             echo "Patching CFI compatibility in $FILE..."
             sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
             sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
-            echo "вњ“ CFI patch applied"
+            echo "✓ CFI patch applied"
           else
-            echo "вљ  File not found, skipping CFI patch"
+            echo "⟳ File not found, skipping CFI patch"
           fi
 
-      - name: Configure backports (full wireless)
+      - name: Configure backports (Mediatek + Realtek only)
         run: |
           set -e
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
@@ -296,15 +293,64 @@ jobs:
           
           cd backports-stable
           
-          echo "Configuring backports for WiFi..."
+          echo "Creating minimal backports config..."
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
-            defconfig-wifi 2>&1 | tee backports-config.log
+            defconfig 2>&1 | tee backports-config.log
           
-          echo "вњ“ Backports configuration complete"
+          echo ""
+          echo "Configuring for Mediatek and Realtek USB drivers..."
+          if [ -x ./scripts/config ]; then
+            # Enable core wireless
+            ./scripts/config --file .config --set-val CONFIG_CFG80211 m || true
+            ./scripts/config --file .config --set-val CONFIG_MAC80211 m || true
+            
+            # Enable Mediatek drivers
+            ./scripts/config --file .config --set-val CONFIG_MT7921_COMMON m || true
+            ./scripts/config --file .config --set-val CONFIG_MT7921U m || true
+            ./scripts/config --file .config --set-val CONFIG_MT76_USB m || true
+            ./scripts/config --file .config --set-val CONFIG_MT76 m || true
+            
+            # Enable Realtek drivers
+            ./scripts/config --file .config --set-val CONFIG_RTL8XXXU m || true
+            ./scripts/config --file .config --set-val CONFIG_RTL8188EU m || true
+            ./scripts/config --file .config --set-val CONFIG_RTL8192EU m || true
+            ./scripts/config --file .config --set-val CONFIG_RTL8723BU m || true
+            ./scripts/config --file .config --set-val CONFIG_RTW88 m || true
+            ./scripts/config --file .config --set-val CONFIG_RTW88_USB m || true
+            
+            # DISABLE Intel drivers to avoid build issues
+            ./scripts/config --file .config --disable CONFIG_IWLWIFI || true
+            ./scripts/config --file .config --disable CONFIG_IWLMVM || true
+            ./scripts/config --file .config --disable CONFIG_IWLDVM || true
+            ./scripts/config --file .config --disable CONFIG_IWL7000 || true
+            
+            # Disable other problematic subsystems
+            ./scripts/config --file .config --disable CONFIG_STAGING || true
+          fi
+          
+          echo ""
+          echo "Running olddefconfig to validate..."
+          make "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            olddefconfig 2>&1 | tail -10
+          
+          echo ""
+          echo "✓ Backports configuration complete"
           echo "Generated .config:"
-          head -30 .config
+          head -50 .config
+
+      - name: Clean backports build directory
+        run: |
+          cd backports-stable
+          echo "Cleaning previous build artifacts..."
+          make mrproper || true
+          rm -f Module.symvers modules.order *.order
+          find . -name "modules.order" -delete
+          find . -name ".tmp_versions" -type d -exec rm -rf {} + 2>/dev/null || true
+          echo "✓ Build directory cleaned"
 
       - name: Build backports modules
         run: |
@@ -340,7 +386,10 @@ jobs:
           cd backports-stable
           
           echo "Building backports modules with $(nproc) threads..."
-          make -j$(nproc) \
+          echo "Building: Mediatek MT7921/MT76 and Realtek RTL8XXXU drivers"
+          
+          # Reduce parallelism to avoid modules.order conflicts
+          make -j4 \
             "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
@@ -350,13 +399,15 @@ jobs:
           BUILD_EXIT=$?
           
           if [ $BUILD_EXIT -ne 0 ]; then
-            echo "вќЊ Build failed with exit code $BUILD_EXIT"
-            echo "Last 50 lines of build output:"
-            tail -50 "$GITHUB_WORKSPACE/build.log"
+            echo "✗ Build failed with exit code $BUILD_EXIT"
+            echo ""
+            echo "Last 100 lines of build output:"
+            tail -100 "$GITHUB_WORKSPACE/build.log"
             exit 1
           fi
           
-          echo "вњ“ Build completed successfully"
+          echo ""
+          echo "✓ Build completed successfully"
 
       - name: Verify .ko files generated
         run: |
@@ -364,88 +415,55 @@ jobs:
           cd backports-stable
           
           echo "=== Searching for .ko files ==="
-          KO_FILES=$(find . -name "*.ko" -type f)
+          KO_FILES=$(find . -name "*.ko" -type f 2>/dev/null)
           KO_COUNT=$(echo "$KO_FILES" | grep -c '\.ko$' || true)
           
           echo "Total .ko files found: $KO_COUNT"
           
           if [ "$KO_COUNT" -eq 0 ]; then
-            echo "вќЊ CRITICAL: No .ko files generated!"
-            echo "Directory structure:"
-            find . -type d | head -30
+            echo "✗ CRITICAL: No .ko files generated!"
             echo ""
-            echo "Last 100 lines of build.log:"
-            tail -100 "$GITHUB_WORKSPACE/build.log"
+            echo "Directory structure:"
+            find . -type d -name "wireless" -o -name "drivers" | head -20
+            echo ""
+            echo "Last 150 lines of build.log:"
+            tail -150 "$GITHUB_WORKSPACE/build.log"
             exit 1
           fi
           
-          echo "вњ“ .ko files generated:"
+          echo ""
+          echo "✓ .ko files generated:"
           echo "$KO_FILES" | sort
           
-          # List module info
-          for ko in $(find . -name "*.ko" -type f); do
-            echo "Module: $ko ($(du -h "$ko" | cut -f1))"
+          echo ""
+          echo "Module details:"
+          for ko in $(echo "$KO_FILES" | sort); do
+            echo "  $(du -h "$ko" | cut -f1)  $ko"
           done
 
-      - name: Rename core modules (bp_ prefix)
+      - name: Extract and organize modules
         run: |
           set -e
           cd backports-stable
           
-          echo "Renaming core modules with bp_ prefix..."
-          
-          for mod in cfg80211 mac80211 compat; do
-            if [ -f "${mod}.ko" ]; then
-              mv "${mod}.ko" "bp_${mod}.ko"
-              echo "вњ“ Renamed ${mod}.ko в†’ bp_${mod}.ko"
-            fi
-          done
-          
-          echo ""
-          echo "=== All built .ko files after renaming ==="
-          find . -name "*.ko" -type f -exec ls -lh {} \; | sort -k9
-
-      - name: Prepare modules-only archive
-        run: |
-          set -e
-          
-          echo "=== Searching for .ko files in backports-stable ==="
-          KO_FILES=$(find backports-stable -name "*.ko" -type f -print)
-          KO_COUNT=$(echo "$KO_FILES" | grep -c '\.ko$' || true)
-          
-          echo "Total .ko files found: $KO_COUNT"
-          
-          if [ "$KO_COUNT" -eq 0 ]; then
-            echo "вќЊ ERROR: No .ko files were built!"
-            echo ""
-            echo "Listing backports-stable structure:"
-            ls -la backports-stable/
-            echo ""
-            echo "Full directory tree:"
-            find backports-stable -type f -name "*.ko" 2>/dev/null || echo "No .ko files found"
-            echo ""
-            echo "Build log errors:"
-            grep -i "error\|fail" "$GITHUB_WORKSPACE/build.log" | tail -20 || true
-            exit 1
-          fi
-          
-          echo "Creating modules output directory..."
-          mkdir -p modules-out
+          echo "Creating organized modules output directory..."
+          mkdir -p ../modules-out
           
           echo "Copying .ko files..."
-          find backports-stable -name "*.ko" -type f -exec cp -v {} modules-out/ \;
+          find . -name "*.ko" -type f -exec cp -v {} ../modules-out/ \;
           
           echo ""
           echo "=== Files in modules-out ==="
-          ls -lh modules-out/
+          ls -lh ../modules-out/
           
           echo ""
           echo "Creating archive..."
-          cd modules-out
-          ARCHIVE_NAME="wireless-modules-op11r-${GITHUB_RUN_NUMBER}.zip"
+          cd ../modules-out
+          ARCHIVE_NAME="wireless-modules-op11r-mediatek-realtek-${GITHUB_RUN_NUMBER}.zip"
           zip -r "$GITHUB_WORKSPACE/$ARCHIVE_NAME" *.ko
           
-          echo "вњ“ Archive created: $ARCHIVE_NAME"
+          echo ""
+          echo "✓ Archive created: $ARCHIVE_NAME"
           ls -lh "$GITHUB_WORKSPACE/$ARCHIVE_NAME"
 
       - name: Collect and verify artifacts
@@ -457,8 +475,8 @@ jobs:
           echo "Collecting artifacts..."
           
           # Find the latest archive
-          if [ -f "$GITHUB_WORKSPACE"/wireless-modules-op11r-*.zip ]; then
-            cp "$GITHUB_WORKSPACE"/wireless-modules-op11r-*.zip artifacts/ || true
+          if ls "$GITHUB_WORKSPACE"/wireless-modules-op11r-mediatek-realtek-*.zip 1> /dev/null 2>&1; then
+            cp "$GITHUB_WORKSPACE"/wireless-modules-op11r-mediatek-realtek-*.zip artifacts/ || true
             echo "✓ Wireless modules archive copied"
           fi
           
@@ -481,16 +499,25 @@ jobs:
           
           # Create summary
           cat > artifacts/BUILD_SUMMARY.txt <<EOF
-            Build Summary
-            =============
-            Date: $(date)
-            Kernel Version: ${KERNEL_VER:-unknown}
-            Manifest: ${MANIFEST:-unknown}
-            Backports Release: ${{ github.event.inputs.backports_release }}
-            SOC: ${SOC}
-            Model: ${MODEL}
-            Build Output: See artifacts/
-            EOF
+          Build Summary
+          =============
+          Date: $(date)
+          Kernel Version: ${KERNEL_VER:-unknown}
+          Manifest: ${MANIFEST:-unknown}
+          Backports Release: ${{ github.event.inputs.backports_release }}
+          SOC: ${SOC}
+          Model: ${MODEL}
+          Build Type: Mediatek + Realtek USB WiFi drivers
+          
+          Drivers Included:
+          - Mediatek MT7921/MT76 USB
+          - Realtek RTL8XXXU (8188EU, 8192EU, 8723BU variants)
+          - cfg80211/mac80211 core modules
+          
+          Intel drivers: DISABLED (to avoid build conflicts)
+          
+          Build Output: See artifacts/
+          EOF
           
           echo ""
           echo "=== Artifacts collected ==="
@@ -499,7 +526,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: op11r-wireless-modules-${{ github.run_number }}
+          name: op11r-mediatek-realtek-modules-${{ github.run_number }}
           path: artifacts/
           retention-days: 30
           if-no-files-found: error
@@ -508,31 +535,42 @@ jobs:
         if: success()
         run: |
           cat > RELEASE_NOTES.md <<EOF
-            # OP11R Wireless Backports Modules Build ${{ github.run_number }}
-            
-            ## Build Information
-            - **Date**: $(date)
-            - **Kernel Version**: ${KERNEL_VER}
-            - **Manifest**: ${MANIFEST}
-            - **Backports Release**: ${{ github.event.inputs.backports_release }}
-            - **Build Status**: ✅ SUCCESS
-            
-            ## Artifacts
-            - **wireless-modules-op11r-${{ github.run_number }}.zip** - Contains all compiled .ko modules
-            
-            ## Contents
-            All WiFi-related .ko files compiled from the backports package:
-            - cfg80211 (if present: bp_cfg80211.ko)
-            - mac80211 (if present: bp_mac80211.ko)
-            - Various WiFi driver modules
-            
-            ## Installation
-            1. Extract the zip file
-            2. Copy .ko files to your kernel modules directory
-            3. Run `depmod` to update module dependencies
-            4. Reboot
-            
-            ## Build Logs
-            See artifacts for complete build logs and configuration files.
-            EOF
-                      cat RELEASE_NOTES.md
+          # OP11R Wireless USB Drivers - Mediatek + Realtek Build ${{ github.run_number }}
+          
+          ## Build Information
+          - **Date**: $(date)
+          - **Kernel Version**: ${KERNEL_VER}
+          - **Manifest**: ${MANIFEST}
+          - **Backports Release**: ${{ github.event.inputs.backports_release }}
+          - **Build Status**: ✅ SUCCESS
+          - **Purpose**: NetHunter WiFi USB adapters
+          
+          ## Supported Drivers
+          ### Mediatek
+          - MT7921 (MT7921U)
+          - MT76 USB variants
+          
+          ### Realtek  
+          - RTL8188EU
+          - RTL8192EU
+          - RTL8723BU
+          - RTL8XXXU family
+          - RTW88 USB
+          
+          ## Artifacts
+          - **wireless-modules-op11r-mediatek-realtek-${{ github.run_number }}.zip** - All .ko modules
+          - **build-full.log** - Complete build output
+          - **backports.config** - Kernel configuration used
+          - **BUILD_SUMMARY.txt** - Summary information
+          
+          ## Installation for NetHunter
+          1. Extract the zip file on your OP11R
+          2. Copy .ko files to `/system/lib/modules/` or appropriate module directory
+          3. Run: \`insmod <module>.ko\` for each driver
+          4. Or use: \`modprobe <module>\` if depmod is configured
+          5. Verify with: \`lsmod | grep mt7921\` or \`lsmod | grep rtl\`
+          
+          ## Build Logs
+          See artifacts for complete build logs and configuration files.
+          EOF
+          cat RELEASE_NOTES.md
