@@ -199,7 +199,19 @@ jobs:
 
           make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
-          
+          if [ -x ./scripts/config ]; then
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI_CLANG || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG_THIN || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_SHADOW_CALL_STACK || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_SW_TAGS || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_HW_TAGS || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_TRAP || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_BOUNDS || true
+          fi
 
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
           make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare
@@ -212,9 +224,9 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE="${{ github.event.inputs.backports_release }}"
-          wget -O backports.tar.xz \
-            "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/${RELEASE}.tar.xz"
-          tar -xf backports.tar.xz
+          wget -O backports.tar.gz \
+            "https://git.kernel.org/pub/scm/linux/kernel/git/backports/backports.git/snapshot/backports-6.1.145-1.tar.gz"
+          tar -xf backports.tar.gz
           mv "$RELEASE" backports-stable
           echo "✓ Backports extracted"
 
@@ -230,7 +242,18 @@ jobs:
           echo "===== KCONFIG SYMBOLS ====="
           grep -RnsE "^[[:space:]]*config[[:space:]]+(MT|RT|RTL|WLAN_VENDOR_|CFG80211|MAC80211)" drivers/net/wireless compat . || true
 
-      
+      - name: Patch compat for CFI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd backports-stable
+
+          FILE="backport-include/linux/module.h"
+          if [ -f "$FILE" ]; then
+            sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
+            sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+            echo "✓ CFI patch applied"
+          fi
 
       - name: Create wireless backports config
         shell: bash
