@@ -179,19 +179,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+          
+          # Սահմանում ենք ճանապարհները
+          [span_3](start_span)[span_4](start_span)MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"[span_3](end_span)[span_4](end_span)
+          [span_5](start_span)[span_6](start_span)KERNEL_BUILD="$MSM/out"[span_5](end_span)[span_6](end_span)
+          [span_7](start_span)[span_8](start_span)BP_DIR="$GITHUB_WORKSPACE/backports-stable"[span_7](end_span)[span_8](end_span)
 
+          # [span_9](start_span)[span_10](start_span)Ապահովում ենք Clang-ի հասանելիությունը[span_9](end_span)[span_10](end_span)
           if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
             export PATH="${CLANG_BIN}:$PATH"
           fi
-          export PATH="/usr/lib/ccache:$PATH"
-          export EXTRA_CFLAGS="-Dbackport_prefix=bp_ -Dbackport_ns=bp"
-          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
-            KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_BUILD" \
-            EXTRA_CFLAGS="$EXTRA_CFLAGS" \
-            modules
-            
+          [span_11](start_span)[span_12](start_span)[span_13](start_span)export PATH="/usr/lib/ccache:$PATH"[span_11](end_span)[span_12](end_span)[span_13](end_span)
+
+          # [span_14](start_span)[span_15](start_span)Կոմպիլյացիայի դրոշակները (Flags)[span_14](end_span)[span_15](end_span)
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -209,16 +209,22 @@ jobs:
             STRIP=llvm-strip
             HOSTCC=clang
             HOSTCXX=clang++
-            CC=clang
+            CC="ccache clang"
           )
 
-          cd "$GITHUB_WORKSPACE/backports-stable"
+          cd "$BP_DIR"
 
-          # Այս հրամանը կատարում է բուն կոմպիլյացիան
+          # Ավելացնում ենք նախածանցը բոլոր սիմվոլների և namespace-ի համար,
+          # որպեսզի խուսափենք բեռնված միջուկի հետ կոնֆլիկտից
+          export EXTRA_CFLAGS="-Dbackport_prefix=bp_ -Dbackport_ns=bp"
+
+          # Գործարկում ենք բուն կոմպիլյացիան 'modules' թիրախով
           make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
-            modules
+            EXTRA_CFLAGS="$EXTRA_CFLAGS" \
+            V=1 \
+            [span_16](start_span)modules[span_16](end_span)
 
       - name: Configure backports for MT76/MT7921 only
         shell: bash
