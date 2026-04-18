@@ -228,8 +228,7 @@ jobs:
           echo "===== MEDIATEK TREE ====="
           find drivers/net/wireless/mediatek/mt76 -maxdepth 2 -type f | sort || true
           echo "===== MEDIATEK CONFIG ENTRIES ====="
-          grep -Rns "config .*MT7921\|config .*MT792x\|config .*MT76" drivers/net/wireless/mediatek/mt76 || true
-          
+          grep -Rns -E 'pattern1|pattern2|pattern3'
           
 
       - name: Configure backports for MT76/MT7921 only
