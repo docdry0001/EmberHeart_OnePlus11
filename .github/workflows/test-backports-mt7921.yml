@@ -183,7 +183,7 @@ jobs:
             STRIP=llvm-strip
             HOSTCC=clang
             HOSTCXX=clang++
-            CC=ccache\ clang
+            CC=clang
           )
 
           cd "$MSM"
