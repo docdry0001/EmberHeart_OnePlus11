@@ -431,24 +431,24 @@ runs:
           -name 'mt76*.ko' -o \
           -name 'mt7921*.ko' \
         \) | sort || true    
-        - name: Inspect installed modules
-          shell: bash
-          run: |
-           set -euo pipefail
-           KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-           MSM="$KERNEL_PLATFORM/msm-kernel"
-           MODROOT="$MSM/out-modules"
+    - name: Inspect installed modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PLATFORM/msm-kernel"
+        MODROOT="$MSM/out-modules"
     
-           echo "[+] Module root:"
-           find "$MODROOT" -maxdepth 4 -type d | sort || true
+        echo "[+] Module root:"
+        find "$MODROOT" -maxdepth 4 -type d | sort || true
     
-           echo "[+] Interesting modules:"
-           find "$MODROOT" -type f \( \
-             -name 'cfg80211.ko' -o \
-             -name 'mac80211.ko' -o \
-             -name 'mt76*.ko' -o \
-             -name 'mt7921*.ko' \
-           \) | sort || true
+        echo "[+] Interesting modules:"
+        find "$MODROOT" -type f \( \
+          -name 'cfg80211.ko' -o \
+          -name 'mac80211.ko' -o \
+          -name 'mt76*.ko' -o \
+           -name 'mt7921*.ko' \
+         \) | sort || true
 
     - name: Create Kernel Modules zip
       id: create_zip
