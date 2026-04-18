@@ -1145,7 +1145,7 @@ runs:
           V=1 \
           modules
       
-    -- name: Collect Build Stats / Validate Image
+    - name: Collect Build Stats / Validate Image
       id: collect_stats
       shell: bash
       run: |
