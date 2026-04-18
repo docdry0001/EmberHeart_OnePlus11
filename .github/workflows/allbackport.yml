@@ -318,14 +318,15 @@ jobs:
           echo "=== RAW BACKPORTS CONFIG ==="
           cat .config
 
-      - name: Configure wireless backports
+      - name: Configure backports (full wireless)
         shell: bash
         run: |
           set -euo pipefail
+      
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-
+      
           export PATH="${CLANG_BIN}:$PATH:/usr/lib/ccache"
-
+      
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -347,20 +348,18 @@ jobs:
             HOSTCXX=clang++
             CC=clang
           )
-
+      
           cd backports-stable
-
+      
+          # ✅ Օգտագործում ենք defconfig-wifi, ՈՉ olddefconfig
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
-            olddefconfig 2>&1 | tee oldconfig.log
-
+            defconfig-wifi
+      
           echo "=== FINAL CONFIG CHECK ==="
           grep -E "^(CPTCFG_|CONFIG_).*(MT76|MT792|RT2X00|RT2800|RTL8|RTW88|CFG80211|MAC80211|WLAN_VENDOR|CRC_CCITT|EEPROM_93CX6)" .config | sort || true
-
-          echo "=== MAKE/KBUILD RULE HINTS ==="
-          grep -RnsE "(mt76|mt7921|mt76x0|mt76x2|rt2800|rt2x00|rtl8xxxu|rtw88)" . 2>/dev/null | head -500 || true
-
+     
       - name: Clean backports build directory
         shell: bash
         run: |
