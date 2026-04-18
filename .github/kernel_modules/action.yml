@@ -1,4 +1,4 @@
-name: Build OnePlus kernel modules
+=name: Build OnePlus kernel modules
 
 permissions:
   contents: write
@@ -352,100 +352,98 @@ runs:
         grep -n 'mmget_still_valid' "$FILE" | head -20 || true
     
         
-  
     - name: Build only Wi-Fi kernel modules
-- name: Build only Wi-Fi kernel modules
-  shell: bash
-  run: |
-   set -euo pipefail
-   KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-   MSM="$KERNEL_PLATFORM/msm-kernel"
-   cd "$MSM"
-
-   export PATH="${CLANG_BIN_PATH}:$PATH"
-   export PATH="/usr/lib/ccache:$PATH"
-
-   MAKE_FLAGS=(
-    LLVM=1
-    LLVM_IAS=1
-    ARCH=arm64
-    SUBARCH=arm64
-    CLANG_TRIPLE=aarch64-linux-gnu-
-    CROSS_COMPILE=aarch64-linux-gnu-
-    CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-    LD=ld.lld
-    HOSTLD=ld.lld
-    AR=llvm-ar
-    NM=llvm-nm
-    OBJCOPY=llvm-objcopy
-    OBJDUMP=llvm-objdump
-    DEPMOD=depmod
-    DTC=dtc
-    STRIP=llvm-strip
-    HOSTCC=clang
-    HOSTCXX=clang++
-    CC=ccache\ clang
-   )
-
-   OUT=out
-   INSTALL_MOD_PATH="$MSM/out-modules"
-   KCFLAGS="-Wno-error -Wframe-larger-than=4096"
-
-   mkdir -p "$OUT"
-   mkdir -p "$INSTALL_MOD_PATH"
-
-   echo "[+] Prepare config"
-   make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-
-   if [ -x ./scripts/config ]; then
-    ./scripts/config --file "$OUT/.config" --set-val CONFIG_FRAME_WARN 4096 || true
-    ./scripts/config --file "$OUT/.config" --enable CONFIG_SECTION_MISMATCH_WARN_ONLY || true
-   fi
-
-   grep -q '^CONFIG_SECTION_MISMATCH_WARN_ONLY=y$' "$OUT/.config" || \
-    echo 'CONFIG_SECTION_MISMATCH_WARN_ONLY=y' >> "$OUT/.config"
-
-   sed -i '/^CONFIG_FRAME_WARN=/d' "$OUT/.config" || true
-   echo 'CONFIG_FRAME_WARN=4096' >> "$OUT/.config"
-
-   make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-
-   echo "[+] Generating full kernel headers (fixes trace.h missing error)"
-   make "${MAKE_FLAGS[@]}" O="$OUT" -j$(nproc --all) prepare scripts
-   make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
-
-   echo "[+] Build cfg80211"
-   make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
-    O="$OUT" M=net/wireless modules
-
-   echo "[+] Build mac80211"
-   make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
-    O="$OUT" M=net/mac80211 modules
-
-   echo "[+] Build mt76/mt7921"
-   make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
-    O="$OUT" M=drivers/net/wireless/mediatek/mt76 modules
-
-   echo "[+] Install cfg80211"
-   make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
-    O="$OUT" M=net/wireless INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-
-   echo "[+] Install mac80211"
-   make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
-    O="$OUT" M=net/mac80211 INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-
-   echo "[+] Install mt76/mt7921"
-   make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
-    O="$OUT" M=drivers/net/wireless/mediatek/mt76 \
-    INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-
-   echo "[+] Installed Wi-Fi modules:"
-   find "$INSTALL_MOD_PATH" -type f \( \
-    -name 'cfg80211.ko' -o \
-    -name 'mac80211.ko' -o \
-    -name 'mt76*.ko' -o \
-    -name 'mt7921*.ko' \
-   \) | sort || true
+      shell: bash
+      run: |
+       set -euo pipefail
+       KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+       MSM="$KERNEL_PLATFORM/msm-kernel"
+       cd "$MSM"
+    
+       export PATH="${CLANG_BIN_PATH}:$PATH"
+       export PATH="/usr/lib/ccache:$PATH"
+    
+       MAKE_FLAGS=(
+        LLVM=1
+        LLVM_IAS=1
+        ARCH=arm64
+        SUBARCH=arm64
+        CLANG_TRIPLE=aarch64-linux-gnu-
+        CROSS_COMPILE=aarch64-linux-gnu-
+        CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+        LD=ld.lld
+        HOSTLD=ld.lld
+        AR=llvm-ar
+        NM=llvm-nm
+        OBJCOPY=llvm-objcopy
+        OBJDUMP=llvm-objdump
+        DEPMOD=depmod
+        DTC=dtc
+        STRIP=llvm-strip
+        HOSTCC=clang
+        HOSTCXX=clang++
+        CC=ccache\ clang
+       )
+    
+       OUT=out
+       INSTALL_MOD_PATH="$MSM/out-modules"
+       KCFLAGS="-Wno-error -Wframe-larger-than=4096"
+    
+       mkdir -p "$OUT"
+       mkdir -p "$INSTALL_MOD_PATH"
+    
+       echo "[+] Prepare config"
+       make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+    
+       if [ -x ./scripts/config ]; then
+        ./scripts/config --file "$OUT/.config" --set-val CONFIG_FRAME_WARN 4096 || true
+        ./scripts/config --file "$OUT/.config" --enable CONFIG_SECTION_MISMATCH_WARN_ONLY || true
+       fi
+    
+       grep -q '^CONFIG_SECTION_MISMATCH_WARN_ONLY=y$' "$OUT/.config" || \
+        echo 'CONFIG_SECTION_MISMATCH_WARN_ONLY=y' >> "$OUT/.config"
+    
+       sed -i '/^CONFIG_FRAME_WARN=/d' "$OUT/.config" || true
+       echo 'CONFIG_FRAME_WARN=4096' >> "$OUT/.config"
+    
+       make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+    
+       echo "[+] Generating full kernel headers (fixes trace.h missing error)"
+       make "${MAKE_FLAGS[@]}" O="$OUT" -j$(nproc --all) prepare scripts
+       make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
+    
+       echo "[+] Build cfg80211"
+       make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
+        O="$OUT" M=net/wireless modules
+    
+       echo "[+] Build mac80211"
+       make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
+        O="$OUT" M=net/mac80211 modules
+    
+       echo "[+] Build mt76/mt7921"
+       make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
+        O="$OUT" M=drivers/net/wireless/mediatek/mt76 modules
+    
+       echo "[+] Install cfg80211"
+       make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
+        O="$OUT" M=net/wireless INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+    
+       echo "[+] Install mac80211"
+       make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
+        O="$OUT" M=net/mac80211 INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+    
+       echo "[+] Install mt76/mt7921"
+       make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" \
+        O="$OUT" M=drivers/net/wireless/mediatek/mt76 \
+        INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+    
+       echo "[+] Installed Wi-Fi modules:"
+       find "$INSTALL_MOD_PATH" -type f \( \
+        -name 'cfg80211.ko' -o \
+        -name 'mac80211.ko' -o \
+        -name 'mt76*.ko' -o \
+        -name 'mt7921*.ko' \
+       \) | sort || true
     
     - name: Inspect installed modules
       shell: bash
