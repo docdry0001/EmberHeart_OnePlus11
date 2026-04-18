@@ -272,8 +272,8 @@ jobs:
 
           printf '%s\n' \
           'CPTCFG_WLAN=y' \
-        #  'CPTCFG_CFG80211=y' \
-        #  'CPTCFG_MAC80211=y' \
+          'CPTCFG_CFG80211=y' \
+          'CPTCFG_MAC80211=y' \
           'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
           'CPTCFG_MT7601U=m' \
           'CPTCFG_MT76_CORE=m' \
