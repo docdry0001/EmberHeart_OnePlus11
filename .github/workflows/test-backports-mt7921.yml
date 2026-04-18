@@ -230,7 +230,6 @@ jobs:
           echo "===== MEDIATEK CONFIG ENTRIES ====="
           grep -Rns -E 'pattern1|pattern2|pattern3'
           
-
       - name: Configure backports for MT76/MT7921 only
         shell: bash
         run: |
