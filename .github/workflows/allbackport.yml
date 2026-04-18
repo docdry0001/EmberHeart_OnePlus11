@@ -121,26 +121,26 @@ jobs:
           fi
 
       - name: Kernel prepare
-  run: |
-    MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-    OUT="$MSM/out"
-    export PATH="${CLANG_BIN}:$PATH" PATH="/usr/lib/ccache:$PATH"
-    MAKE_FLAGS=(LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64 CLANG_TRIPLE=aarch64-linux-gnu-
-                CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-                LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
-                OBJDUMP=llvm-objdump DEPMOD=depmod DTC=dtc STRIP=llvm-strip
-                HOSTCC=clang HOSTCXX=clang++ CC=clang)
-    cd "$MSM"
-    make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-    if [ -x ./scripts/config ]; then
-      # ... (մյուս disable հրամանները)
-
-      # ⚠️ Սա է կարևորը. cfg80211-ը և mac80211-ը դարձնել մոդուլ, որպեսզի backports-ը կարողանա դրանք փոխարինել
-      ./scripts/config --file "$OUT/.config" --set-val CONFIG_CFG80211 m || true
-      ./scripts/config --file "$OUT/.config" --set-val CONFIG_MAC80211 m || true
-    fi
-    make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-    make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare
+        run: |
+          MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+          OUT="$MSM/out"
+          export PATH="${CLANG_BIN}:$PATH" PATH="/usr/lib/ccache:$PATH"
+          MAKE_FLAGS=(LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64 CLANG_TRIPLE=aarch64-linux-gnu-
+                      CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+                      LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
+                      OBJDUMP=llvm-objdump DEPMOD=depmod DTC=dtc STRIP=llvm-strip
+                      HOSTCC=clang HOSTCXX=clang++ CC=clang)
+          cd "$MSM"
+          make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+          if [ -x ./scripts/config ]; then
+            # ... (մյուս disable հրամանները)
+      
+            # ⚠️ Սա է կարևորը. cfg80211-ը և mac80211-ը դարձնել մոդուլ, որպեսզի backports-ը կարողանա դրանք փոխարինել
+            ./scripts/config --file "$OUT/.config" --set-val CONFIG_CFG80211 m || true
+            ./scripts/config --file "$OUT/.config" --set-val CONFIG_MAC80211 m || true
+          fi
+          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+          make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare
           if [ -x ./scripts/config ]; then
             ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI || true
             ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI_CLANG || true
