@@ -236,11 +236,11 @@ jobs:
           set -euo pipefail
           cd backports-stable
 
-          echo "===== MEDIATEK / RALINK / REALTEK TREE ====="
-          find drivers/net/wireless -maxdepth 3 -type f | grep -E "(mediatek|ralink|realtek|mt76|rt2x00|rtl8|rtw88)" | sort || true
+          echo "===== DRIVER FILES ====="
+          find drivers/net/wireless -maxdepth 4 -type f | grep -E "(mediatek|ralink|realtek|mt76|rt2x00|rtl8|rtw88)" | sort || true
 
           echo "===== KCONFIG SYMBOLS ====="
-          grep -RnsE "^[[:space:]]*config[[:space:]]+(MT|RT|RTL|WLAN_VENDOR_)" drivers/net/wireless || true
+          grep -RnsE "^[[:space:]]*config[[:space:]]+(MT|RT|RTL|WLAN_VENDOR_|CFG80211|MAC80211)" drivers/net/wireless compat . || true
 
       - name: Patch compat for CFI
         shell: bash
@@ -278,7 +278,10 @@ jobs:
           CPTCFG_WLAN_VENDOR_MEDIATEK=y
           CPTCFG_MT76_CORE=m
           CPTCFG_MT76_USB=m
+          CPTCFG_MT76_SDIO=m
           CPTCFG_MT76_CONNAC_LIB=m
+          CPTCFG_MT76x02_LIB=m
+          CPTCFG_MT76x02_USB=m
           CPTCFG_MT76x0_COMMON=m
           CPTCFG_MT76x0U=m
           CPTCFG_MT76x2_COMMON=m
@@ -290,23 +293,26 @@ jobs:
 
           CPTCFG_WLAN_VENDOR_RALINK=y
           CPTCFG_RT2X00=m
-          CPTCFG_RT2800_LIB=m
-          CPTCFG_RT2800_LIB_USB=m
           CPTCFG_RT2X00_LIB=m
           CPTCFG_RT2X00_LIB_USB=m
           CPTCFG_RT2X00_USB=m
+          CPTCFG_RT2800_LIB=m
+          CPTCFG_RT2800_LIB_USB=m
           CPTCFG_RT2800USB=m
           CPTCFG_RT2800USB_RT33XX=y
           CPTCFG_RT2800USB_RT35XX=y
           CPTCFG_RT2800USB_RT3573=y
           CPTCFG_RT2800USB_RT53XX=y
           CPTCFG_RT2800USB_UNKNOWN=y
+          CPTCFG_CRC_CCITT=m
+          CPTCFG_EEPROM_93CX6=m
 
           CPTCFG_WLAN_VENDOR_REALTEK=y
           CPTCFG_RTL8XXXU=m
           CPTCFG_RTW88=m
           CPTCFG_RTW88_CORE=m
           CPTCFG_RTW88_USB=m
+          CPTCFG_RTW88_DEBUG=y
           EOF
 
           echo "=== RAW BACKPORTS CONFIG ==="
@@ -350,7 +356,10 @@ jobs:
             olddefconfig 2>&1 | tee oldconfig.log
 
           echo "=== FINAL CONFIG CHECK ==="
-          grep -E "^(CPTCFG_(MT76|MT792|RT2X00|RT2800|RTL8XXXU|RTW88|CFG80211|MAC80211|WLAN_VENDOR_))" .config || true
+          grep -E "^(CPTCFG_|CONFIG_).*(MT76|MT792|RT2X00|RT2800|RTL8|RTW88|CFG80211|MAC80211|WLAN_VENDOR|CRC_CCITT|EEPROM_93CX6)" .config | sort || true
+
+          echo "=== MAKE/KBUILD RULE HINTS ==="
+          grep -RnsE "(mt76|mt7921|mt76x0|mt76x2|rt2800|rt2x00|rtl8xxxu|rtw88)" . 2>/dev/null | head -500 || true
 
       - name: Clean backports build directory
         shell: bash
@@ -358,6 +367,7 @@ jobs:
           set -euo pipefail
           cd backports-stable
           find . -name "*.o" -delete || true
+          find . -name "*.ko" -delete || true
           find . -name ".tmp_versions" -type d -exec rm -rf {} + 2>/dev/null || true
           find . -name "modules.order" -delete || true
           echo "✓ Build directory cleaned"
@@ -402,30 +412,56 @@ jobs:
             KLIB_BUILD="$KERNEL_BUILD" \
             V=1 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
-      - name: Verify wireless .ko files generated
+      - name: Verify target .ko files generated
         shell: bash
         run: |
           set -euo pipefail
           cd backports-stable
 
-          echo "=== Searching for .ko files ==="
-          KO_FILES=$(find . -name "*.ko" -type f 2>/dev/null | sort || true)
+          KO_FILES=$(find . -name "*.ko" -type f | sort || true)
+          echo "=== ALL KO FILES ==="
           echo "$KO_FILES"
 
-          WIRELESS_KO=$(echo "$KO_FILES" | grep -E '(mt76|mt7921|rt2x00|rt2800|rtl8xxxu|rtw88|cfg80211|mac80211)\.ko$' || true)
-          WIRELESS_COUNT=$(echo "$WIRELESS_KO" | sed '/^$/d' | wc -l)
+          REQUIRED=(
+            "cfg80211.ko"
+            "mac80211.ko"
+            "mt76.ko"
+            "rtl8xxxu.ko"
+          )
 
-          echo "Wireless .ko count: $WIRELESS_COUNT"
+          OPTIONAL_TARGETS=(
+            "mt7921u.ko"
+            "mt76x0u.ko"
+            "mt76x2u.ko"
+            "rt2800usb.ko"
+            "rt2x00usb.ko"
+            "rt2x00lib.ko"
+            "rt2800lib.ko"
+            "rtw88_core.ko"
+            "rtw88_usb.ko"
+          )
 
-          if [ "$WIRELESS_COUNT" -eq 0 ]; then
-            echo "ERROR: no real wireless driver modules were generated"
-            echo "Last 200 log lines:"
+          for f in "${REQUIRED[@]}"; do
+            echo "$KO_FILES" | grep -q "/$f$" || { echo "Missing required module: $f"; exit 1; }
+          done
+
+          echo "=== OPTIONAL TARGETS STATUS ==="
+          FOUND_OPTIONAL=0
+          for f in "${OPTIONAL_TARGETS[@]}"; do
+            if echo "$KO_FILES" | grep -q "/$f$"; then
+              echo "FOUND: $f"
+              FOUND_OPTIONAL=$((FOUND_OPTIONAL + 1))
+            else
+              echo "MISSING: $f"
+            fi
+          done
+
+          if [ "$FOUND_OPTIONAL" -eq 0 ]; then
+            echo "No target USB/device-specific modules were generated"
+            echo "Last 200 build log lines:"
             tail -200 "$GITHUB_WORKSPACE/build.log" || true
             exit 1
           fi
-
-          echo "=== Wireless modules ==="
-          echo "$WIRELESS_KO"
 
       - name: Extract and organize modules
         shell: bash
@@ -435,11 +471,11 @@ jobs:
 
           mkdir -p ../modules-out
 
-          find . -name "*.ko" -type f | grep -E '(mt76|mt7921|rt2x00|rt2800|rtl8xxxu|rtw88|cfg80211|mac80211)\.ko$' | while read -r f; do
+          find . -name "*.ko" -type f | grep -E '(mt76|mt7921|mt76x0|mt76x2|rt2x00|rt2800|rtl8xxxu|rtw88|cfg80211|mac80211)\.ko$' | while read -r f; do
             cp -v "$f" ../modules-out/
           done
 
-          echo "=== Files in modules-out ==="
+          echo "=== FILES IN modules-out ==="
           ls -lh ../modules-out/
 
           if [ "$(find ../modules-out -maxdepth 1 -name "*.ko" | wc -l)" -eq 0 ]; then
