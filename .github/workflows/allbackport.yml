@@ -508,31 +508,31 @@ jobs:
         if: success()
         run: |
           cat > RELEASE_NOTES.md <<EOF
-# OP11R Wireless Backports Modules Build ${{ github.run_number }}
-
-## Build Information
-- **Date**: $(date)
-- **Kernel Version**: ${KERNEL_VER}
-- **Manifest**: ${MANIFEST}
-- **Backports Release**: ${{ github.event.inputs.backports_release }}
-- **Build Status**: ✅ SUCCESS
-
-## Artifacts
-- **wireless-modules-op11r-${{ github.run_number }}.zip** - Contains all compiled .ko modules
-
-## Contents
-All WiFi-related .ko files compiled from the backports package:
-- cfg80211 (if present: bp_cfg80211.ko)
-- mac80211 (if present: bp_mac80211.ko)
-- Various WiFi driver modules
-
-## Installation
-1. Extract the zip file
-2. Copy .ko files to your kernel modules directory
-3. Run `depmod` to update module dependencies
-4. Reboot
-
-## Build Logs
-See artifacts for complete build logs and configuration files.
-EOF
-          cat RELEASE_NOTES.md
+            # OP11R Wireless Backports Modules Build ${{ github.run_number }}
+            
+            ## Build Information
+            - **Date**: $(date)
+            - **Kernel Version**: ${KERNEL_VER}
+            - **Manifest**: ${MANIFEST}
+            - **Backports Release**: ${{ github.event.inputs.backports_release }}
+            - **Build Status**: ✅ SUCCESS
+            
+            ## Artifacts
+            - **wireless-modules-op11r-${{ github.run_number }}.zip** - Contains all compiled .ko modules
+            
+            ## Contents
+            All WiFi-related .ko files compiled from the backports package:
+            - cfg80211 (if present: bp_cfg80211.ko)
+            - mac80211 (if present: bp_mac80211.ko)
+            - Various WiFi driver modules
+            
+            ## Installation
+            1. Extract the zip file
+            2. Copy .ko files to your kernel modules directory
+            3. Run `depmod` to update module dependencies
+            4. Reboot
+            
+            ## Build Logs
+            See artifacts for complete build logs and configuration files.
+            EOF
+                      cat RELEASE_NOTES.md
