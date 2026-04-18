@@ -152,12 +152,11 @@ jobs:
             echo "CLANG_BIN=$(dirname "$(command -v clang)")" >> "$GITHUB_ENV"
           fi
 
-      - name: Build kernel prepare targets
+      - name: Build backports modules
         shell: bash
         run: |
           set -euo pipefail
-          MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-          OUT="$MSM/out"
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
 
           if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
             export PATH="${CLANG_BIN}:$PATH"
@@ -178,25 +177,19 @@ jobs:
             NM=llvm-nm
             OBJCOPY=llvm-objcopy
             OBJDUMP=llvm-objdump
-            DEPMOD=depmod
-            DTC=dtc
             STRIP=llvm-strip
             HOSTCC=clang
             HOSTCXX=clang++
-            CC="ccache clang"
+            CC=clang
           )
 
-          cd "$MSM"
-          mkdir -p "$OUT"
+          cd "$GITHUB_WORKSPACE/backports-stable"
 
-          make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-
-          # Մենք ԱՅԼԵՎՍ ՉԵՆՔ ԱՆՋԱՏՈՒՄ CONFIG_CFI, CONFIG_LTO և KASAN ֆունկցիաները,
-          # որպեսզի կոմպիլացված մոդուլները համատեղելի լինեն OOS միջուկի հետ:
-
-          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-          make "${MAKE_FLAGS[@]}" O="$OUT" prepare
-          make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
+          # Այս հրամանը կատարում է բուն կոմպիլյացիան
+          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            modules
 
       - name: Download stable backports release
         shell: bash
@@ -379,24 +372,22 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           zip -r mediatek-mt76-port-op11r-5.10.zip mt76-port-bundle >/dev/null
 
-      - name: Collect artifacts
+      - name: Collect KO modules
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts
+          mkdir -p artifacts/modules
 
-          [ -f "$GITHUB_WORKSPACE/mediatek-mt76-port-op11r-5.10.zip" ] && \
-            cp -f "$GITHUB_WORKSPACE/mediatek-mt76-port-op11r-5.10.zip" artifacts/ || true
+          # Փնտրում և հավաքում է բոլոր .ko ֆայլերը backports թղթապանակից
+          find "$GITHUB_WORKSPACE/backports-stable" -name "*.ko" -exec cp {} artifacts/modules/ \;
 
-          [ -f "$GITHUB_WORKSPACE/backports-build.log" ] && \
-            cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
+          # Նաև պահպանում ենք լոգերը և կոնֆիգը
+          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && cp "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
+          
+          echo "===== GENERATED MODULES ====="
+          ls -R artifacts/modules
 
-          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && \
-            cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
-
-          echo "===== ARTIFACT CONTENTS ====="
-          find artifacts -maxdepth 3 -type f | sort || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
