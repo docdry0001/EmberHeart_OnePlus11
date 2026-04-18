@@ -262,7 +262,58 @@ jobs:
             echo "⟳ File not found, skipping CFI patch"
           fi
 
-      - name: Configure backports (Mediatek + Realtek only)
+      - name: Create custom backports config for Mediatek + Realtek
+        run: |
+          set -e
+          cd backports-stable
+          
+          echo "Creating custom backports configuration..."
+          
+          # Start with empty config
+          cat > .config <<'CONFIGEOF'
+          CONFIG_CFG80211=m
+          CONFIG_MAC80211=m
+          CONFIG_CFG80211_WEXT=y
+          CONFIG_WIRELESS_EXT=y
+          CONFIG_WEXT_PRIV=y
+          
+          # Mediatek drivers
+          CONFIG_MT76=m
+          CONFIG_MT76_USB=m
+          CONFIG_MT76_MMIO=m
+          CONFIG_MT76_SDIO=m
+          CONFIG_MT76_CORE=m
+          CONFIG_MT7921_COMMON=m
+          CONFIG_MT7921U=m
+          CONFIG_MT7921E=m
+          CONFIG_MT7921S=m
+          
+          # Realtek drivers  
+          CONFIG_RTL8XXXU=m
+          CONFIG_RTL8188EU=m
+          CONFIG_RTL8192EU=m
+          CONFIG_RTL8723BU=m
+          CONFIG_RTL8723CU=m
+          CONFIG_RTL8821CU=m
+          CONFIG_RTW88=m
+          CONFIG_RTW88_USB=m
+          CONFIG_RTW88_SDIO=m
+          CONFIG_RTW88_CORE=m
+          
+          # Disable problematic drivers
+          CONFIG_IWLWIFI=n
+          CONFIG_IWLMVM=n
+          CONFIG_IWLDVM=n
+          CONFIG_ATH10K=n
+          CONFIG_ATH11K=n
+          CONFIGEOF
+          
+          echo "✓ Custom .config created"
+          echo ""
+          echo "Configuration content:"
+          cat .config
+
+      - name: Configure backports with oldconfig
         run: |
           set -e
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
@@ -293,63 +344,26 @@ jobs:
           
           cd backports-stable
           
-          echo "Creating minimal backports config..."
-          make "${MAKE_FLAGS[@]}" \
+          echo "Running oldconfig to process configuration..."
+          yes "" | make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
-            defconfig 2>&1 | tee backports-config.log
+            oldconfig 2>&1 | tee oldconfig.log
           
           echo ""
-          echo "Configuring for Mediatek and Realtek USB drivers..."
-          if [ -x ./scripts/config ]; then
-            # Enable core wireless
-            ./scripts/config --file .config --set-val CONFIG_CFG80211 m || true
-            ./scripts/config --file .config --set-val CONFIG_MAC80211 m || true
-            
-            # Enable Mediatek drivers
-            ./scripts/config --file .config --set-val CONFIG_MT7921_COMMON m || true
-            ./scripts/config --file .config --set-val CONFIG_MT7921U m || true
-            ./scripts/config --file .config --set-val CONFIG_MT76_USB m || true
-            ./scripts/config --file .config --set-val CONFIG_MT76 m || true
-            
-            # Enable Realtek drivers
-            ./scripts/config --file .config --set-val CONFIG_RTL8XXXU m || true
-            ./scripts/config --file .config --set-val CONFIG_RTL8188EU m || true
-            ./scripts/config --file .config --set-val CONFIG_RTL8192EU m || true
-            ./scripts/config --file .config --set-val CONFIG_RTL8723BU m || true
-            ./scripts/config --file .config --set-val CONFIG_RTW88 m || true
-            ./scripts/config --file .config --set-val CONFIG_RTW88_USB m || true
-            
-            # DISABLE Intel drivers to avoid build issues
-            ./scripts/config --file .config --disable CONFIG_IWLWIFI || true
-            ./scripts/config --file .config --disable CONFIG_IWLMVM || true
-            ./scripts/config --file .config --disable CONFIG_IWLDVM || true
-            ./scripts/config --file .config --disable CONFIG_IWL7000 || true
-            
-            # Disable other problematic subsystems
-            ./scripts/config --file .config --disable CONFIG_STAGING || true
-          fi
-          
+          echo "✓ Configuration processed"
           echo ""
-          echo "Running olddefconfig to validate..."
-          make "${MAKE_FLAGS[@]}" \
-            KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_BUILD" \
-            olddefconfig 2>&1 | tail -10
-          
-          echo ""
-          echo "✓ Backports configuration complete"
-          echo "Generated .config:"
-          head -50 .config
+          echo "Final .config:"
+          cat .config
 
       - name: Clean backports build directory
         run: |
           cd backports-stable
           echo "Cleaning previous build artifacts..."
-          make mrproper || true
-          rm -f Module.symvers modules.order *.order
-          find . -name "modules.order" -delete
+          find . -name "*.o" -delete
+          find . -name "*.ko" -delete
           find . -name ".tmp_versions" -type d -exec rm -rf {} + 2>/dev/null || true
+          find . -name "modules.order" -delete
           echo "✓ Build directory cleaned"
 
       - name: Build backports modules
@@ -385,11 +399,11 @@ jobs:
           
           cd backports-stable
           
-          echo "Building backports modules with $(nproc) threads..."
+          echo "Building backports modules with reduced parallelism..."
           echo "Building: Mediatek MT7921/MT76 and Realtek RTL8XXXU drivers"
+          echo "Using -j2 to prevent module ordering conflicts"
           
-          # Reduce parallelism to avoid modules.order conflicts
-          make -j4 \
+          make -j2 \
             "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
@@ -399,10 +413,11 @@ jobs:
           BUILD_EXIT=$?
           
           if [ $BUILD_EXIT -ne 0 ]; then
+            echo ""
             echo "✗ Build failed with exit code $BUILD_EXIT"
             echo ""
-            echo "Last 100 lines of build output:"
-            tail -100 "$GITHUB_WORKSPACE/build.log"
+            echo "Last 150 lines of build output:"
+            tail -150 "$GITHUB_WORKSPACE/build.log"
             exit 1
           fi
           
@@ -423,11 +438,8 @@ jobs:
           if [ "$KO_COUNT" -eq 0 ]; then
             echo "✗ CRITICAL: No .ko files generated!"
             echo ""
-            echo "Directory structure:"
-            find . -type d -name "wireless" -o -name "drivers" | head -20
-            echo ""
-            echo "Last 150 lines of build.log:"
-            tail -150 "$GITHUB_WORKSPACE/build.log"
+            echo "Checking for build errors in log..."
+            grep -i "error\|undefined\|failed" "$GITHUB_WORKSPACE/build.log" | head -30
             exit 1
           fi
           
@@ -438,7 +450,8 @@ jobs:
           echo ""
           echo "Module details:"
           for ko in $(echo "$KO_FILES" | sort); do
-            echo "  $(du -h "$ko" | cut -f1)  $ko"
+            size=$(du -h "$ko" | cut -f1)
+            echo "  [$size]  $ko"
           done
 
       - name: Extract and organize modules
@@ -455,6 +468,11 @@ jobs:
           echo ""
           echo "=== Files in modules-out ==="
           ls -lh ../modules-out/
+          
+          if [ $(ls -1 ../modules-out/*.ko 2>/dev/null | wc -l) -eq 0 ]; then
+            echo "✗ ERROR: No .ko files copied!"
+            exit 1
+          fi
           
           echo ""
           echo "Creating archive..."
@@ -486,15 +504,15 @@ jobs:
             echo "✓ Build log copied"
           fi
           
+          if [ -f backports-stable/oldconfig.log ]; then
+            cp backports-stable/oldconfig.log artifacts/ || true
+            echo "✓ Config log copied"
+          fi
+          
           # Copy configs
           if [ -f backports-stable/.config ]; then
             cp backports-stable/.config artifacts/backports.config || true
             echo "✓ Backports config copied"
-          fi
-          
-          if [ -f backports-stable/backports-config.log ]; then
-            cp backports-stable/backports-config.log artifacts/ || true
-            echo "✓ Config generation log copied"
           fi
           
           # Create summary
@@ -507,70 +525,7 @@ jobs:
           Backports Release: ${{ github.event.inputs.backports_release }}
           SOC: ${SOC}
           Model: ${MODEL}
-          Build Type: Mediatek + Realtek USB WiFi drivers
+          Build Type: Mediatek + Realtek USB WiFi drivers for NetHunter
           
-          Drivers Included:
-          - Mediatek MT7921/MT76 USB
-          - Realtek RTL8XXXU (8188EU, 8192EU, 8723BU variants)
-          - cfg80211/mac80211 core modules
-          
-          Intel drivers: DISABLED (to avoid build conflicts)
-          
-          Build Output: See artifacts/
-          EOF
-          
-          echo ""
-          echo "=== Artifacts collected ==="
-          ls -lhR artifacts/
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: op11r-mediatek-realtek-modules-${{ github.run_number }}
-          path: artifacts/
-          retention-days: 30
-          if-no-files-found: error
-
-      - name: Create release notes
-        if: success()
-        run: |
-          cat > RELEASE_NOTES.md <<EOF
-          # OP11R Wireless USB Drivers - Mediatek + Realtek Build ${{ github.run_number }}
-          
-          ## Build Information
-          - **Date**: $(date)
-          - **Kernel Version**: ${KERNEL_VER}
-          - **Manifest**: ${MANIFEST}
-          - **Backports Release**: ${{ github.event.inputs.backports_release }}
-          - **Build Status**: ✅ SUCCESS
-          - **Purpose**: NetHunter WiFi USB adapters
-          
-          ## Supported Drivers
-          ### Mediatek
-          - MT7921 (MT7921U)
-          - MT76 USB variants
-          
-          ### Realtek  
-          - RTL8188EU
-          - RTL8192EU
-          - RTL8723BU
-          - RTL8XXXU family
-          - RTW88 USB
-          
-          ## Artifacts
-          - **wireless-modules-op11r-mediatek-realtek-${{ github.run_number }}.zip** - All .ko modules
-          - **build-full.log** - Complete build output
-          - **backports.config** - Kernel configuration used
-          - **BUILD_SUMMARY.txt** - Summary information
-          
-          ## Installation for NetHunter
-          1. Extract the zip file on your OP11R
-          2. Copy .ko files to `/system/lib/modules/` or appropriate module directory
-          3. Run: \`insmod <module>.ko\` for each driver
-          4. Or use: \`modprobe <module>\` if depmod is configured
-          5. Verify with: \`lsmod | grep mt7921\` or \`lsmod | grep rtl\`
-          
-          ## Build Logs
-          See artifacts for complete build logs and configuration files.
-          EOF
-          cat RELEASE_NOTES.md
+          Drivers Configured:
+          - Mediatek MT76 family](#)
