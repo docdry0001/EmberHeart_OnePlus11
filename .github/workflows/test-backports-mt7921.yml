@@ -175,56 +175,7 @@ jobs:
           echo "===== MEDIATEK CONFIG ENTRIES ====="
           grep -Rns "config .*MT7921\|config .*MT792x\|config .*MT76" drivers/net/wireless/mediatek/mt76 || true
 
-      - name: Build backports modules
-        shell: bash
-        run: |
-          set -euo pipefail
-          
-          # Սահմանում ենք ճանապարհները
-          MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-          KERNEL_BUILD="$MSM/out"
-          BP_DIR="$GITHUB_WORKSPACE/backports-stable"
-          
-          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
-            export PATH="${CLANG_BIN}:$PATH"
-          fi
-          export PATH="/usr/lib/ccache:$PATH"
-      
-          # Կոմպիլյացիայի դրոշակները (Flags)
-          MAKE_FLAGS=(
-            LLVM=1
-            LLVM_IAS=1
-            ARCH=arm64
-            SUBARCH=arm64
-            CLANG_TRIPLE=aarch64-linux-gnu-
-            CROSS_COMPILE=aarch64-linux-gnu-
-            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-            LD=ld.lld
-            HOSTLD=ld.lld
-            AR=llvm-ar
-            NM=llvm-nm
-            OBJCOPY=llvm-objcopy
-            OBJDUMP=llvm-objdump
-            STRIP=llvm-strip
-            HOSTCC=clang
-            HOSTCXX=clang++
-            CC="ccache clang"
-          )
-      
-          cd "$BP_DIR"
-      
-          # Ավելացնում ենք նախածանցը բոլոր սիմվոլների և namespace-ի համար,
-          # որպեսզի խուսափենք բեռնված միջուկի հետ կոնֆլիկտից
-          export EXTRA_CFLAGS="-Dbackport_prefix=bp_ -Dbackport_ns=bp"
-      
-          # Գործարկում ենք բուն կոմպիլյացիան 'modules' թիրախով
-          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
-            KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_BUILD" \
-            EXTRA_CFLAGS="$EXTRA_CFLAGS" \
-            V=1 \
-            modules
-      
+            
       - name: Configure backports for MT76/MT7921 only
         shell: bash
         run: |
@@ -298,7 +249,58 @@ jobs:
             KLIB_BUILD="$KERNEL_BUILD" \
             V=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log" || true
-            
+
+
+      - name: Build backports modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          
+          # Սահմանում ենք ճանապարհները
+          MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+          KERNEL_BUILD="$MSM/out"
+          BP_DIR="$GITHUB_WORKSPACE/backports-stable"
+          
+          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+            export PATH="${CLANG_BIN}:$PATH"
+          fi
+          export PATH="/usr/lib/ccache:$PATH"
+      
+          # Կոմպիլյացիայի դրոշակները (Flags)
+          MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC="ccache clang"
+          )
+      
+          cd "$BP_DIR"
+      
+          # Ավելացնում ենք նախածանցը բոլոր սիմվոլների և namespace-ի համար,
+          # որպեսզի խուսափենք բեռնված միջուկի հետ կոնֆլիկտից
+          export EXTRA_CFLAGS="-Dbackport_prefix=bp_ -Dbackport_ns=bp"
+      
+          # Գործարկում ենք բուն կոմպիլյացիան 'modules' թիրախով
+          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            EXTRA_CFLAGS="$EXTRA_CFLAGS" \
+            V=1 \
+            modules
+
       
       - name: Prepare MT76 transplant bundle
         shell: bash
