@@ -274,20 +274,32 @@ jobs:
 
           printf '%s\n' \
           'CPTCFG_WLAN=y' \
-          'CPTCFG_CFG80211=y' \
-          'CPTCFG_MAC80211=y' \
+        #  'CPTCFG_CFG80211=y' \
+        #  'CPTCFG_MAC80211=y' \
           'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
+          'CPTCFG_MT7601U=m' \
           'CPTCFG_MT76_CORE=m' \
           'CPTCFG_MT76_USB=m' \
+          'CPTCFG_MT76x02_LIB=m' \
+          'CPTCFG_MT76x02_USB=m' \
           'CPTCFG_MT76_CONNAC_LIB=m' \
-          'CPTCFG_MT792x_LIB=m' \
-          'CPTCFG_MT792x_USB=m' \
+          'CPTCFG_MT7603E=m' \
+          'CONFIG_MT76x2_COMMON=m' \
+          'CONFIG_MT76x0_COMMON=m' \
+          'CONFIG_MT7615_COMMON=m' \
+          'CONFIG_MT7615E=m' \
+          'CONFIG_MT7915E=m' \
+          'CONFIG_MT7921E=m' \
           'CPTCFG_MT7921_COMMON=m' \
           'CPTCFG_MT7921U=m' \
           'CPTCFG_USB=y' \
           'CPTCFG_PCI=y' \
           'CPTCFG_NL80211_TESTMODE=y' >> .config
-
+          
+          ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --module CONFIG_MAC80211_LEDS \
+          --module CONFIG_CAN_SLCAN
+          
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
