@@ -239,9 +239,9 @@ jobs:
           
           # Correct URL format for kernel.org backports
           wget -v -O backports.tar.xz \
-            "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1/${RELEASE}.tar.xz" || \
+            "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz" || \
           wget -v -O backports.tar.xz \
-            "https://www.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1/${RELEASE}.tar.xz"
+            "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz"
           
           echo "вњ“ Downloaded, extracting..."
           tar -xf backports.tar.xz
