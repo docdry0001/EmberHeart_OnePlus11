@@ -1253,7 +1253,16 @@ runs:
         set -euo pipefail
         echo "Deleting old ccache..."
         gh cache delete ccache-${{ env.CONFIG }}-kernel-${{ env.KERNEL_FULL_VER }}- || true
-
+    - name: Upload kernel build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-out
+         path: |
+            ${{ env.MSM }}/out/.config
+            ${{ env.MSM }}/out/Module.symvers
+            ${{ env.MSM }}/out/scripts/
+            ${{ env.MSM }}/out/include/
+            ${{ env.MSM }}/out/arch/
     - name: Upload Artifacts
       if: success() && steps.create_zip.conclusion == 'success'
       uses: actions/upload-artifact@v4
