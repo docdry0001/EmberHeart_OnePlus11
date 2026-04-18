@@ -855,8 +855,6 @@ runs:
         set_m CONFIG_MT76x2_COMMON
         set_m CONFIG_MT76x2U
         set_m CONFIG_MT76_CONNAC_LIB
-        set_m CONFIG_MT792x_LIB
-        set_m CONFIG_MT792x_USB
         set_m CONFIG_MT7921_COMMON
         set_m CONFIG_MT7921U
 
