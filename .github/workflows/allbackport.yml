@@ -1,1 +1,411 @@
+name: Full Wireless Backports Bundle for OP11R
 
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: "Manifest preset"
+        required: true
+        default: "OOS16"
+        type: choice
+        options:
+          - OOS14
+          - OOS15
+          - OOS16
+      backports_release:
+        description: "Stable backports release"
+        required: true
+        default: "backports-6.1.97-1"
+        type: choice
+        options:
+          - backports-6.1.97-1
+
+jobs:
+  prepare-wireless-port-bundle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+
+    env:
+      MODEL: OP11R
+      SOC: waipio
+      CONFIG: OP11R
+      BRANCH: oneplus/sm8475
+      MANIFEST_OOS14_MODULES: oneplus_11r_u.xml
+      MANIFEST_OOS15_MODULES: oneplus_11r_v.xml
+      MANIFEST_OOS16_MODULES: oneplus_11r_b.xml
+
+    steps:
+      - name: Validate OP11R target
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$MODEL" = "OP11R" ] || { echo "Expected MODEL=OP11R, got $MODEL"; exit 1; }
+          [ "$SOC" = "waipio" ] || { echo "Expected SOC=waipio, got $SOC"; exit 1; }
+
+      - name: Cleanup runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/share/swift /usr/local/.ghcup /usr/local/julia* \
+            /usr/local/lib/android /usr/local/share/chromium /opt/microsoft /opt/google \
+            /opt/az /usr/local/share/powershell /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates build-essential clang lld flex bison \
+            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+            libxml2-utils rsync unzip dwarves file python3 ccache wget patch jq \
+            coccinelle kmod bc perl xz-utils zip
+          sudo apt-get clean
+
+      - name: Set manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ github.event.inputs.manifest }}" in
+            OOS14) echo "MANIFEST=$MANIFEST_OOS14_MODULES" >> "$GITHUB_ENV" ;;
+            OOS15) echo "MANIFEST=$MANIFEST_OOS15_MODULES" >> "$GITHUB_ENV" ;;
+            OOS16) echo "MANIFEST=$MANIFEST_OOS16_MODULES" >> "$GITHUB_ENV" ;;
+            *) echo "Unknown manifest"; exit 1 ;;
+          esac
+
+      - name: Install repo tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo curl -L https://storage.googleapis.com/git-repo-downloads/repo -o /usr/local/bin/repo
+          sudo chmod +x /usr/local/bin/repo
+          repo --version
+
+      - name: Sync OP11R kernel source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$CONFIG"
+          cd "$CONFIG"
+
+          repo init -u https://github.com/OnePlusOSS/kernel_manifest.git \
+            -b "$BRANCH" \
+            -m "$MANIFEST" \
+            --repo-rev=v2.16 \
+            --depth=1 \
+            --no-clone-bundle \
+            --no-tags
+
+          ok=false
+          for i in 1 2 3; do
+            if repo sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
+              ok=true
+              break
+            fi
+            echo "repo sync attempt $i failed"
+            sleep 20
+          done
+          $ok || { echo "repo sync failed"; exit 1; }
+
+      - name: Detect kernel version and prepare msm tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+          cd "$MSM"
+
+          VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
+          PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
+          SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
+          echo "KERNEL_VER=$VERSION.$PATCHLEVEL.$SUBLEVEL" >> "$GITHUB_ENV"
+
+          make ARCH=arm64 mrproper
+          mkdir -p out
+
+          ./scripts/kconfig/merge_config.sh -O out -m \
+            arch/arm64/configs/gki_defconfig \
+            arch/arm64/configs/vendor/${SOC}_GKI.config
+
+          cp out/.config arch/arm64/configs/gki_defconfig
+          make O=out ARCH=arm64 olddefconfig </dev/null
+
+      - name: Detect clang
+        shell: bash
+        run: |
+          set -euo pipefail
+          KP="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+          FOUND=false
+          for base in "$KP/prebuilts" "$KP/prebuilts-master"; do
+            [ -d "$base/clang/host/linux-x86" ] || continue
+            latest=$(ls -d "$base"/clang/host/linux-x86/clang-r*/ 2>/dev/null | sort -V | tail -n1 || true)
+            if [ -n "$latest" ] && [ -x "$latest/bin/clang" ]; then
+              echo "CLANG_BIN=$latest/bin" >> "$GITHUB_ENV"
+              FOUND=true
+            fi
+          done
+          if ! $FOUND; then
+            echo "CLANG_BIN=$(dirname "$(command -v clang)")" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build kernel prepare targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+          OUT="$MSM/out"
+
+          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+            export PATH="${CLANG_BIN}:$PATH"
+          fi
+          export PATH="/usr/lib/ccache:$PATH"
+
+          MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=clang
+          )
+
+          cd "$MSM"
+          mkdir -p "$OUT"
+
+          make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+
+          if [ -x ./scripts/config ]; then
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI_CLANG || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG_THIN || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_SHADOW_CALL_STACK || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_SW_TAGS || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_HW_TAGS || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_TRAP || true
+            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_BOUNDS || true
+          fi
+
+          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+          make "${MAKE_FLAGS[@]}" O="$OUT" prepare
+          make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
+
+      - name: Download stable backports release
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE="${{ github.event.inputs.backports_release }}"
+          URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/${RELEASE}.tar.xz"
+
+          wget -O backports.tar.xz "$URL"
+          tar -xf backports.tar.xz
+          mv "$RELEASE" backports-stable
+
+      - name: Patch backports compat for OnePlus CFI macros
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          FILE="backport-include/linux/module.h"
+
+          if [ -f "$FILE" ]; then
+            sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
+            sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+          fi
+
+      - name: Configure backports for full wireless stack
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+
+          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+            export PATH="${CLANG_BIN}:$PATH"
+          fi
+          export PATH="/usr/lib/ccache:$PATH"
+
+          MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=clang
+          )
+
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          # Use defconfig-wifi to enable all wireless drivers
+          make "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            defconfig-wifi
+
+          echo "===== FINAL WIRELESS CONFIG CHECK ====="
+          grep -E "CPTCFG_(CFG80211|MAC80211|WLAN|ATH|INTEL|REALTEK|BROADCOM|MEDIATEK)" .config || true
+
+      - name: Build backports tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+
+          if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+            export PATH="${CLANG_BIN}:$PATH"
+          fi
+          export PATH="/usr/lib/ccache:$PATH"
+
+          MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=clang
+          )
+
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            V=1 \
+            2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log"
+
+      - name: Rename core modules with bp_ prefix
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/backports-stable"
+
+          # Rename cfg80211.ko, mac80211.ko, compat.ko to have bp_ prefix
+          for mod in cfg80211 mac80211 compat; do
+            if [ -f "${mod}.ko" ]; then
+              mv "${mod}.ko" "bp_${mod}.ko"
+              echo "Renamed ${mod}.ko -> bp_${mod}.ko"
+            fi
+          done
+
+          # List all .ko files for verification
+          echo "===== ALL BUILT MODULES ====="
+          find . -name "*.ko" -type f | sort
+
+      - name: Prepare full wireless transplant bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUNDLE_ROOT="$GITHUB_WORKSPACE/wireless-port-bundle"
+          BP="$GITHUB_WORKSPACE/backports-stable"
+          MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+
+          rm -rf "$BUNDLE_ROOT"
+          mkdir -p "$BUNDLE_ROOT/drivers/net/wireless"
+
+          # Copy all wireless driver sources from backports
+          cp -a "$BP/drivers/net/wireless/"* "$BUNDLE_ROOT/drivers/net/wireless/"
+
+          # Create modules directory and copy all built .ko files
+          mkdir -p "$BUNDLE_ROOT/modules"
+          find "$BP" -name "*.ko" -type f -exec cp {} "$BUNDLE_ROOT/modules/" \;
+
+          mkdir -p "$BUNDLE_ROOT/metadata"
+
+          {
+            echo "MODEL=$MODEL"
+            echo "SOC=$SOC"
+            echo "TARGET_KERNEL=$KERNEL_VER"
+            echo "BACKPORTS_RELEASE=${{ github.event.inputs.backports_release }}"
+            echo "MANIFEST=$MANIFEST"
+            echo "BUNDLE_KIND=full_wireless_transplant"
+          } > "$BUNDLE_ROOT/metadata/manifest.txt"
+
+          if [ -f "$BP/.config" ]; then
+            cp -f "$BP/.config" "$BUNDLE_ROOT/metadata/backports.config"
+          fi
+
+          if [ -f "$GITHUB_WORKSPACE/backports-build.log" ]; then
+            cp -f "$GITHUB_WORKSPACE/backports-build.log" "$BUNDLE_ROOT/metadata/"
+          fi
+
+          echo "===== BUNDLE CONTENTS ====="
+          find "$BUNDLE_ROOT" -maxdepth 5 -type f | sort || true
+
+      - name: Create full wireless transplant bundle zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          zip -r wireless-full-port-op11r-5.10.zip wireless-port-bundle >/dev/null
+
+      - name: Collect artifacts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+
+          [ -f "$GITHUB_WORKSPACE/wireless-full-port-op11r-5.10.zip" ] && \
+            cp -f "$GITHUB_WORKSPACE/wireless-full-port-op11r-5.10.zip" artifacts/ || true
+
+          [ -f "$GITHUB_WORKSPACE/backports-build.log" ] && \
+            cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
+
+          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && \
+            cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
+
+          echo "===== ARTIFACT CONTENTS ====="
+          find artifacts -maxdepth 3 -type f | sort || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: op11r-full-wireless-backports-bundle
+          path: artifacts
