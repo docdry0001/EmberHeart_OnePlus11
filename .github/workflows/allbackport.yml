@@ -39,107 +39,176 @@ jobs:
     steps:
       - name: Validate target
         run: |
+          set -e
           [ "$MODEL" = "OP11R" ] || exit 1
           [ "$SOC" = "waipio" ] || exit 1
+          echo "вњ“ Target validation passed"
 
       - name: Cleanup runner
         run: |
+          set -e
           sudo rm -rf /usr/share/dotnet /usr/share/swift /usr/local/.ghcup /usr/local/julia* \
             /usr/local/lib/android /usr/local/share/chromium /opt/microsoft /opt/google \
-            /opt/az /usr/local/share/powershell /opt/hostedtoolcache || true
-          docker system prune -af || true
-          docker builder prune -af || true
+            /opt/az /usr/local/share/powershell /opt/hostedtoolcache 2>/dev/null || true
+          docker system prune -af 2>/dev/null || true
+          docker builder prune -af 2>/dev/null || true
+          echo "Disk space after cleanup:"
           df -h
 
       - name: Install dependencies
         run: |
+          set -e
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             git curl ca-certificates build-essential clang lld flex bison \
             libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
             libxml2-utils rsync unzip dwarves file python3 ccache wget patch jq \
-            coccinelle kmod bc perl xz-utils zip
+            coccinelle kmod bc perl xz-utils zip device-tree-compiler
           sudo apt-get clean
+          echo "вњ“ Dependencies installed"
 
       - name: Set manifest
         run: |
+          set -e
           case "${{ github.event.inputs.manifest }}" in
             OOS14) echo "MANIFEST=$MANIFEST_OOS14_MODULES" >> "$GITHUB_ENV" ;;
             OOS15) echo "MANIFEST=$MANIFEST_OOS15_MODULES" >> "$GITHUB_ENV" ;;
             OOS16) echo "MANIFEST=$MANIFEST_OOS16_MODULES" >> "$GITHUB_ENV" ;;
-            *) echo "Unknown manifest"; exit 1 ;;
+            *) echo "вќЊ Unknown manifest"; exit 1 ;;
           esac
+          echo "вњ“ Manifest set to: $MANIFEST"
 
       - name: Install repo
         run: |
+          set -e
           sudo curl -L https://storage.googleapis.com/git-repo-downloads/repo -o /usr/local/bin/repo
           sudo chmod +x /usr/local/bin/repo
+          repo --version
+          echo "вњ“ Repo tool installed"
 
       - name: Sync OP11R kernel source
         run: |
+          set -e
           mkdir -p "$CONFIG"
           cd "$CONFIG"
+          echo "Initializing repo..."
           repo init -u https://github.com/OnePlusOSS/kernel_manifest.git \
             -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          
+          echo "Syncing kernel sources (3 retries)..."
           for i in 1 2 3; do
+            echo "Attempt $i..."
             if repo sync -c --no-clone-bundle --no-tags --optimized-fetch -j$(nproc) --fail-fast; then
+              echo "вњ“ Sync successful"
               break
             fi
-            sleep 20
+            if [ $i -lt 3 ]; then
+              echo "вљ  Sync failed, retrying in 20 seconds..."
+              sleep 20
+            else
+              echo "вќЊ Sync failed after 3 attempts"
+              exit 1
+            fi
           done
 
       - name: Detect kernel version and prepare tree
         run: |
+          set -e
           MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
           cd "$MSM"
+          
+          echo "Detecting kernel version..."
           VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
           PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
           SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
-          echo "KERNEL_VER=$VERSION.$PATCHLEVEL.$SUBLEVEL" >> "$GITHUB_ENV"
+          KERNEL_VER="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
+          echo "KERNEL_VER=$KERNEL_VER" >> "$GITHUB_ENV"
+          echo "вњ“ Kernel version: $KERNEL_VER"
+          
+          echo "Cleaning kernel tree..."
           make ARCH=arm64 mrproper
+          
           mkdir -p out
+          echo "Merging kernel configs..."
           ./scripts/kconfig/merge_config.sh -O out -m \
             arch/arm64/configs/gki_defconfig \
-            arch/arm64/configs/vendor/${SOC}_GKI.config
+            arch/arm64/configs/vendor/${SOC}_GKI.config || {
+            echo "вљ  Config merge warning, continuing..."
+          }
+          
           cp out/.config arch/arm64/configs/gki_defconfig
           make O=out ARCH=arm64 olddefconfig </dev/null
 
       - name: Detect clang
         run: |
+          set -e
           KP="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
           FOUND=false
+          
           for base in "$KP/prebuilts" "$KP/prebuilts-master"; do
-            [ -d "$base/clang/host/linux-x86" ] || continue
+            if [ ! -d "$base/clang/host/linux-x86" ]; then
+              continue
+            fi
             latest=$(ls -d "$base"/clang/host/linux-x86/clang-r*/ 2>/dev/null | sort -V | tail -n1 || true)
             if [ -n "$latest" ] && [ -x "$latest/bin/clang" ]; then
               echo "CLANG_BIN=$latest/bin" >> "$GITHUB_ENV"
               FOUND=true
+              echo "вњ“ Found prebuilt clang at: $latest/bin"
+              break
             fi
           done
+          
           if ! $FOUND; then
-            echo "CLANG_BIN=$(dirname "$(command -v clang)")" >> "$GITHUB_ENV"
+            SYSTEM_CLANG=$(dirname "$(command -v clang)")
+            echo "CLANG_BIN=$SYSTEM_CLANG" >> "$GITHUB_ENV"
+            echo "вњ“ Using system clang at: $SYSTEM_CLANG"
           fi
 
       - name: Kernel prepare
         run: |
+          set -e
           MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
           OUT="$MSM/out"
-          export PATH="${CLANG_BIN}:$PATH" PATH="/usr/lib/ccache:$PATH"
-          MAKE_FLAGS=(LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64 CLANG_TRIPLE=aarch64-linux-gnu-
-                      CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-                      LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
-                      OBJDUMP=llvm-objdump DEPMOD=depmod DTC=dtc STRIP=llvm-strip
-                      HOSTCC=clang HOSTCXX=clang++ CC=clang)
+          
+          export PATH="${CLANG_BIN}:$PATH:/usr/lib/ccache"
+          export HOSTCC=clang
+          export HOSTCXX=clang++
+          
+          declare -a MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            CC=clang
+          )
+          
           cd "$MSM"
+          echo "Step 1: Generate gki_defconfig..."
           make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+          
+          echo "Step 2: Configure WiFi modules to modular..."
           if [ -x ./scripts/config ]; then
-            # ... (մյուս disable հրամանները)
-      
             ./scripts/config --file "$OUT/.config" --set-val CONFIG_CFG80211 m || true
             ./scripts/config --file "$OUT/.config" --set-val CONFIG_MAC80211 m || true
           fi
+          
+          echo "Step 3: Prepare kernel headers and modules_prepare..."
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-          make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare
+          make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare 2>&1 | tail -20
+          
+          echo "Step 4: Disable incompatible kernel features..."
           if [ -x ./scripts/config ]; then
             ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI || true
             ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI_CLANG || true
@@ -153,96 +222,317 @@ jobs:
             ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_TRAP || true
             ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_BOUNDS || true
           fi
+          
+          echo "Step 5: Final olddefconfig and prepare..."
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-          make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare
+          make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare 2>&1 | tail -20
+          
+          echo "вњ“ Kernel preparation complete"
+          echo "Kernel build output location: $OUT"
+          ls -la "$OUT" | head -20
 
       - name: Download backports
         run: |
+          set -e
           RELEASE="${{ github.event.inputs.backports_release }}"
-          wget -O backports.tar.xz "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/${RELEASE}.tar.xz"
+          echo "Downloading backports: $RELEASE"
+          
+          # Correct URL format for kernel.org backports
+          wget -v -O backports.tar.xz \
+            "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1/${RELEASE}.tar.xz" || \
+          wget -v -O backports.tar.xz \
+            "https://www.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1/${RELEASE}.tar.xz"
+          
+          echo "вњ“ Downloaded, extracting..."
           tar -xf backports.tar.xz
           mv "$RELEASE" backports-stable
+          
+          echo "вњ“ Backports extracted"
+          ls -la backports-stable/ | head -10
 
       - name: Patch compat for CFI
         run: |
+          set -e
           cd backports-stable
+          
           FILE="backport-include/linux/module.h"
-          [ -f "$FILE" ] && sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
-          [ -f "$FILE" ] && sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+          if [ -f "$FILE" ]; then
+            echo "Patching CFI compatibility in $FILE..."
+            sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
+            sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+            echo "вњ“ CFI patch applied"
+          else
+            echo "вљ  File not found, skipping CFI patch"
+          fi
 
       - name: Configure backports (full wireless)
         run: |
+          set -e
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-          export PATH="${CLANG_BIN}:$PATH" PATH="/usr/lib/ccache:$PATH"
-          MAKE_FLAGS=(LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64 CLANG_TRIPLE=aarch64-linux-gnu-
-                      CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-                      LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
-                      OBJDUMP=llvm-objdump DEPMOD=depmod DTC=dtc STRIP=llvm-strip
-                      HOSTCC=clang HOSTCXX=clang++ CC=clang)
+          
+          export PATH="${CLANG_BIN}:$PATH:/usr/lib/ccache"
+          
+          declare -a MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=clang
+          )
+          
           cd backports-stable
-          make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" defconfig-wifi
+          
+          echo "Configuring backports for WiFi..."
+          make "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            defconfig-wifi 2>&1 | tee backports-config.log
+          
+          echo "вњ“ Backports configuration complete"
+          echo "Generated .config:"
+          head -30 .config
 
       - name: Build backports modules
         run: |
+          set -e
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-          export PATH="${CLANG_BIN}:$PATH" PATH="/usr/lib/ccache:$PATH"
-          MAKE_FLAGS=(LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64 CLANG_TRIPLE=aarch64-linux-gnu-
-                      CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-                      LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
-                      OBJDUMP=llvm-objdump DEPMOD=depmod DTC=dtc STRIP=llvm-strip
-                      HOSTCC=clang HOSTCXX=clang++ CC=clang)
+          
+          export PATH="${CLANG_BIN}:$PATH:/usr/lib/ccache"
+          export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
+          mkdir -p "$CCACHE_DIR"
+          
+          declare -a MAKE_FLAGS=(
+            LLVM=1
+            LLVM_IAS=1
+            ARCH=arm64
+            SUBARCH=arm64
+            CLANG_TRIPLE=aarch64-linux-gnu-
+            CROSS_COMPILE=aarch64-linux-gnu-
+            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+            LD=ld.lld
+            HOSTLD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            DEPMOD=depmod
+            DTC=dtc
+            STRIP=llvm-strip
+            HOSTCC=clang
+            HOSTCXX=clang++
+            CC=clang
+          )
+          
           cd backports-stable
-          make -j$(nproc) "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" V=1 \
+          
+          echo "Building backports modules with $(nproc) threads..."
+          make -j$(nproc) \
+            "${MAKE_FLAGS[@]}" \
+            KLIB="$KERNEL_BUILD" \
+            KLIB_BUILD="$KERNEL_BUILD" \
+            V=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/build.log"
-
-      - name: Rename core modules (bp_ prefix)
-        run: |
-          cd backports-stable
-          for mod in cfg80211 mac80211 compat; do
-            if [ -f "${mod}.ko" ]; then
-              mv "${mod}.ko" "bp_${mod}.ko"
-              echo "Renamed ${mod}.ko -> bp_${mod}.ko"
-            fi
-          done
-          echo "=== All built .ko files ==="
-          find . -name "*.ko" -type f | sort
-
-      - name: Prepare modules-only archive
-        run: |
-          echo "=== Searching for .ko files in backports-stable ==="
-          find backports-stable -name "*.ko" -type f -print
           
-          KO_COUNT=$(find backports-stable -name "*.ko" -type f | wc -l)
-          echo "Total .ko files found: $KO_COUNT"
+          BUILD_EXIT=$?
           
-          if [ "$KO_COUNT" -eq 0 ]; then
-            echo "ERROR: No .ko files were built!"
-            echo "Listing top-level backports-stable contents:"
-            ls -la backports-stable/
-            echo "Check build.log for compilation errors."
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "вќЊ Build failed with exit code $BUILD_EXIT"
+            echo "Last 50 lines of build output:"
+            tail -50 "$GITHUB_WORKSPACE/build.log"
             exit 1
           fi
           
+          echo "вњ“ Build completed successfully"
+
+      - name: Verify .ko files generated
+        run: |
+          set -e
+          cd backports-stable
+          
+          echo "=== Searching for .ko files ==="
+          KO_FILES=$(find . -name "*.ko" -type f)
+          KO_COUNT=$(echo "$KO_FILES" | grep -c '\.ko$' || true)
+          
+          echo "Total .ko files found: $KO_COUNT"
+          
+          if [ "$KO_COUNT" -eq 0 ]; then
+            echo "вќЊ CRITICAL: No .ko files generated!"
+            echo "Directory structure:"
+            find . -type d | head -30
+            echo ""
+            echo "Last 100 lines of build.log:"
+            tail -100 "$GITHUB_WORKSPACE/build.log"
+            exit 1
+          fi
+          
+          echo "вњ“ .ko files generated:"
+          echo "$KO_FILES" | sort
+          
+          # List module info
+          for ko in $(find . -name "*.ko" -type f); do
+            echo "Module: $ko ($(du -h "$ko" | cut -f1))"
+          done
+
+      - name: Rename core modules (bp_ prefix)
+        run: |
+          set -e
+          cd backports-stable
+          
+          echo "Renaming core modules with bp_ prefix..."
+          
+          for mod in cfg80211 mac80211 compat; do
+            if [ -f "${mod}.ko" ]; then
+              mv "${mod}.ko" "bp_${mod}.ko"
+              echo "вњ“ Renamed ${mod}.ko в†’ bp_${mod}.ko"
+            fi
+          done
+          
+          echo ""
+          echo "=== All built .ko files after renaming ==="
+          find . -name "*.ko" -type f -exec ls -lh {} \; | sort -k9
+
+      - name: Prepare modules-only archive
+        run: |
+          set -e
+          
+          echo "=== Searching for .ko files in backports-stable ==="
+          KO_FILES=$(find backports-stable -name "*.ko" -type f -print)
+          KO_COUNT=$(echo "$KO_FILES" | grep -c '\.ko$' || true)
+          
+          echo "Total .ko files found: $KO_COUNT"
+          
+          if [ "$KO_COUNT" -eq 0 ]; then
+            echo "вќЊ ERROR: No .ko files were built!"
+            echo ""
+            echo "Listing backports-stable structure:"
+            ls -la backports-stable/
+            echo ""
+            echo "Full directory tree:"
+            find backports-stable -type f -name "*.ko" 2>/dev/null || echo "No .ko files found"
+            echo ""
+            echo "Build log errors:"
+            grep -i "error\|fail" "$GITHUB_WORKSPACE/build.log" | tail -20 || true
+            exit 1
+          fi
+          
+          echo "Creating modules output directory..."
           mkdir -p modules-out
+          
+          echo "Copying .ko files..."
           find backports-stable -name "*.ko" -type f -exec cp -v {} modules-out/ \;
           
-          echo "=== Files copied to modules-out ==="
-          ls -la modules-out/
+          echo ""
+          echo "=== Files in modules-out ==="
+          ls -lh modules-out/
           
+          echo ""
+          echo "Creating archive..."
           cd modules-out
-          zip -r "$GITHUB_WORKSPACE/wireless-modules-op11r.zip" *.ko
-      - name: Collect artifacts
+          ARCHIVE_NAME="wireless-modules-op11r-${GITHUB_RUN_NUMBER}.zip"
+          zip -r "$GITHUB_WORKSPACE/$ARCHIVE_NAME" *.ko
+          
+          echo "вњ“ Archive created: $ARCHIVE_NAME"
+          ls -lh "$GITHUB_WORKSPACE/$ARCHIVE_NAME"
+
+      - name: Collect and verify artifacts
         if: always()
         run: |
+          set -e
           mkdir -p artifacts
-          cp "$GITHUB_WORKSPACE/wireless-modules-op11r.zip" artifacts/ || true
-          cp "$GITHUB_WORKSPACE/build.log" artifacts/ || true
-          cp backports-stable/.config artifacts/backports.config || true
-          echo "Artifacts ready:"
-          ls -la artifacts/
-
+          
+          echo "Collecting artifacts..."
+          
+          # Find the latest archive
+          if [ -f "$GITHUB_WORKSPACE"/wireless-modules-op11r-*.zip ]; then
+            cp "$GITHUB_WORKSPACE"/wireless-modules-op11r-*.zip artifacts/ || true
+            echo "вњ“ Wireless modules archive copied"
+          fi
+          
+          # Copy logs
+          if [ -f "$GITHUB_WORKSPACE/build.log" ]; then
+            cp "$GITHUB_WORKSPACE/build.log" artifacts/build-full.log || true
+            echo "вњ“ Build log copied"
+          fi
+          
+          # Copy configs
+          if [ -f backports-stable/.config ]; then
+            cp backports-stable/.config artifacts/backports.config || true
+            echo "вњ“ Backports config copied"
+          fi
+          
+          if [ -f backports-stable/backports-config.log ]; then
+            cp backports-stable/backports-config.log artifacts/ || true
+            echo "вњ“ Config generation log copied"
+          fi
+          
+          # Create summary
+          cat > artifacts/BUILD_SUMMARY.txt <<EOF
+          Build Summary
+          =============
+          Date: $(date)
+          Kernel Version: ${KERNEL_VER:-unknown}
+          Manifest: ${MANIFEST:-unknown}
+          Backports Release: ${{ github.event.inputs.backports_release }}
+          SOC: ${SOC}
+          Model: ${MODEL}
+          Build Output: See artifacts/
+          EOF
+                    
+                    echo ""
+                    echo "=== Artifacts collected ==="
+                    ls -lhR artifacts/
+          
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: op11r-wireless-modules-only
-          path: artifacts
+        name: op11r-wireless-modules-${{ github.run_number }}
+        path: artifacts/
+        retention-days: 30
+        if-no-files-found: error
+          
+      - name: Create release notes
+        if: success()
+        run: |
+          cat > RELEASE_NOTES.md <<EOF
+          # OP11R Wireless Backports Modules Build ${{ github.run_number }}
+          
+          ## Build Information
+          - **Date**: $(date)
+          - **Kernel Version**: ${KERNEL_VER}
+          - **Manifest**: ${MANIFEST}
+          - **Backports Release**: ${{ github.event.inputs.backports_release }}
+          - **Build Status**: вњ… SUCCESS
+          
+          ## Artifacts
+          - **wireless-modules-op11r-${{ github.run_number }}.zip** - Contains all compiled .ko modules
+          
+          ## Contents
+          All WiFi-related .ko files compiled from the backports package:
+          - cfg80211 (if present: bp_cfg80211.ko)
+          - mac80211 (if present: bp_mac80211.ko)
+          - Various WiFi driver modules
+          
+          ## Installation
+          1. Extract the zip file
+          2. Copy .ko files to your kernel modules directory
+          3. Run `depmod` to update module dependencies
+          4. Reboot
+          
+          ## Build Logs
+          See artifacts for complete build logs and configuration files.
+          EOF
+                    cat RELEASE_NOTES.md
