@@ -1079,73 +1079,73 @@ runs:
         echo "Kernel built 😆"
         echo "::endgroup::"
         
-- name: Build backports modules
-  shell: bash
-  run: |
-    set -euo pipefail
+    - name: Build backports modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        # Սահմանում ենք ճանապարհները (նույնը, ինչ kernel-ի build-ի ժամանակ)
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        KERNEL_BUILD="$MSM/out"
+        BP_DIR="$GITHUB_WORKSPACE/backports-stable"
+        
+        # Clang-ի PATH-ը
+        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
+          export PATH="${CLANG_BIN_PATH}:$PATH"
+        fi
+        export PATH="/usr/lib/ccache:$PATH"
     
-    # Սահմանում ենք ճանապարհները (նույնը, ինչ kernel-ի build-ի ժամանակ)
-    MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-    KERNEL_BUILD="$MSM/out"
-    BP_DIR="$GITHUB_WORKSPACE/backports-stable"
+        # Ստուգում՝ արդյո՞ք backports-ի աղբյուրները արդեն առկա են
+        if [ ! -d "$BP_DIR" ]; then
+          echo "ERROR: backports-stable source not found at $BP_DIR"
+          exit 1
+        fi
     
-    # Clang-ի PATH-ը
-    if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-      export PATH="${CLANG_BIN_PATH}:$PATH"
-    fi
-    export PATH="/usr/lib/ccache:$PATH"
-
-    # Ստուգում՝ արդյո՞ք backports-ի աղբյուրները արդեն առկա են
-    if [ ! -d "$BP_DIR" ]; then
-      echo "ERROR: backports-stable source not found at $BP_DIR"
-      exit 1
-    fi
-
-    cd "$BP_DIR"
-
-    # MAKE_FLAGS (նույնը, ինչ kernel-ի build-ում, բայց CC-ն ccache-ով)
-    MAKE_FLAGS=(
-      LLVM=1
-      LLVM_IAS=1
-      ARCH=arm64
-      SUBARCH=arm64
-      CLANG_TRIPLE=aarch64-linux-gnu-
-      CROSS_COMPILE=aarch64-linux-gnu-
-      CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-      LD=ld.lld
-      HOSTLD=ld.lld
-      AR=llvm-ar
-      NM=llvm-nm
-      OBJCOPY=llvm-objcopy
-      OBJDUMP=llvm-objdump
-      STRIP=llvm-strip
-      HOSTCC=clang
-      HOSTCXX=clang++
-      CC="ccache clang"
-    )
-
-    # Սիմվոլների նախածանց՝ կոնֆլիկտից խուսափելու համար
-    export EXTRA_CFLAGS="-Dbackport_prefix=bp_ -Dbackport_ns=bp"
-
-    # Համոզվում ենք, որ kernel-ի out-ը պարունակում է Module.symvers
-    if [ ! -f "$KERNEL_BUILD/Module.symvers" ]; then
-      echo "WARNING: Module.symvers missing, backports may have dependency issues."
-    fi
-
-    # Կոնֆիգուրացիա (եթե արդեն արված չէ)
-    if [ ! -f ".config" ]; then
-      make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" defconfig-wifi
-    fi
-
-    # Կոմպիլյացիա
-    make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
-      KLIB="$KERNEL_BUILD" \
-      KLIB_BUILD="$KERNEL_BUILD" \
-      EXTRA_CFLAGS="$EXTRA_CFLAGS" \
-      V=1 \
-      modules
+        cd "$BP_DIR"
+    
+        # MAKE_FLAGS (նույնը, ինչ kernel-ի build-ում, բայց CC-ն ccache-ով)
+        MAKE_FLAGS=(
+          LLVM=1
+          LLVM_IAS=1
+          ARCH=arm64
+          SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          LD=ld.lld
+          HOSTLD=ld.lld
+          AR=llvm-ar
+          NM=llvm-nm
+          OBJCOPY=llvm-objcopy
+          OBJDUMP=llvm-objdump
+          STRIP=llvm-strip
+          HOSTCC=clang
+          HOSTCXX=clang++
+          CC="ccache clang"
+        )
+    
+        # Սիմվոլների նախածանց՝ կոնֆլիկտից խուսափելու համար
+        export EXTRA_CFLAGS="-Dbackport_prefix=bp_ -Dbackport_ns=bp"
+    
+        # Համոզվում ենք, որ kernel-ի out-ը պարունակում է Module.symvers
+        if [ ! -f "$KERNEL_BUILD/Module.symvers" ]; then
+          echo "WARNING: Module.symvers missing, backports may have dependency issues."
+        fi
+    
+        # Կոնֆիգուրացիա (եթե արդեն արված չէ)
+        if [ ! -f ".config" ]; then
+          make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" defconfig-wifi
+        fi
+    
+        # Կոմպիլյացիա
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
+          KLIB="$KERNEL_BUILD" \
+          KLIB_BUILD="$KERNEL_BUILD" \
+          EXTRA_CFLAGS="$EXTRA_CFLAGS" \
+          V=1 \
+          modules
       
-    - name: Collect Build Stats / Validate Image
+    -- name: Collect Build Stats / Validate Image
       id: collect_stats
       shell: bash
       run: |
