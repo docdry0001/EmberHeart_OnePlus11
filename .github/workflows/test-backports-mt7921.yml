@@ -1,4 +1,4 @@
-name: Prepare MT76/MT7921 Source Port Bundle for OP11R
+name: Test Stable Backports MT7921U on OP11R
 
 on:
   workflow_dispatch:
@@ -19,9 +19,17 @@ on:
         type: choice
         options:
           - backports-6.1.97-1
+      optimize_level:
+        description: "Optimization level"
+        required: true
+        default: "O2"
+        type: choice
+        options:
+          - O2
+          - O3
 
 jobs:
-  prepare-mt76-port-bundle:
+  backports-mt7921-stable:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -64,7 +72,7 @@ jobs:
             git curl ca-certificates build-essential clang lld flex bison \
             libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
             libxml2-utils rsync unzip dwarves file python3 ccache wget patch jq \
-            coccinelle kmod bc perl xz-utils zip
+            coccinelle kmod bc perl xz-utils
           sudo apt-get clean
 
       - name: Set manifest
@@ -152,7 +160,7 @@ jobs:
             echo "CLANG_BIN=$(dirname "$(command -v clang)")" >> "$GITHUB_ENV"
           fi
 
-      - name: Build kernel prepare targets
+      - name: Build kernel prepare targets for backports
         shell: bash
         run: |
           set -euo pipefail
@@ -183,7 +191,7 @@ jobs:
             STRIP=llvm-strip
             HOSTCC=clang
             HOSTCXX=clang++
-            CC=clang
+            CC=ccache\ clang
           )
 
           cd "$MSM"
@@ -191,6 +199,7 @@ jobs:
 
           make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
+          # Disable hardening features temporarily for external backports build
           if [ -x ./scripts/config ]; then
             ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI || true
             ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI_CLANG || true
@@ -209,6 +218,15 @@ jobs:
           make "${MAKE_FLAGS[@]}" O="$OUT" prepare
           make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
 
+          echo "===== PREPARED KERNEL TREE CHECK ====="
+          ls -l "$OUT/include/generated/autoconf.h" || true
+          ls -l "$OUT/include/config/auto.conf" || true
+          ls -ld "$OUT/arch/arm64/include/generated" || true
+          find "$OUT" -path '*asm/compiler.h' | head -20 || true
+
+          echo "===== TEMP HARDENING CONFIG CHECK ====="
+          grep -E 'CONFIG_(CFI|CFI_CLANG|LTO_CLANG|LTO_CLANG_THIN|SHADOW_CALL_STACK|KASAN|UBSAN)=' "$OUT/.config" || true
+    
       - name: Download stable backports release
         shell: bash
         run: |
@@ -220,42 +238,27 @@ jobs:
           tar -xf backports.tar.xz
           mv "$RELEASE" backports-stable
 
-      - name: Inspect backports MediaTek tree
+      - name: Inspect stable backports package
         shell: bash
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE/backports-stable"
 
-          echo "===== MEDIATEK TREE ====="
-          find drivers/net/wireless/mediatek/mt76 -maxdepth 3 -type f | sort || true
+          echo "===== RELEVANT FILES ====="
+          find . -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' | head -300 || true
 
-          echo "===== MEDIATEK KCONFIG SYMBOLS ====="
-          grep -RnsE "^[[:space:]]*config[[:space:]]+MT|^[[:space:]]*config[[:space:]]+WLAN_VENDOR_MEDIATEK" \
-            drivers/net/wireless/mediatek \
-            drivers/net/wireless/mediatek/mt76 \
-            . || true
+          echo "===== RELEVANT CONFIG ENTRIES ====="
+          grep -Rns "config .*MT7921\|config .*MT76\|config .*CFG80211\|config .*MAC80211" . || true
 
-      - name: Inspect backports MediaTek tree
+      - name: Configure stable backports for MT7921U only
         shell: bash
         run: |
           set -euo pipefail
-          cd "$GITHUB_WORKSPACE/backports-stable"
-          echo "===== MEDIATEK TREE ====="
-          find drivers/net/wireless/mediatek/mt76 -maxdepth 2 -type f | sort || true
-          echo "===== MEDIATEK CONFIG ENTRIES ====="
-          grep -Rns -E 'pattern1|pattern2|pattern3'
-          
-      - name: Configure backports for MT76/MT7921 only
-        shell: bash
-        run: |
-          set -euo pipefail
-
           KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
 
           if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
             export PATH="${CLANG_BIN}:$PATH"
           fi
-
           export PATH="/usr/lib/ccache:$PATH"
 
           MAKE_FLAGS=(
@@ -282,51 +285,49 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/backports-stable"
 
+          echo "===== DEFCONFIG FILES ====="
+          find defconfigs -maxdepth 2 -type f | sort || true
+
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
             allnoconfig
 
-          {
-            echo "CPTCFG_WLAN=y"
-            echo "CPTCFG_CFG80211=y"
-            echo "CPTCFG_MAC80211=y"
-            echo "CPTCFG_WLAN_VENDOR_MEDIATEK=y"
-
-            echo "CPTCFG_MT76_CORE=m"
-            echo "CPTCFG_MT76_USB=m"
-            echo "CPTCFG_MT76_CONNAC_LIB=m"
-
-            echo "CPTCFG_MT76x0_COMMON=m"
-            echo "CPTCFG_MT76x0U=m"
-
-            echo "CPTCFG_MT76x2_COMMON=m"
-            echo "CPTCFG_MT76x2E=m"
-            echo "CPTCFG_MT76x2U=m"
-
-            echo "CPTCFG_MT7615_COMMON=m"
-            echo "CPTCFG_MT7615E=m"
-            echo "CPTCFG_MT7663_USB_SDIO_COMMON=m"
-
-            echo "CPTCFG_MT792x_LIB=m"
-            echo "CPTCFG_MT792x_USB=m"
-            echo "CPTCFG_MT7921_COMMON=m"
-            echo "CPTCFG_MT7921U=m"
-
-            echo "CPTCFG_MT7915E=m"
-
-            echo "CPTCFG_USB=y"
-            echo "CPTCFG_PCI=y"
-            echo "CPTCFG_NL80211_TESTMODE=y"
-          } >> .config
+          printf '%s\n' \
+          'CPTCFG_WLAN=y' \
+          'CPTCFG_CFG80211=y' \
+          'CPTCFG_MAC80211=y' \
+          'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
+          'CPTCFG_MT76_CORE=m' \
+          'CPTCFG_MT76_USB=m' \
+          'CPTCFG_MT76_CONNAC_LIB=m' \
+          'CPTCFG_MT792x_LIB=m' \
+          'CPTCFG_MT792x_USB=m' \
+          'CPTCFG_MT7921_COMMON=m' \
+          'CPTCFG_MT7921U=m' \
+          'CPTCFG_USB=y' \
+          'CPTCFG_PCI=y' \
+          'CPTCFG_NL80211_TESTMODE=y' >> .config
 
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
             olddefconfig </dev/null || true
 
-          echo "===== FINAL CONFIG CHECK ====="
-          grep -E "CPTCFG_(MT76|MT79|CFG80211|MAC80211|WLAN_VENDOR_MEDIATEK)" .config || true
+          echo "===== MT7921 SYMBOL PROOF ====="
+          grep -E 'CPTCFG_MT7921U|CPTCFG_MT7921_COMMON|CPTCFG_MT792x_USB|CPTCFG_MT792x_LIB|CPTCFG_MT76_USB|CPTCFG_MT76_CORE|CPTCFG_CFG80211|CPTCFG_MAC80211|CPTCFG_WLAN_VENDOR_MEDIATEK|CPTCFG_WLAN=' .config || true
+
+          echo "===== MT7921 SOURCE FILES ====="
+          find drivers -type f | grep -E 'mt7921|mt76' | sort || true
+
+          if ! grep -q '^CPTCFG_MT7921U=m' .config && ! grep -q '^CPTCFG_MT7921U=y' .config; then
+            echo "MT7921U symbol is NOT enabled."
+            exit 1
+          fi
+
+          echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
+          grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
+
       - name: Patch backports compat for OnePlus CFI macros
         shell: bash
         run: |
@@ -335,12 +336,18 @@ jobs:
 
           FILE="backport-include/linux/module.h"
 
-          if [ -f "$FILE" ]; then
-            sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
-            sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
-          fi
+          echo "===== BEFORE PATCH ====="
+          grep -n "__CFI_ADDRESSABLE" "$FILE" || true
 
-      - name: Build backports tree for source adaptation validation
+          # Target kernel's __CFI_ADDRESSABLE() takes one arg, not two.
+          sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
+          sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+
+          echo "===== AFTER PATCH ====="
+          grep -n "__CFI_ADDRESSABLE" "$FILE" || true
+
+
+      - name: Build stable backports against OP11R kernel tree
         shell: bash
         run: |
           set -euo pipefail
@@ -379,60 +386,30 @@ jobs:
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
             V=1 \
-            2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log" || true
+            2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log"
 
-      - name: Prepare MT76 transplant bundle
+          KO_COUNT=$(find . -type f -name '*.ko' | wc -l || true)
+          echo "KO_COUNT=$KO_COUNT"
+
+          if [ "$KO_COUNT" -eq 0 ]; then
+            echo "Build completed without producing any .ko modules."
+            exit 1
+          fi
+          
+      - name: Verify useful outputs exist
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
 
-          BUNDLE_ROOT="$GITHUB_WORKSPACE/mt76-port-bundle"
-          BP="$GITHUB_WORKSPACE/backports-stable"
-          MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+          KO_COUNT=$(find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' | wc -l || true)
+          echo "KO_COUNT=$KO_COUNT"
 
-          rm -rf "$BUNDLE_ROOT"
-          mkdir -p "$BUNDLE_ROOT/drivers/net/wireless/mediatek"
-
-          cp -a "$BP/drivers/net/wireless/mediatek/mt76" \
-                "$BUNDLE_ROOT/drivers/net/wireless/mediatek/"
-
-          mkdir -p "$BUNDLE_ROOT/metadata"
-
-          {
-            echo "MODEL=$MODEL"
-            echo "SOC=$SOC"
-            echo "TARGET_KERNEL=$KERNEL_VER"
-            echo "BACKPORTS_RELEASE=${{ github.event.inputs.backports_release }}"
-            echo "MANIFEST=$MANIFEST"
-            echo "BUNDLE_KIND=source_transplant"
-          } > "$BUNDLE_ROOT/metadata/manifest.txt"
-
-          if [ -f "$BP/.config" ]; then
-            cp -f "$BP/.config" "$BUNDLE_ROOT/metadata/backports.config"
+          if [ "$KO_COUNT" -eq 0 ]; then
+            echo "No .ko files were produced."
+            exit 1
           fi
-
-          if [ -f "$GITHUB_WORKSPACE/backports-build.log" ]; then
-            cp -f "$GITHUB_WORKSPACE/backports-build.log" "$BUNDLE_ROOT/metadata/"
-          fi
-
-          if [ -f "$BP/drivers/net/wireless/mediatek/mt76/Kconfig" ]; then
-            cp -f "$BP/drivers/net/wireless/mediatek/mt76/Kconfig" "$BUNDLE_ROOT/metadata/mt76.Kconfig"
-          fi
-
-          if [ -f "$BP/drivers/net/wireless/mediatek/mt76/Makefile" ]; then
-            cp -f "$BP/drivers/net/wireless/mediatek/mt76/Makefile" "$BUNDLE_ROOT/metadata/mt76.Makefile"
-          fi
-
-          echo "===== BUNDLE CONTENTS ====="
-          find "$BUNDLE_ROOT" -maxdepth 5 -type f | sort || true
-
-      - name: Create transplant bundle zip
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$GITHUB_WORKSPACE"
-          zip -r mediatek-mt76-port-op11r-5.10.zip mt76-port-bundle >/dev/null
-
+      
       - name: Collect artifacts
         if: always()
         shell: bash
@@ -440,21 +417,19 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts
 
-          [ -f "$GITHUB_WORKSPACE/mediatek-mt76-port-op11r-5.10.zip" ] && \
-            cp -f "$GITHUB_WORKSPACE/mediatek-mt76-port-op11r-5.10.zip" artifacts/ || true
+          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
+          [ -f "$GITHUB_WORKSPACE/backports-build.log" ] && cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
+          [ -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" artifacts/ || true
 
-          [ -f "$GITHUB_WORKSPACE/backports-build.log" ] && \
-            cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
-
-          [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && \
-            cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
+          find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
+          find "$GITHUB_WORKSPACE/backports-stable" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
 
           echo "===== ARTIFACT CONTENTS ====="
-          find artifacts -maxdepth 3 -type f | sort || true
+          find artifacts -maxdepth 5 -type f | sort || true
+
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: op11r-mt76-port-bundle
+          name: op11r-backports-mt7921-stable
           path: artifacts
-          
