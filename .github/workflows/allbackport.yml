@@ -277,7 +277,7 @@ jobs:
           CPTCFG_MT792x_LIB=m
           CPTCFG_MT792x_USB=m
           CPTCFG_MT7921_COMMON=m
-          CPTCFG_MT7921U=m
+          CPTCFG_MT7921E=m
 
           CPTCFG_WLAN_VENDOR_RALINK=y
           CPTCFG_RT2X00=m
@@ -305,6 +305,32 @@ jobs:
 
           echo "=== RAW BACKPORTS CONFIG ==="
           cat .config
+
+
+    - name: Enable MediaTek MT7921U configs
+      shell: bash
+      run: |
+        set -euo pipefail
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        DEFCONFIG="$MSM/arch/arm64/configs/gki_defconfig"
+        OUT="$MSM/out"
+
+        cd "$MSM"
+        chmod +x ./scripts/config
+        mkdir -p "$OUT"
+
+        ./scripts/config --file "$DEFCONFIG" --enable CONFIG_WLAN_VENDOR_MEDIATEK
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT76_CORE
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT76_USB
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT76_CONNAC_LIB
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT7921_COMMON
+        ./scripts/config --file "$DEFCONFIG" --module CONFIG_MT7921U
+
+        make ARCH=arm64 O="$OUT" gki_defconfig
+        make ARCH=arm64 O="$OUT" olddefconfig </dev/null
+
+        echo "===== MT7921 CONFIG CHECK ====="
+        grep -E 'CONFIG_(WLAN_VENDOR_MEDIATEK|MT76_CORE|MT76_USB|MT76_CONNAC_LIB|MT792x_LIB|MT792x_USB|MT7921_COMMON|MT7921U)=' "$OUT/.config" || true
 
       - name: Configure backports (full wireless)
         shell: bash
