@@ -222,7 +222,7 @@ jobs:
           set -euo pipefail
           mkdir -p backports-stable/backport-include/linux
           curl -L --fail \
-            https://raw.githubusercontent.com/docdry0001/kernel_patches/main/backports/ieee80211.h \
+            https://github.com/docdry0001/kernel_patches/blob/main/kernel_patches/op11/common/op11rbackportwifipatch.patch \
             -o backports-stable/backport-include/linux/ieee80211.h
           echo "✅ ieee80211 backport patch applied"
 
