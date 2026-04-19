@@ -995,6 +995,20 @@ runs:
         echo "Clang detected ✅"
         echo "::endgroup::"
 
+   - name: Download backports
+     shell: bash
+     run: |
+       set -euo pipefail
+       cd "$GITHUB_WORKSPACE"
+       #եթե backports-stable գոյություն չունի, ներբեռնել և քաղել
+       if [ ! -d backports-stable ]; then
+         wget -O backports-6.1.97-1.tar.xz \
+           https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz
+         mkdir backports-stable
+         #քաղել այն backports-stable director into (supports xz)
+         tar -xf backports-6.1.97-1.tar.xz --strip-components=1 -C backports-stable
+       fi
+
     - name: Build Kernel
       shell: bash
       env:
