@@ -573,58 +573,7 @@ runs:
 
         echo "OnePlus BBR added ✅"
         echo "::endgroup::"
-    - name: Import MT76 backport source into common kernel
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Importing MT76 backport source into common kernel"
 
-        BUNDLE_URL="https://raw.githubusercontent.com/docdry0001/EmberHeart_OnePlus11/main/.github/mt76.zip"
-        TMP="$GITHUB_WORKSPACE/_mt76_bundle"
-        KERNEL_DIR="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
-        DEST_PARENT="$KERNEL_DIR/drivers/net/wireless/mediatek"
-        DEST="$DEST_PARENT/mt76"
-
-        rm -rf "$TMP"
-        mkdir -p "$TMP"
-        mkdir -p "$DEST_PARENT"
-
-        echo "Downloading mt76.zip..."
-        curl -L --fail "$BUNDLE_URL" -o "$TMP/mt76.zip"
-
-        echo "Inspecting zip..."
-        zipinfo -1 "$TMP/mt76.zip" | sed -n '1,200p'
-
-        echo "Unpacking mt76.zip..."
-        unzip -q "$TMP/mt76.zip" -d "$TMP/unpacked"
-
-        SRC="$(find "$TMP/unpacked" -type f -path '*/mt76/Kconfig' | head -n 1)"
-        [ -n "$SRC" ] || { echo "mt76/Kconfig not found inside zip"; exit 1; }
-        SRC="$(dirname "$SRC")"
-
-        echo "Resolved SRC=$SRC"
-
-        echo "Replacing msm kernel mt76 tree..."
-        rm -rf "$DEST"
-        cp -a "$SRC" "$DEST"
-
-        echo "Normalizing mt76 file timestamps..."
-        find "$DEST" -exec touch -c {} +
-        find "$DEST" -type d -exec touch -c {} +
-
-        echo "Removing build artifacts from imported tree..."
-        find "$DEST" -type f | grep -E '\.(o|ko|mod|mod\.c|mod\.o|symversions|lto\.o)$|(^|/)modules\.order$|(^|/)Module\.symvers$' | while read -r f; do
-          rm -f "$f"
-        done
-
-        echo "===== IMPORTED MT76 TREE CHECK ====="
-        find "$DEST" -maxdepth 2 -type f | sort | head -200 || true
-
-        echo "===== IMPORTED MT7921 CHECK ====="
-        find "$DEST/mt7921" -maxdepth 2 -type f | sort || true
-
-        echo "::endgroup::"
-        
     - name: Add my kernel patches to common kernel
       if: env.SOC == 'kalama'
       shell: bash
@@ -789,77 +738,9 @@ runs:
           --module CONFIG_RT2800USB_RT53XX \
           --module CONFIG_RT2800USB_RT55XX \
           --module CONFIG_RT2800USB_UNKNOWN
- 
+
         echo "Nethunter configs applied"
         echo "::endgroup::"
-
-    - name: Probe mt7921 source presence
-      shell: bash
-      run: |
-        set -euo pipefail
-
-        for BASE in "$CONFIG/kernel_platform/common" "$CONFIG/kernel_platform/msm-kernel"; do
-          [ -d "$BASE" ] || continue
-          echo "===== CHECKING: $BASE ====="
-          find "$BASE/drivers/net/wireless/mediatek" -maxdepth 4 -type f 2>/dev/null | grep -E 'mt7921|mt76' || true
-          grep -Rns "config MT7921U" "$BASE/drivers/net/wireless/mediatek" 2>/dev/null || true
-          grep -Rns "config MT792x_USB" "$BASE/drivers/net/wireless/mediatek" 2>/dev/null || true
-          grep -Rns "config MT7921_COMMON" "$BASE/drivers/net/wireless/mediatek" 2>/dev/null || true
-        done
-        
-    - name: Add MediaTek mt76/mt7921 configs to common kernel
-      shell: bash
-      run: |
-        set -euo pipefail
-        cd "$CONFIG/kernel_platform/common"
-        chmod +x ./scripts/config
-
-        has_cfg() {
-          local opt="${1#CONFIG_}"
-          grep -Rqs "^config ${opt}\b" \
-            arch/arm64/configs \
-            drivers/net/wireless \
-            net \
-            2>/dev/null
-        }
-
-        set_m() {
-          local opt="$1"
-          if has_cfg "$opt"; then
-            ./scripts/config --file arch/arm64/configs/gki_defconfig --module "$opt"
-            echo "[OK] $opt=m"
-          else
-            echo "[SKIP] missing in tree: $opt"
-          fi
-        }
-
-        set_y() {
-          local opt="$1"
-          if has_cfg "$opt"; then
-            ./scripts/config --file arch/arm64/configs/gki_defconfig --enable "$opt"
-            echo "[OK] $opt=y"
-          else
-            echo "[SKIP] missing in tree: $opt"
-          fi
-        }
-
-        set_y CONFIG_WLAN_VENDOR_MEDIATEK
-        set_m CONFIG_MT76_CORE
-        set_m CONFIG_MT76_LEDS
-        set_m CONFIG_MT76_USB
-        set_m CONFIG_MT76x02_LIB
-        set_m CONFIG_MT76x02_USB
-        set_m CONFIG_MT7601U
-        set_m CONFIG_MT76x0_COMMON
-        set_m CONFIG_MT76x0U
-        set_m CONFIG_MT76x2_COMMON
-        set_m CONFIG_MT76x2U
-        set_m CONFIG_MT76_CONNAC_LIB
-        set_m CONFIG_MT7921_COMMON
-        set_m CONFIG_MT7921U
-
-        echo "Nethunter MediaTek configs applied"    
-    
     - name: Add TTL Target Support
       shell: bash
       run: |
@@ -901,8 +782,6 @@ runs:
           --enable CONFIG_IP_SET_HASH_NETPORT \
           --enable CONFIG_IP_SET_HASH_NETIFACE \
           --enable CONFIG_IP_SET_LIST_SET
-
-
 
         echo "IP  SET support added ✅"
         echo "::endgroup::"
@@ -995,20 +874,6 @@ runs:
         echo "Clang detected ✅"
         echo "::endgroup::"
 
-   - name: Download backports
-     shell: bash
-     run: |
-       set -euo pipefail
-       cd "$GITHUB_WORKSPACE"
-       #եթե backports-stable գոյություն չունի, ներբեռնել և քաղել
-       if [ ! -d backports-stable ]; then
-         wget -O backports-6.1.97-1.tar.xz \
-           https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz
-         mkdir backports-stable
-         #քաղել այն backports-stable director into (supports xz)
-         tar -xf backports-6.1.97-1.tar.xz --strip-components=1 -C backports-stable
-       fi
-
     - name: Build Kernel
       shell: bash
       env:
@@ -1077,7 +942,6 @@ runs:
         KCPPFLAGS="-DCONFIG_OPTIMIZE_INLINING"
 
         echo "Starting build with $(nproc --all) threads..."
-        export KCFLAGS="-Wno-error"
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
         make -j$(nproc --all) "${MAKE_FLAGS[@]}" KCFLAGS="$KCFLAGS" KCPPFLAGS="$KCPPFLAGS" O="$OUT" Image modules
         make -j$(nproc --all) "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
@@ -1090,73 +954,7 @@ runs:
         sha256sum "$IMG" | tee "$OUT/Image.sha256"
         echo "Kernel built 😆"
         echo "::endgroup::"
-        
-    - name: Build backports modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        
-        # Սահմանում ենք ճանապարհները (նույնը, ինչ kernel-ի build-ի ժամանակ)
-        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-        KERNEL_BUILD="$MSM/out"
-        BP_DIR="$GITHUB_WORKSPACE/backports-stable"
-        
-        # Clang-ի PATH-ը
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
-        fi
-        export PATH="/usr/lib/ccache:$PATH"
-    
-        # Ստուգում՝ արդյո՞ք backports-ի աղբյուրները արդեն առկա են
-        if [ ! -d "$BP_DIR" ]; then
-          echo "ERROR: backports-stable source not found at $BP_DIR"
-          exit 1
-        fi
-    
-        cd "$BP_DIR"
-    
-        # MAKE_FLAGS (նույնը, ինչ kernel-ի build-ում, բայց CC-ն ccache-ով)
-        MAKE_FLAGS=(
-          LLVM=1
-          LLVM_IAS=1
-          ARCH=arm64
-          SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld
-          HOSTLD=ld.lld
-          AR=llvm-ar
-          NM=llvm-nm
-          OBJCOPY=llvm-objcopy
-          OBJDUMP=llvm-objdump
-          STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC="ccache clang"
-        )
-    
-        # Սիմվոլների նախածանց՝ կոնֆլիկտից խուսափելու համար
-        export EXTRA_CFLAGS="-Dbackport_prefix=bp_ -Dbackport_ns=bp"
-    
-        # Համոզվում ենք, որ kernel-ի out-ը պարունակում է Module.symvers
-        if [ ! -f "$KERNEL_BUILD/Module.symvers" ]; then
-          echo "WARNING: Module.symvers missing, backports may have dependency issues."
-        fi
-    
-        # Կոնֆիգուրացիա (եթե արդեն արված չէ)
-        if [ ! -f ".config" ]; then
-          make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" defconfig-wifi
-        fi
-    
-        # Կոմպիլյացիա
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
-          KLIB="$KERNEL_BUILD" \
-          KLIB_BUILD="$KERNEL_BUILD" \
-          EXTRA_CFLAGS="$EXTRA_CFLAGS" \
-          V=1 \
-          modules
-      
+
     - name: Collect Build Stats / Validate Image
       id: collect_stats
       shell: bash
@@ -1212,7 +1010,6 @@ runs:
 
         echo "Build stats collected ✅"
         echo "::endgroup::"
-        
     - name: Create Kernel ZIP
       id: create_zip
       shell: bash
@@ -1331,7 +1128,7 @@ runs:
         set -euo pipefail
         echo "Deleting old ccache..."
         gh cache delete ccache-${{ env.CONFIG }}-kernel-${{ env.KERNEL_FULL_VER }}- || true
-    
+
     - name: Upload Artifacts
       if: success() && steps.create_zip.conclusion == 'success'
       uses: actions/upload-artifact@v4
