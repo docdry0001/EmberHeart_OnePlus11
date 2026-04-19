@@ -624,7 +624,26 @@ runs:
 
         echo "Other kernel patches applied 🔥"
         echo "::endgroup::"
-
+        
+    - name: Import MT76 source into common kernel
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Importing MT76 source into common kernel"
+        BUNDLE_URL="https://raw.githubusercontent.com/docdry0001/EmberHeart_OnePlus11/main/.github/mt76.zip"
+        TMP="$GITHUB_WORKSPACE/_mt76_bundle"
+        KERNEL_DIR="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
+        DEST="$KERNEL_DIR/drivers/net/wireless/mediatek/mt76"
+        mkdir -p "$TMP" "$(dirname "$DEST")"
+        curl -L --fail "$BUNDLE_URL" -o "$TMP/mt76.zip"
+        unzip -q "$TMP/mt76.zip" -d "$TMP/unpacked"
+        SRC=$(find "$TMP/unpacked" -type f -path '*/mt76/Kconfig' | head -n1 | xargs dirname)
+        [ -n "$SRC" ] || { echo "mt76/Kconfig not found"; exit 1; }
+        rm -rf "$DEST"
+        cp -a "$SRC" "$DEST"
+        find "$DEST" -exec touch -c {} +
+        echo "MT76 imported ✅"
+        echo "::endgroup::"
      
     - name: Add Nethunter inline configs
       shell: bash
