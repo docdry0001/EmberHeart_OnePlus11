@@ -378,7 +378,7 @@ jobs:
           mt792x-usb.ko
           mt7921-common.ko
           mt7921u.ko
-EOF
+          EOF
           fi
           echo "filename,vermagic,depends" > "$STAGING/module_metadata.csv"
           for ko in $(find "$MODULE_DIR" -type f -name '*.ko'); do
@@ -404,7 +404,7 @@ EOF
             fi
           done
           echo "Backports modules loaded"
-EOF
+          EOF
           chmod +x "$INSTALL_SH"
           DEPLOY_ZIP="$GITHUB_WORKSPACE/backports-mt7921-deploy-$KVER.zip"
           cd "$STAGING"
