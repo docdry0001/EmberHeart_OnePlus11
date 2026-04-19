@@ -213,7 +213,7 @@ jobs:
           set -euo pipefail
           RELEASE="${{ github.event.inputs.backports_release }}"
           wget -O backports.tar.xz \
-            "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.197/backports-6.1.197-1.tar.xz"
+            "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz"
           tar -xf backports.tar.xz
           mv "$RELEASE" backports-stable
           echo "✓ Backports extracted"
