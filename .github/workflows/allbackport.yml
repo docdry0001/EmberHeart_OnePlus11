@@ -1,4 +1,4 @@
-name: Build Wireless Backports Modules for OP11R (5.10)
+name: Build Wireless Backports Modules for OP11R
 
 on:
   workflow_dispatch:
@@ -215,13 +215,24 @@ jobs:
           mv "$RELEASE" backports-stable
           echo "✓ Backports extracted"
 
-      - name: Patch backports for kernel 5.10 compatibility
+      # ✅ ԱՎԵԼԱՑՐԵՆՔ PATCH-Ը (ieee80211.h)
+      - name: Apply ieee80211 backport patch for kernel 5.10
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p backports-stable/backport-include/linux
+          curl -L --fail \
+            https://raw.githubusercontent.com/docdry0001/kernel_patches/main/backports/ieee80211.h \
+            -o backports-stable/backport-include/linux/ieee80211.h
+          echo "✅ ieee80211 backport patch applied"
+
+      - name: Configure backports (only mt76/mt7921u, disable CFI/LTO/SCS)
         shell: bash
         run: |
           set -euo pipefail
           cd backports-stable
 
-          # 1. Disable CFI, LTO, Shadow Call Stack
+          # Disable incompatible options (CFI, LTO, SCS) - these cause errors on 5.10
           cat >> .config <<'EOF'
           CPTCFG_CFI=n
           CPTCFG_LTO=n
@@ -230,110 +241,38 @@ jobs:
           CPTCFG_STACK_VALIDATION=n
           EOF
 
-          # 2. Fix missing ieee80211_txq struct fields (5.10 vs 6.1)
-          cat >> backport-include/linux/ieee80211.h <<'EOF'
-          #ifndef BACKPORT_IEEE80211_H
-          #define BACKPORT_IEEE80211_H
-          #include <linux/version.h>
-          #if LINUX_VERSION_CODE < KERNEL_VERSION(5,11,0)
-          /* 5.10 does not have 'netdev' and 'txstats' in ieee80211_txq */
-          struct ieee80211_txq {
-            struct ieee80211_vif *vif;
-            struct sta_info *sta;
-            struct ieee80211_tx_rate rates[8];
-            u8 rate_idx;
-            u8 hw_queue;
-            u16 flags;
-          };
-          #define BACKPORT_IEEE80211_TXQ_HAS_NETDEV 0
-          #else
-          #define BACKPORT_IEEE80211_TXQ_HAS_NETDEV 1
-          #endif
-          #endif
-          EOF
+          # Start from defconfig-wifi, then disable all vendors except MediaTek
+          make defconfig-wifi
 
-          # 3. Remove unsupported compiler flags from Makefiles
-          find . -name "Makefile" -exec sed -i 's/-fsanitize=cfi//g' {} \;
-          find . -name "Makefile" -exec sed -i 's/-flto//g' {} \;
-          find . -name "Makefile" -exec sed -i 's/-fsanitize=shadow-call-stack//g' {} \;
+          # Disable all other wireless vendors to avoid ieee80211 struct conflicts
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_ATH
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_BROADCOM
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_INTEL
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_REALTEK
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_RALINK
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_INTERSIL
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_MARVELL
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_QUANTENNA
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_RSI
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_ST
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_TI
+          ./scripts/config --disable CPTCFG_WLAN_VENDOR_ZYDAS
 
-          echo "✓ Backports patched for kernel 5.10"
+          # Enable only MediaTek and mt7921u
+          ./scripts/config --enable CPTCFG_WLAN_VENDOR_MEDIATEK
+          ./scripts/config --module CPTCFG_MT76_CORE
+          ./scripts/config --module CPTCFG_MT76_USB
+          ./scripts/config --module CPTCFG_MT7921_COMMON
+          ./scripts/config --module CPTCFG_MT7921U
 
-      - name: Create wireless backports config (full, with mt7921u)
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd backports-stable
-
-          # Start from a clean known-good config
-          make defconfig-wifi || true
-
-          # Now explicitly enable all required modules, especially mt7921u
-          cat >> .config <<'EOF'
-          CPTCFG_WLAN=y
-          CPTCFG_CFG80211=m
-          CPTCFG_MAC80211=m
-          CPTCFG_CFG80211_WEXT=y
-          CPTCFG_WIRELESS_EXT=y
-          CPTCFG_WEXT_PRIV=y
-          CPTCFG_NL80211_TESTMODE=y
-          CPTCFG_USB=y
-          CPTCFG_PCI=y
-
-          # MediaTek MT76 family (critical: mt7921u)
-          CPTCFG_WLAN_VENDOR_MEDIATEK=y
-          CPTCFG_MT76_CORE=m
-          CPTCFG_MT76_USB=m
-          CPTCFG_MT76_SDIO=m
-          CPTCFG_MT76_CONNAC_LIB=m
-          CPTCFG_MT76x02_LIB=m
-          CPTCFG_MT76x02_USB=m
-          CPTCFG_MT76x0_COMMON=m
-          CPTCFG_MT76x0U=m
-          CPTCFG_MT76x2_COMMON=m
-          CPTCFG_MT76x2U=m
-          CPTCFG_MT792x_LIB=m
-          CPTCFG_MT792x_USB=m
-          CPTCFG_MT7921_COMMON=m
-          CPTCFG_MT7921E=m
-          CPTCFG_MT7921U=m    # <-- this is the key module
-
-          # Ralink
-          CPTCFG_WLAN_VENDOR_RALINK=y
-          CPTCFG_RT2X00=m
-          CPTCFG_RT2X00_LIB=m
-          CPTCFG_RT2X00_LIB_USB=m
-          CPTCFG_RT2X00_USB=m
-          CPTCFG_RT2800_LIB=m
-          CPTCFG_RT2800_LIB_USB=m
-          CPTCFG_RT2800USB=m
-          CPTCFG_RT2800USB_RT33XX=y
-          CPTCFG_RT2800USB_RT35XX=y
-          CPTCFG_RT2800USB_RT3573=y
-          CPTCFG_RT2800USB_RT53XX=y
-          CPTCFG_RT2800USB_UNKNOWN=y
-          CPTCFG_CRC_CCITT=m
-          CPTCFG_EEPROM_93CX6=m
-
-          # Realtek
-          CPTCFG_WLAN_VENDOR_REALTEK=y
-          CPTCFG_RTL8XXXU=m
-          CPTCFG_RTW88=m
-          CPTCFG_RTW88_CORE=m
-          CPTCFG_RTW88_USB=m
-          CPTCFG_RTW88_DEBUG=y
-          EOF
-
-          # Finalize configuration without overwriting our additions
+          # Finalize
           make olddefconfig
 
-          # Verify that mt7921u is really set
-          grep "CPTCFG_MT7921U" .config || { echo "ERROR: mt7921u not enabled in config"; exit 1; }
+          # Verify mt7921u is enabled
+          grep -q "CPTCFG_MT7921U=m" .config || { echo "mt7921u not enabled"; exit 1; }
+          echo "✓ Backports configured for mt7921u"
 
-          echo "=== BACKPORTS FINAL CONFIG ==="
-          grep -E "^(CPTCFG_MT7921U|CPTCFG_MT76|CPTCFG_RT2X00|CPTCFG_RTW88)" .config || true
-
-      - name: Build wireless backports modules (with V=1 for debugging)
+      - name: Build wireless backports modules
         shell: bash
         run: |
           set -euo pipefail
@@ -367,53 +306,36 @@ jobs:
 
           cd backports-stable
 
-          # Use more parallel jobs (but keep log readable)
           make -j"$(nproc)" \
             "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
             V=1 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
-          # Check if mt7921u.ko was actually built
-          if [ ! -f drivers/net/wireless/mediatek/mt76/mt7921/mt7921u.ko ] && [ ! -f net/mac80211/rc80211_minstrel_ht.ko ]; then
-            echo "ERROR: mt7921u.ko not found after build!"
-            echo "Last 100 lines of build log:"
+          # Check if mt7921u.ko was built
+          if [ ! -f drivers/net/wireless/mediatek/mt76/mt7921/mt7921u.ko ]; then
+            echo "ERROR: mt7921u.ko not found!"
             tail -100 "$GITHUB_WORKSPACE/build.log"
             exit 1
           fi
 
-      - name: Verify and collect modules (with mt7921u mandatory)
+      - name: Collect and package modules
         shell: bash
         run: |
           set -euo pipefail
           cd backports-stable
-
           mkdir -p ../modules-out
-
-          # Find all .ko files
           find . -name "*.ko" -type f -exec cp -v {} ../modules-out/ \;
-
-          echo "=== ALL MODULES COPIED ==="
-          ls -lh ../modules-out/
-
-          # Critical check
-          if [ ! -f ../modules-out/mt7921u.ko ]; then
-            echo "FATAL: mt7921u.ko is missing after copy!"
-            echo "Available .ko files:"
-            find ../modules-out -name "*.ko" | sort
-            exit 1
-          fi
-
           cd ../modules-out
 
-          # Create final zip
+          # Create zip archive
           ARCHIVE_NAME="wireless-backports-5.10-${GITHUB_RUN_NUMBER}.zip"
           zip -r "$GITHUB_WORKSPACE/$ARCHIVE_NAME" *.ko
 
-          echo "✓ Archive created with mt7921u.ko included"
-          unzip -l "$GITHUB_WORKSPACE/$ARCHIVE_NAME" | grep mt7921u
+          echo "✓ Archive created: $ARCHIVE_NAME"
+          ls -lh "$GITHUB_WORKSPACE/$ARCHIVE_NAME"
 
-      - name: Upload artifacts (always)
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
