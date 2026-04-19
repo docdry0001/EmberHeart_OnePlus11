@@ -15,10 +15,10 @@ on:
       backports_release:
         description: "Stable backports release"
         required: true
-        default: "backports-6.1.145-1"
+        default: "backports-5.15.153-1"
         type: choice
         options:
-          - backports-6.1.145-1
+          - backports-5.15.153-1
 
 jobs:
   build-wireless-modules:
@@ -199,19 +199,7 @@ jobs:
 
           make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
-          if [ -x ./scripts/config ]; then
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI_CLANG || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG_THIN || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_SHADOW_CALL_STACK || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_SW_TAGS || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_HW_TAGS || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_TRAP || true
-            ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_BOUNDS || true
-          fi
+          
 
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
           make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare
@@ -224,9 +212,9 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE="${{ github.event.inputs.backports_release }}"
-          wget -O backports.tar.gz \
-            "https://git.kernel.org/pub/scm/linux/kernel/git/backports/backports.git/snapshot/backports-6.1.145-1.tar.gz"
-          tar -xf backports.tar.gz
+          wget -O backports.tar.xz \
+            "https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v5.15.153/backports-5.15.153-1.tar.xz"
+          tar -xf backports.tar.xz
           mv "$RELEASE" backports-stable
           echo "✓ Backports extracted"
 
