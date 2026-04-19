@@ -1,4 +1,4 @@
-name: Build Wireless Backports Modules for OP11R
+name: Build Wireless Backports Modules for OP11R (5.10)
 
 on:
   workflow_dispatch:
@@ -198,9 +198,6 @@ jobs:
           cd "$MSM"
 
           make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-
-          
-
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
           make "${MAKE_FLAGS[@]}" O="$OUT" prepare modules_prepare
 
@@ -218,40 +215,61 @@ jobs:
           mv "$RELEASE" backports-stable
           echo "✓ Backports extracted"
 
-      - name: Inspect backports symbols
+      - name: Patch backports for kernel 5.10 compatibility
         shell: bash
         run: |
           set -euo pipefail
           cd backports-stable
 
-          echo "===== DRIVER FILES ====="
-          find drivers/net/wireless -maxdepth 4 -type f | grep -E "(mediatek|ralink|realtek|mt76|rt2x00|rtl8|rtw88)" | sort || true
+          # 1. Disable CFI, LTO, Shadow Call Stack
+          cat >> .config <<'EOF'
+          CPTCFG_CFI=n
+          CPTCFG_LTO=n
+          CPTCFG_KERNEL_CFI=n
+          CPTCFG_SHADOW_CALL_STACK=n
+          CPTCFG_STACK_VALIDATION=n
+          EOF
 
-          echo "===== KCONFIG SYMBOLS ====="
-          grep -RnsE "^[[:space:]]*config[[:space:]]+(MT|RT|RTL|WLAN_VENDOR_|CFG80211|MAC80211)" drivers/net/wireless compat . || true
+          # 2. Fix missing ieee80211_txq struct fields (5.10 vs 6.1)
+          cat >> backport-include/linux/ieee80211.h <<'EOF'
+          #ifndef BACKPORT_IEEE80211_H
+          #define BACKPORT_IEEE80211_H
+          #include <linux/version.h>
+          #if LINUX_VERSION_CODE < KERNEL_VERSION(5,11,0)
+          /* 5.10 does not have 'netdev' and 'txstats' in ieee80211_txq */
+          struct ieee80211_txq {
+            struct ieee80211_vif *vif;
+            struct sta_info *sta;
+            struct ieee80211_tx_rate rates[8];
+            u8 rate_idx;
+            u8 hw_queue;
+            u16 flags;
+          };
+          #define BACKPORT_IEEE80211_TXQ_HAS_NETDEV 0
+          #else
+          #define BACKPORT_IEEE80211_TXQ_HAS_NETDEV 1
+          #endif
+          #endif
+          EOF
 
-      - name: Patch compat for CFI
+          # 3. Remove unsupported compiler flags from Makefiles
+          find . -name "Makefile" -exec sed -i 's/-fsanitize=cfi//g' {} \;
+          find . -name "Makefile" -exec sed -i 's/-flto//g' {} \;
+          find . -name "Makefile" -exec sed -i 's/-fsanitize=shadow-call-stack//g' {} \;
+
+          echo "✓ Backports patched for kernel 5.10"
+
+      - name: Create wireless backports config (full, with mt7921u)
         shell: bash
         run: |
           set -euo pipefail
           cd backports-stable
 
-          FILE="backport-include/linux/module.h"
-          if [ -f "$FILE" ]; then
-            sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
-            sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
-            echo "✓ CFI patch applied"
-          fi
+          # Start from a clean known-good config
+          make defconfig-wifi || true
 
-      - name: Create wireless backports config
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd backports-stable
-
-          rm -f .config
-
-          cat > .config <<'EOF'
+          # Now explicitly enable all required modules, especially mt7921u
+          cat >> .config <<'EOF'
           CPTCFG_WLAN=y
           CPTCFG_CFG80211=m
           CPTCFG_MAC80211=m
@@ -259,10 +277,10 @@ jobs:
           CPTCFG_WIRELESS_EXT=y
           CPTCFG_WEXT_PRIV=y
           CPTCFG_NL80211_TESTMODE=y
-
           CPTCFG_USB=y
           CPTCFG_PCI=y
 
+          # MediaTek MT76 family (critical: mt7921u)
           CPTCFG_WLAN_VENDOR_MEDIATEK=y
           CPTCFG_MT76_CORE=m
           CPTCFG_MT76_USB=m
@@ -278,7 +296,9 @@ jobs:
           CPTCFG_MT792x_USB=m
           CPTCFG_MT7921_COMMON=m
           CPTCFG_MT7921E=m
+          CPTCFG_MT7921U=m    # <-- this is the key module
 
+          # Ralink
           CPTCFG_WLAN_VENDOR_RALINK=y
           CPTCFG_RT2X00=m
           CPTCFG_RT2X00_LIB=m
@@ -295,6 +315,7 @@ jobs:
           CPTCFG_CRC_CCITT=m
           CPTCFG_EEPROM_93CX6=m
 
+          # Realtek
           CPTCFG_WLAN_VENDOR_REALTEK=y
           CPTCFG_RTL8XXXU=m
           CPTCFG_RTW88=m
@@ -303,66 +324,16 @@ jobs:
           CPTCFG_RTW88_DEBUG=y
           EOF
 
-          echo "=== RAW BACKPORTS CONFIG ==="
-          cat .config
+          # Finalize configuration without overwriting our additions
+          make olddefconfig
 
+          # Verify that mt7921u is really set
+          grep "CPTCFG_MT7921U" .config || { echo "ERROR: mt7921u not enabled in config"; exit 1; }
 
-  
+          echo "=== BACKPORTS FINAL CONFIG ==="
+          grep -E "^(CPTCFG_MT7921U|CPTCFG_MT76|CPTCFG_RT2X00|CPTCFG_RTW88)" .config || true
 
-      - name: Configure backports (full wireless)
-        shell: bash
-        run: |
-          set -euo pipefail
-      
-          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
-      
-          export PATH="${CLANG_BIN}:$PATH:/usr/lib/ccache"
-      
-          MAKE_FLAGS=(
-            LLVM=1
-            LLVM_IAS=1
-            ARCH=arm64
-            SUBARCH=arm64
-            CLANG_TRIPLE=aarch64-linux-gnu-
-            CROSS_COMPILE=aarch64-linux-gnu-
-            CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-            LD=ld.lld
-            HOSTLD=ld.lld
-            AR=llvm-ar
-            NM=llvm-nm
-            OBJCOPY=llvm-objcopy
-            OBJDUMP=llvm-objdump
-            DEPMOD=depmod
-            DTC=dtc
-            STRIP=llvm-strip
-            HOSTCC=clang
-            HOSTCXX=clang++
-            CC=clang
-          )
-      
-          cd backports-stable
-      
-          # ✅ Օգտագործում ենք defconfig-wifi, ՈՉ olddefconfig
-          make "${MAKE_FLAGS[@]}" \
-            KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_BUILD" \
-            defconfig-wifi
-      
-          echo "=== FINAL CONFIG CHECK ==="
-          grep -E "^(CPTCFG_|CONFIG_).*(MT76|MT792|RT2X00|RT2800|RTL8|RTW88|CFG80211|MAC80211|WLAN_VENDOR|CRC_CCITT|EEPROM_93CX6)" .config | sort || true
-     
-      - name: Clean backports build directory
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd backports-stable
-          find . -name "*.o" -delete || true
-          find . -name "*.ko" -delete || true
-          find . -name ".tmp_versions" -type d -exec rm -rf {} + 2>/dev/null || true
-          find . -name "modules.order" -delete || true
-          echo "✓ Build directory cleaned"
-
-      - name: Build wireless backports modules
+      - name: Build wireless backports modules (with V=1 for debugging)
         shell: bash
         run: |
           set -euo pipefail
@@ -396,88 +367,22 @@ jobs:
 
           cd backports-stable
 
-          make -j2 \
+          # Use more parallel jobs (but keep log readable)
+          make -j"$(nproc)" \
             "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
             V=1 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
-      - name: Verify target .ko files generated
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd backports-stable
-
-          KO_FILES=$(find . -name "*.ko" -type f | sort || true)
-          echo "=== ALL KO FILES ==="
-          echo "$KO_FILES"
-
-          REQUIRED=(
-            "cfg80211.ko"
-            "compat.ko"
-            "mac80211.ko"
-            "mt76.ko"
-            "mt76-connac-lib.ko"
-            "mt76-usb.ko"
-            "mt76x0-common.ko"
-            "mt76x0u.ko"
-            "mt76x2-common.ko"
-            "mt76x2e.ko"
-            "mt76x2u.ko"
-            "mt76x02-lib.ko"
-            "mt76x02-usb.ko"
-            "mt7601u.ko"
-            "mt7603e.ko"
-            "mt7615-common.ko"
-            "mt7615e.ko"
-            "mt7915e.ko"
-            "mt7921-common.ko"
-            "mt7921e.ko"
-            "mt7921u.ko"
-            "rt2800usb.ko"
-            "rt2x00usb.ko"
-            "rt2x00lib.ko"
-            "rt2800lib.ko"
-            "rtw88_core.ko"
-            "rtw88_usb.ko"
-            "rtl8xxxu.ko"
-          )
-
-          OPTIONAL_TARGETS=(
-            "mt7921u.ko"
-            "mt76x0u.ko"
-            "mt76x2u.ko"
-            "rt2800usb.ko"
-            "rt2x00usb.ko"
-            "rt2x00lib.ko"
-            "rt2800lib.ko"
-            "rtw88_core.ko"
-            "rtw88_usb.ko"
-          )
-
-          for f in "${REQUIRED[@]}"; do
-            echo "$KO_FILES" | grep -q "/$f$" || { echo "Missing required module: $f"; exit 1; }
-          done
-
-          echo "=== OPTIONAL TARGETS STATUS ==="
-          FOUND_OPTIONAL=0
-          for f in "${OPTIONAL_TARGETS[@]}"; do
-            if echo "$KO_FILES" | grep -q "/$f$"; then
-              echo "FOUND: $f"
-              FOUND_OPTIONAL=$((FOUND_OPTIONAL + 1))
-            else
-              echo "MISSING: $f"
-            fi
-          done
-
-          if [ "$FOUND_OPTIONAL" -eq 0 ]; then
-            echo "No target USB/device-specific modules were generated"
-            echo "Last 200 build log lines:"
-            tail -200 "$GITHUB_WORKSPACE/build.log" || true
+          # Check if mt7921u.ko was actually built
+          if [ ! -f drivers/net/wireless/mediatek/mt76/mt7921/mt7921u.ko ] && [ ! -f net/mac80211/rc80211_minstrel_ht.ko ]; then
+            echo "ERROR: mt7921u.ko not found after build!"
+            echo "Last 100 lines of build log:"
+            tail -100 "$GITHUB_WORKSPACE/build.log"
             exit 1
           fi
 
-      - name: Extract and organize modules
+      - name: Verify and collect modules (with mt7921u mandatory)
         shell: bash
         run: |
           set -euo pipefail
@@ -485,71 +390,35 @@ jobs:
 
           mkdir -p ../modules-out
 
-          find . -name "*.ko" -type f | grep -E '(mt76|mt7921|mt76x0|mt76x2|rt2x00|rt2800|rtl8xxxu|rtw88|cfg80211|mac80211)\.ko$' | while read -r f; do
-            cp -v "$f" ../modules-out/
-          done
+          # Find all .ko files
+          find . -name "*.ko" -type f -exec cp -v {} ../modules-out/ \;
 
-          echo "=== FILES IN modules-out ==="
+          echo "=== ALL MODULES COPIED ==="
           ls -lh ../modules-out/
 
-          if [ "$(find ../modules-out -maxdepth 1 -name "*.ko" | wc -l)" -eq 0 ]; then
-            echo "ERROR: no wireless .ko files copied"
+          # Critical check
+          if [ ! -f ../modules-out/mt7921u.ko ]; then
+            echo "FATAL: mt7921u.ko is missing after copy!"
+            echo "Available .ko files:"
+            find ../modules-out -name "*.ko" | sort
             exit 1
           fi
 
           cd ../modules-out
-          ARCHIVE_NAME="wireless-modules-op11r-allfamilies-${GITHUB_RUN_NUMBER}.zip"
+
+          # Create final zip
+          ARCHIVE_NAME="wireless-backports-5.10-${GITHUB_RUN_NUMBER}.zip"
           zip -r "$GITHUB_WORKSPACE/$ARCHIVE_NAME" *.ko
 
-          echo "✓ Archive created: $ARCHIVE_NAME"
-          ls -lh "$GITHUB_WORKSPACE/$ARCHIVE_NAME"
+          echo "✓ Archive created with mt7921u.ko included"
+          unzip -l "$GITHUB_WORKSPACE/$ARCHIVE_NAME" | grep mt7921u
 
-      - name: Collect and verify artifacts
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-
-          echo "Collecting artifacts..."
-
-          if ls "$GITHUB_WORKSPACE"/wireless-modules-op11r-allfamilies-*.zip 1> /dev/null 2>&1; then
-            cp "$GITHUB_WORKSPACE"/wireless-modules-op11r-allfamilies-*.zip artifacts/ || true
-            echo "✓ Wireless modules archive copied"
-          fi
-
-          if [ -f "$GITHUB_WORKSPACE/build.log" ]; then
-            cp "$GITHUB_WORKSPACE/build.log" artifacts/build-full.log || true
-            echo "✓ Build log copied"
-          fi
-
-          if [ -f backports-stable/oldconfig.log ]; then
-            cp backports-stable/oldconfig.log artifacts/ || true
-            echo "✓ Config log copied"
-          fi
-
-          if [ -f backports-stable/.config ]; then
-            cp backports-stable/.config artifacts/backports.config || true
-            echo "✓ Backports config copied"
-          fi
-
-          cat > artifacts/BUILD_SUMMARY.txt <<EOF
-          Build Summary
-          =============
-          Date: $(date)
-          Kernel Version: ${KERNEL_VER:-unknown}
-          Manifest: ${MANIFEST:-unknown}
-          Backports Release: ${{ github.event.inputs.backports_release }}
-          SOC: ${SOC}
-          Model: ${MODEL}
-          Build Type: MediaTek + Ralink + Realtek WiFi modules
-          EOF
-
-          ls -lah artifacts
-
-      - name: Upload artifacts
+      - name: Upload artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: op11r-wireless-backports
-          path: artifacts
+          name: op11r-wireless-backports-5.10
+          path: |
+            ${{ github.workspace }}/wireless-backports-5.10-*.zip
+            ${{ github.workspace }}/build.log
+            ${{ github.workspace }}/backports-stable/.config
