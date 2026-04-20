@@ -215,60 +215,52 @@ jobs:
           mv "$RELEASE" backports-stable
           echo "✓ Backports extracted"
 
-      # ✅ ԱՎԵԼԱՑՐԵՆՔ PATCH-Ը (ieee80211.h)
+      # ✅ Apply ieee80211 patch for 5.10
       - name: Apply ieee80211 backport patch for kernel 5.10
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p backports-stable/backport-include/linux
           curl -L --fail \
-            https://github.com/docdry0001/kernel_patches/blob/main/kernel_patches/op11/common/op11rbackportwifipatch.patch \
+            https://raw.githubusercontent.com/docdry0001/kernel_patches/main/backports/ieee80211.h \
             -o backports-stable/backport-include/linux/ieee80211.h
           echo "✅ ieee80211 backport patch applied"
 
+      # ✅ Configure backports without ./scripts/config
       - name: Configure backports (only mt76/mt7921u, disable CFI/LTO/SCS)
         shell: bash
         run: |
           set -euo pipefail
           cd backports-stable
 
-          # Disable incompatible options (CFI, LTO, SCS) - these cause errors on 5.10
-          cat >> .config <<'EOF'
-          CPTCFG_CFI=n
-          CPTCFG_LTO=n
-          CPTCFG_KERNEL_CFI=n
-          CPTCFG_SHADOW_CALL_STACK=n
-          CPTCFG_STACK_VALIDATION=n
-          EOF
-
-          # Start from defconfig-wifi, then disable all vendors except MediaTek
+          # 1. Start from defconfig-wifi
           make defconfig-wifi
 
-          # Disable all other wireless vendors to avoid ieee80211 struct conflicts
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_ATH
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_BROADCOM
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_INTEL
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_REALTEK
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_RALINK
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_INTERSIL
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_MARVELL
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_QUANTENNA
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_RSI
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_ST
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_TI
-          ./scripts/config --disable CPTCFG_WLAN_VENDOR_ZYDAS
+          # 2. Disable incompatible options (CFI, LTO, SCS) – directly edit .config
+          sed -i 's/^CPTCFG_CFI=.*/# CPTCFG_CFI is not set/' .config
+          sed -i 's/^CPTCFG_LTO=.*/# CPTCFG_LTO is not set/' .config
+          sed -i 's/^CPTCFG_KERNEL_CFI=.*/# CPTCFG_KERNEL_CFI is not set/' .config
+          sed -i 's/^CPTCFG_SHADOW_CALL_STACK=.*/# CPTCFG_SHADOW_CALL_STACK is not set/' .config
+          sed -i 's/^CPTCFG_STACK_VALIDATION=.*/# CPTCFG_STACK_VALIDATION is not set/' .config
 
-          # Enable only MediaTek and mt7921u
-          ./scripts/config --enable CPTCFG_WLAN_VENDOR_MEDIATEK
-          ./scripts/config --module CPTCFG_MT76_CORE
-          ./scripts/config --module CPTCFG_MT76_USB
-          ./scripts/config --module CPTCFG_MT7921_COMMON
-          ./scripts/config --module CPTCFG_MT7921U
+          # 3. Disable all wireless vendors except MediaTek
+          for vendor in ATH BROADCOM INTEL REALTEK RALINK INTERSIL MARVELL QUANTENNA RSI ST TI ZYDAS; do
+            sed -i "s/^CPTCFG_WLAN_VENDOR_${vendor}=.*/# CPTCFG_WLAN_VENDOR_${vendor} is not set/" .config
+          done
 
-          # Finalize
+          # 4. Enable MediaTek and mt7921u (add lines if missing)
+          sed -i 's/^# CPTCFG_WLAN_VENDOR_MEDIATEK is not set/CPTCFG_WLAN_VENDOR_MEDIATEK=y/' .config
+          grep -q "^CPTCFG_WLAN_VENDOR_MEDIATEK=y" .config || echo "CPTCFG_WLAN_VENDOR_MEDIATEK=y" >> .config
+
+          for module in MT76_CORE MT76_USB MT7921_COMMON MT7921U; do
+            sed -i "s/^# CPTCFG_${module} is not set/CPTCFG_${module}=m/" .config
+            grep -q "^CPTCFG_${module}=m" .config || echo "CPTCFG_${module}=m" >> .config
+          done
+
+          # 5. Finalize configuration
           make olddefconfig
 
-          # Verify mt7921u is enabled
+          # 6. Verify mt7921u is enabled
           grep -q "CPTCFG_MT7921U=m" .config || { echo "mt7921u not enabled"; exit 1; }
           echo "✓ Backports configured for mt7921u"
 
