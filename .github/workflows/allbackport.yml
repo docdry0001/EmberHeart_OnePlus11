@@ -19,11 +19,10 @@ on:
         type: choice
         options:
           - backports-6.1.97-1
-
-jobs:
-  build-wireless-modules:
-    runs-on: ubuntu-latest
-    permissions:
+  jobs:
+   build-wireless-modules:
+   runs-on: ubuntu-latest
+   permissions:
       contents: write
       actions: write
 
@@ -35,11 +34,11 @@ jobs:
       MANIFEST_OOS14_MODULES: oneplus_11r_u.xml
       MANIFEST_OOS15_MODULES: oneplus_11r_v.xml
       MANIFEST_OOS16_MODULES: oneplus_11r_b.xml
-
-  steps:
-    - name: Validate Inputs
-      shell: bash
-      run: |
+      
+steps:
+- name: Validate Inputs
+  shell: bash
+  run: |
         set -euo pipefail
         echo "::group::Validate inputs"
 
@@ -95,9 +94,9 @@ jobs:
            echo "Input validation OK."
            echo "::endgroup::"
 
-      - name: Aggressive cleanup
-        shell: bash
-        run: |
+    - name: Aggressive cleanup
+      shell: bash
+      run: |
             set -euo pipefail
             echo "::group::Cleanup space"
             sudo rm -rf /usr/share/dotnet || true
