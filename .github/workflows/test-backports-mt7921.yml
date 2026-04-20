@@ -378,7 +378,7 @@ jobs:
           mt792x-usb.ko
           mt7921-common.ko
           mt7921u.ko
-EOF
+          EOF
           fi
           echo "filename,vermagic,depends" > "$STAGING/module_metadata.csv"
           for ko in $(find "$MODULE_DIR" -type f -name '*.ko'); do
@@ -404,7 +404,7 @@ EOF
             fi
           done
           echo "Backports modules loaded"
-EOF
+          EOF
           chmod +x "$INSTALL_SH"
           DEPLOY_ZIP="$GITHUB_WORKSPACE/backports-mt7921-deploy-$KVER.zip"
           cd "$STAGING"
@@ -434,25 +434,25 @@ EOF
           printf "id=%s\nname=MT7921 backports for OP11R\nversion=%s\nversionCode=%s\nauthor=CI\ndescription=Backported MT7921U kernel modules for OnePlus 11R built via CI\n" "$MODID" "$KVER" "$VC" > "$MODROOT/module.prop"
           # Create a service script that loads all modules on boot in correct order
           cat <<'EOF_SERVICE' > "$MODROOT/service.sh"
-#!/system/bin/sh
-MODDIR=${0%/*}
-# Find the modules directory (should be lib/modules/<kernel>)
-MOD_PATH=$(find "$MODDIR"/lib/modules -maxdepth 2 -type d -print | sort | tail -n1)
-[ -d "$MOD_PATH" ] || exit 0
-# Load in specified order if modules.load exists, otherwise load all .ko files
-if [ -f "$MOD_PATH/modules.load" ]; then
-  while IFS= read -r mod; do
-    base=$(basename "$mod")
-    if [ -f "$MOD_PATH/$base" ]; then
-      insmod "$MOD_PATH/$base" || modprobe "$MOD_PATH/$base" || true
-    fi
-  done < "$MOD_PATH/modules.load"
-else
-  for ko in "$MOD_PATH"/*.ko; do
-    insmod "$ko" || modprobe "$ko" || true
-  done
-fi
-EOF_SERVICE
+          #!/system/bin/sh
+          MODDIR=${0%/*}
+          # Find the modules directory (should be lib/modules/<kernel>)
+          MOD_PATH=$(find "$MODDIR"/lib/modules -maxdepth 2 -type d -print | sort | tail -n1)
+          [ -d "$MOD_PATH" ] || exit 0
+          # Load in specified order if modules.load exists, otherwise load all .ko files
+          if [ -f "$MOD_PATH/modules.load" ]; then
+            while IFS= read -r mod; do
+              base=$(basename "$mod")
+              if [ -f "$MOD_PATH/$base" ]; then
+                insmod "$MOD_PATH/$base" || modprobe "$MOD_PATH/$base" || true
+              fi
+            done < "$MOD_PATH/modules.load"
+          else
+            for ko in "$MOD_PATH"/*.ko; do
+              insmod "$ko" || modprobe "$ko" || true
+            done
+          fi
+          EOF_SERVICE
           chmod +x "$MODROOT/service.sh"
           # Package the module into a zip file. Zip the module directory itself (not the parent).
           cd "$MAGISK_DIR"
