@@ -128,14 +128,12 @@ jobs:
           PATCHLEVEL=$(grep '^PATCHLEVEL *= ' Makefile | awk '{print $3}')
           SUBLEVEL=$(grep '^SUBLEVEL *= ' Makefile | awk '{print $3}')
           echo "KERNEL_VER=$VERSION.$PATCHLEVEL.$SUBLEVEL" >> "$GITHUB_ENV"
-
           make ARCH=arm64 mrproper
           mkdir -p out
-
           ./scripts/kconfig/merge_config.sh -O out -m \
             arch/arm64/configs/gki_defconfig \
             arch/arm64/configs/vendor/${SOC}_GKI.config
-
+          cp out/.config arch/arm64/configs/gki_defconfig
           make O=out ARCH=arm64 olddefconfig </dev/null
 
       - name: Detect clang
@@ -162,12 +160,10 @@ jobs:
           set -euo pipefail
           MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
           OUT="$MSM/out"
-
           if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
             export PATH="${CLANG_BIN}:$PATH"
           fi
           export PATH="/usr/lib/ccache:$PATH"
-
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -189,13 +185,9 @@ jobs:
             HOSTCXX=clang++
             CC=ccache\ clang
           )
-
           cd "$MSM"
           mkdir -p "$OUT"
-
-          # Keep merged vendor config; do not reset with plain gki_defconfig here
-          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
-
+          make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
           if [ -x ./scripts/config ]; then
             ./scripts/config --file "$OUT/.config" --disable CFI || true
             ./scripts/config --file "$OUT/.config" --disable CFI_CLANG || true
@@ -209,11 +201,9 @@ jobs:
             ./scripts/config --file "$OUT/.config" --disable UBSAN_TRAP || true
             ./scripts/config --file "$OUT/.config" --disable UBSAN_BOUNDS || true
           fi
-
           make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
           make "${MAKE_FLAGS[@]}" O="$OUT" prepare
           make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
-
           echo "===== PREPARED KERNEL TREE CHECK ====="
           ls -l "$OUT/include/generated/autoconf.h" || true
           ls -l "$OUT/include/config/auto.conf" || true
@@ -246,14 +236,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          KERNEL_SRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-          KERNEL_BUILD="$KERNEL_SRC/out"
-
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
           if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
             export PATH="${CLANG_BIN}:$PATH"
           fi
           export PATH="/usr/lib/ccache:$PATH"
-
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -275,16 +262,13 @@ jobs:
             HOSTCXX=clang++
             CC=clang
           )
-
           cd "$GITHUB_WORKSPACE/backports-stable"
           echo "===== DEFCONFIG FILES ====="
           find defconfigs -maxdepth 2 -type f | sort || true
-
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_SRC" \
+            KLIB_BUILD="$KERNEL_BUILD" \
             allnoconfig
-
           cat >> .config <<'EOF'
           CPTCFG_WLAN=y
           CPTCFG_CFG80211=m
@@ -298,27 +282,21 @@ jobs:
           CPTCFG_MT7921_COMMON=m
           CPTCFG_MT7921U=m
           CPTCFG_USB=y
-          CPTCFG_PM=y
-          CPTCFG_PM_SLEEP=y
-          CPTCFG_PM_RUNTIME=y
+          CPTCFG_PCI=y
           CPTCFG_NL80211_TESTMODE=y
           EOF
-
           make "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_SRC" \
+            KLIB_BUILD="$KERNEL_BUILD" \
             olddefconfig </dev/null || true
-
           echo "===== MT7921 SYMBOL PROOF ====="
-          grep -E 'CPTCFG_MT7921U|CPTCFG_MT7921_COMMON|CPTCFG_MT792x_USB|CPTCFG_MT792x_LIB|CPTCFG_MT76_USB|CPTCFG_MT76_CORE|CPTCFG_CFG80211|CPTCFG_MAC80211|CPTCFG_WLAN_VENDOR_MEDIATEK|CPTCFG_WLAN=|CPTCFG_PM=' .config || true
+          grep -E 'CPTCFG_MT7921U|CPTCFG_MT7921_COMMON|CPTCFG_MT792x_USB|CPTCFG_MT792x_LIB|CPTCFG_MT76_USB|CPTCFG_MT76_CORE|CPTCFG_CFG80211|CPTCFG_MAC80211|CPTCFG_WLAN_VENDOR_MEDIATEK|CPTCFG_WLAN=' .config || true
           echo "===== MT7921 SOURCE FILES ====="
           find drivers -type f | grep -E 'mt7921|mt76' | sort || true
-
           if ! grep -q '^CPTCFG_MT7921U=m' .config && ! grep -q '^CPTCFG_MT7921U=y' .config; then
             echo "MT7921U symbol is NOT enabled."
             exit 1
           fi
-
           echo "===== FINAL BACKPORTS CONFIG MT7921 CHECK ====="
           grep -E 'MT7921|MT792|MT76|CFG80211|MAC80211' .config || true
 
@@ -339,14 +317,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          KERNEL_SRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-          KERNEL_BUILD="$KERNEL_SRC/out"
-
+          KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
           if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
             export PATH="${CLANG_BIN}:$PATH"
           fi
           export PATH="/usr/lib/ccache:$PATH"
-
           MAKE_FLAGS=(
             LLVM=1
             LLVM_IAS=1
@@ -368,14 +343,12 @@ jobs:
             HOSTCXX=clang++
             CC=clang
           )
-
           cd "$GITHUB_WORKSPACE/backports-stable"
           make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
-            KLIB_BUILD="$KERNEL_SRC" \
+            KLIB_BUILD="$KERNEL_BUILD" \
             V=1 \
             2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log"
-
           KO_COUNT=$(find . -type f -name '*.ko' | wc -l || true)
           echo "KO_COUNT=$KO_COUNT"
           if [ "$KO_COUNT" -eq 0 ]; then
@@ -390,15 +363,10 @@ jobs:
           KVER="${KERNEL_VER}"
           STAGING="$GITHUB_WORKSPACE/deploy"
           MODULE_DIR="$STAGING/lib/modules/$KVER"
-
           rm -rf "$STAGING"
           mkdir -p "$MODULE_DIR"
-
-          # Flatten modules so install/load scripts can reliably find them
           find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' -exec cp -f {} "$MODULE_DIR/" \;
-
           depmod -b "$STAGING" "$KVER" || true
-
           cat > "$MODULE_DIR/modules.load" <<'EOF'
           compat.ko
           cfg80211.ko
@@ -411,7 +379,6 @@ jobs:
           mt7921-common.ko
           mt7921u.ko
           EOF
-
           echo "filename,vermagic,depends" > "$STAGING/module_metadata.csv"
           for ko in "$MODULE_DIR"/*.ko; do
             [ -f "$ko" ] || continue
@@ -420,7 +387,6 @@ jobs:
             depends=$(modinfo -F depends "$ko" || echo "unknown")
             echo "$fn,$vermagic,$depends" >> "$STAGING/module_metadata.csv"
           done
-
           INSTALL_SH="$STAGING/install.sh"
           cat > "$INSTALL_SH" <<'EOF'
           #!/system/bin/sh
@@ -428,19 +394,15 @@ jobs:
           set -e
           BASEDIR=$(dirname "$0")
           MODROOT=$(find "$BASEDIR/lib/modules" -maxdepth 2 -type d | sort | tail -n1)
-
           [ -d "$MODROOT" ] || exit 1
-
           for mod in compat.ko cfg80211.ko mac80211.ko mt76.ko mt76-usb.ko mt76-connac-lib.ko mt792x-lib.ko mt792x-usb.ko mt7921-common.ko mt7921u.ko; do
             if [ -f "$MODROOT/$mod" ]; then
               insmod "$MODROOT/$mod" || modprobe "$MODROOT/$mod" || true
             fi
           done
-
           echo "Backports modules load attempt finished"
           EOF
           chmod +x "$INSTALL_SH"
-
           DEPLOY_ZIP="$GITHUB_WORKSPACE/backports-mt7921-deploy-$KVER.zip"
           cd "$STAGING"
           zip -r "$DEPLOY_ZIP" .
@@ -455,14 +417,11 @@ jobs:
           MAGISK_DIR="$GITHUB_WORKSPACE/magisk"
           MODID="mt7921_backports"
           MODROOT="$MAGISK_DIR/$MODID"
-
           rm -rf "$MODROOT"
           mkdir -p "$MODROOT"
-
           if [ -d "$STAGING/lib" ]; then
             cp -r "$STAGING/lib" "$MODROOT/"
           fi
-
           VC=$(date +%s)
           cat > "$MODROOT/module.prop" <<EOF
           id=$MODID
@@ -472,13 +431,11 @@ jobs:
           author=CI
           description=Backported MT7921U kernel modules for OnePlus 11R built via CI
           EOF
-
           cat > "$MODROOT/service.sh" <<'EOF'
           #!/system/bin/sh
           MODDIR=${0%/*}
           MOD_PATH=$(find "$MODDIR/lib/modules" -maxdepth 2 -type d | sort | tail -n1)
           [ -d "$MOD_PATH" ] || exit 0
-
           for mod in compat.ko cfg80211.ko mac80211.ko mt76.ko mt76-usb.ko mt76-connac-lib.ko mt792x-lib.ko mt792x-usb.ko mt7921-common.ko mt7921u.ko; do
             if [ -f "$MOD_PATH/$mod" ]; then
               insmod "$MOD_PATH/$mod" || modprobe "$MOD_PATH/$mod" || true
@@ -486,7 +443,6 @@ jobs:
           done
           EOF
           chmod +x "$MODROOT/service.sh"
-
           cd "$MAGISK_DIR"
           zip -r "$GITHUB_WORKSPACE/backports-mt7921-magisk-$KVER.zip" "$MODID"
           echo "Created Magisk module package: backports-mt7921-magisk-$KVER.zip"
@@ -514,21 +470,17 @@ jobs:
           [ -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" artifacts/ || true
           find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
           find "$GITHUB_WORKSPACE/backports-stable" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
-
           DEPLOY_ZIP="backports-mt7921-deploy-$KERNEL_VER.zip"
           if [ -f "$GITHUB_WORKSPACE/$DEPLOY_ZIP" ]; then
             cp "$GITHUB_WORKSPACE/$DEPLOY_ZIP" artifacts/
           fi
-
           if [ -f "$GITHUB_WORKSPACE/deploy/module_metadata.csv" ]; then
             cp "$GITHUB_WORKSPACE/deploy/module_metadata.csv" artifacts/
           fi
-
           MAGISK_ZIP="backports-mt7921-magisk-$KERNEL_VER.zip"
           if [ -f "$GITHUB_WORKSPACE/$MAGISK_ZIP" ]; then
             cp "$GITHUB_WORKSPACE/$MAGISK_ZIP" artifacts/
           fi
-
           echo "===== ARTIFACT CONTENTS ====="
           find artifacts -maxdepth 5 -type f | sort || true
 
