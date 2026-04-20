@@ -36,7 +36,7 @@ jobs:
       MANIFEST_OOS15_MODULES: oneplus_11r_v.xml
       MANIFEST_OOS16_MODULES: oneplus_11r_b.xml
 
-    steps:
+  steps:
     - name: Validate Inputs
       shell: bash
       run: |
