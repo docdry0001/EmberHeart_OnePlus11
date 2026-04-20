@@ -625,35 +625,54 @@ runs:
         cd ..
         echo "Modules remaining after filtering: $(find modules -type f -name '*.ko' | wc -l)"
 
-    - name: Create Kernel Modules zip
+    - name: Create MT7921 Modules zip (FIXED)
       id: create_zip
       shell: bash
       run: |
         set -euo pipefail
-
+    
         CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        KERNEL_PLATFORM="$CONFIG_DIR/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        OUT="$MSM/out"
-        MODULES_SRC="$OUT/modules"
-        EXTERNAL_MODULES_OUT="$CONFIG_DIR/artifacts/external_modules"
-        MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
-
+        COMMON="$CONFIG_DIR/kernel_platform/common"
+        OUT="$COMMON/out"
+    
+        ZIP_OUT="$CONFIG_DIR/artifacts/mt7921_modules.zip"
+    
         mkdir -p "$CONFIG_DIR/artifacts"
-        rm -f "$MODULES_ZIP"
-
-        if [ "${{ inputs.package_external_only }}" = "true" ] && \
-           [ -d "$EXTERNAL_MODULES_OUT" ] && \
-           [ -n "$(find "$EXTERNAL_MODULES_OUT" -type f -name '*.ko' -print -quit)" ]; then
-          echo "Packaging external modules only..."
-          find "$EXTERNAL_MODULES_OUT" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
-        else
-          echo "Packaging stock filtered modules..."
-          [ -d "$MODULES_SRC" ] || { echo "Modules source directory not found: $MODULES_SRC"; exit 1; }
-          find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
+        rm -f "$ZIP_OUT"
+    
+        echo "[*] Finding modules directory..."
+    
+        MOD_DIR="$(find "$OUT" -type d -path "*/lib/modules/*" | head -n1)"
+    
+        if [ -z "$MOD_DIR" ]; then
+          echo "::error::Modules directory not found"
+          find "$OUT" -maxdepth 4 -type d
+          exit 1
         fi
-
-        echo "Packaged kernel modules to $MODULES_ZIP"
+    
+        echo "[*] Using modules from: $MOD_DIR"
+    
+        TMP_DIR="$OUT/mt7921_modules"
+        rm -rf "$TMP_DIR"
+        mkdir -p "$TMP_DIR"
+    
+        # --- CORE WIFI STACK ---
+        cp -v "$MOD_DIR/kernel/net/wireless/cfg80211.ko" "$TMP_DIR/" || true
+        cp -v "$MOD_DIR/kernel/net/mac80211/mac80211.ko" "$TMP_DIR/" || true
+    
+        # --- MT76 + MT7921 ---
+        if [ -d "$MOD_DIR/kernel/drivers/net/wireless/mediatek/mt76" ]; then
+          find "$MOD_DIR/kernel/drivers/net/wireless/mediatek/mt76" -type f -name "*.ko" \
+            -exec cp -v {} "$TMP_DIR/" \;
+        fi
+    
+        echo "[*] Final module list:"
+        ls -lah "$TMP_DIR"
+    
+        cd "$TMP_DIR"
+        zip -r "$ZIP_OUT" .
+    
+        echo "[*] Created zip: $ZIP_OUT"
 
     - name: Final Build Summary
       shell: bash
