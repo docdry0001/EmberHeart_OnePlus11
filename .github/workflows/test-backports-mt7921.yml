@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build MT7921 backports through stock kernel action
-        uses: .github/kernel_modules/action.yml
+        uses: https://github.com/docdry0001/EmberHeart_OnePlus11/blob/main/.github/kernel_modules/action.yml
         with:
           manifest: ${{ github.event.inputs.manifest }}
           optimize_level: ${{ github.event.inputs.optimize_level }}
