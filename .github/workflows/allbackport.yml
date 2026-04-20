@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: read
+      actions: write
 
     env:
       MODEL: OP11R
@@ -37,37 +37,98 @@ jobs:
       MANIFEST_OOS16_MODULES: oneplus_11r_b.xml
 
     steps:
-      - name: Validate target
+    - name: Validate Inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::Validate inputs"
+
+        model="${MODEL:-}"
+        soc="${SOC:-}"
+        branch="${BRANCH:-}"
+        manifest="${MANIFEST:-}"
+        optimize='${{ inputs.optimize_level }}'
+
+        [[ -n "$model" ]] || { echo "Input 'model' cannot be empty"; exit 1; }
+        [[ -n "$soc" ]] || { echo "Input 'soc' cannot be empty"; exit 1; }
+        [[ -n "$branch" ]] || { echo "Input 'branch' cannot be empty"; exit 1; }
+        [[ -n "$manifest" ]] || { echo "Input 'manifest' cannot be empty"; exit 1; }
+
+        if ! [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]]; then
+          echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"
+          exit 1
+        fi
+
+        if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+          echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"
+          exit 1
+        fi
+
+        if [[ "$manifest" == http*://* ]]; then
+          if ! [[ "$manifest" =~ ^https:// ]]; then
+            echo "Manifest URL must be HTTPS"
+            exit 1
+          fi
+          if ! [[ "$manifest" =~ \.xml($|\?) ]]; then
+            echo "Manifest URL should point to an XML file (.xml)"
+            exit 1
+          fi
+          else
+          if ! [[ "$manifest" =~ \.xml$ ]]; then
+            echo "Manifest filename must end with .xml"
+            exit 1
+          fi
+          if [[ "$manifest" =~ [[:space:]] ]]; then
+            echo "Manifest filename cannot contain spaces"
+            exit 1
+          fi
+          fi
+
+           case "$optimize" in
+            O2|O3) ;;
+           *)
+            echo "optimize_level must be O2 or O3; got '$optimize'"
+            exit 1
+            ;;
+            esac
+
+           echo "Input validation OK."
+           echo "::endgroup::"
+
+      - name: Aggressive cleanup
         shell: bash
         run: |
-          set -euo pipefail
-          [ "$MODEL" = "OP11R" ] || exit 1
-          [ "$SOC" = "waipio" ] || exit 1
-          echo "Target validation passed"
+            set -euo pipefail
+            echo "::group::Cleanup space"
+            sudo rm -rf /usr/share/dotnet || true
+            sudo rm -rf /usr/share/swift || true
+            sudo rm -rf /usr/local/.ghcup || true
+            sudo rm -rf /usr/local/julia* || true
+            sudo rm -rf /usr/local/lib/android || true
+            sudo rm -rf /usr/local/share/chromium || true
+            sudo rm -rf /opt/microsoft /opt/google || true
+            sudo rm -rf /opt/az || true
+            bsudo rm -rf /usr/local/share/powershell || true
+            sudo rm -rf /opt/host edtoolcache || true
+            docker system prune -af || true
+            docker builder prune -af || true
+            df -h
+           echo "::endgroup::"
 
-      - name: Cleanup runner
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo rm -rf /usr/share/dotnet /usr/share/swift /usr/local/.ghcup \
-            /usr/local/lib/android /usr/local/share/chromium /opt/microsoft \
-            /opt/google /opt/az /usr/local/share/powershell /opt/hostedtoolcache 2>/dev/null || true
-          docker system prune -af 2>/dev/null || true
-          df -h
-
-      - name: Install dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git curl ca-certificates build-essential clang lld flex bison \
-            libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-            libxml2-utils rsync unzip dwarves file python3 ccache wget patch jq \
-            coccinelle kmod bc perl xz-utils zip device-tree-compiler \
-            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
-          sudo apt-get clean
-
+     - name: Install Minimal Dependencies
+       shell: bash
+       run: |
+         set -euo pipefail
+         echo "::group::Install deps"
+         sudo apt-get -o Acquire::Retries=3 update -qq
+         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          git curl ca-certificates build-essential clang lld flex bison \
+          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+          libxml2-utils rsync unzip dwarves file python3 ccache wget patch jq \
+          coccinelle kmod bc perl xz-utils
+         sudo apt-get clean
+         echo "::endgroup::"
+         
       - name: Set manifest
         shell: bash
         run: |
