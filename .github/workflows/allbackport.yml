@@ -247,10 +247,10 @@ jobs:
           CPTCFG_NL80211_TESTMODE=y
           EOF
 
-          yes "" | make "${FLAGS[@]}" \
+          make "${FLAGS[@]}" \
             KLIB="$KERNEL_BUILD" \
             KLIB_BUILD="$KERNEL_BUILD" \
-            oldconfig 2>&1 | tee oldconfig.log
+            olddefconfig 2>&1 | tee oldconfig.log
 
           echo "===== enabled symbols ====="
           grep -E '^(CPTCFG_(CFG80211|MAC80211|MT76|MT792|RTW88|RTL8XXXU|WLAN_VENDOR_).*)=' .config | sort || true
