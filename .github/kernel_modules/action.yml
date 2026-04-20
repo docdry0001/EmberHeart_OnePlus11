@@ -290,47 +290,6 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm -f "$OUT/.config"
 
-    - name: Add nethunter specific drivers already present in kernel to be built as modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM"
-
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK
-
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_ATH \
-          --module CONFIG_ATH_COMMON \
-          --module CONFIG_ATH9K \
-          --module CONFIG_ATH9K_HW \
-          --module CONFIG_ATH9K_HTC \
-          --module CONFIG_ATH9K_COMMON \
-          --module CONFIG_ATH10K \
-          --module CONFIG_ATH10K_USB \
-          --module CONFIG_ATH11K
-
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --module CONFIG_MT7601U \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
-          --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E
-
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
-          --module CONFIG_CAN_SLCAN
-
     - name: Add my kernel patches to msm kernel
       if: env.SOC == 'waipio'
       shell: bash
