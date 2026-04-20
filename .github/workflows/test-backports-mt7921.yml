@@ -30,7 +30,7 @@ on:
           - O2
           - O3
 
-jobs:
+ jobs:
   backports-mt7921-stock-env:
     runs-on: ubuntu-latest
     permissions:
