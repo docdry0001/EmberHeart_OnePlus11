@@ -378,7 +378,7 @@ jobs:
           mt792x-usb.ko
           mt7921-common.ko
           mt7921u.ko
-          EOF
+EOF
           fi
           echo "filename,vermagic,depends" > "$STAGING/module_metadata.csv"
           for ko in $(find "$MODULE_DIR" -type f -name '*.ko'); do
@@ -404,12 +404,60 @@ jobs:
             fi
           done
           echo "Backports modules loaded"
-          EOF
+EOF
           chmod +x "$INSTALL_SH"
           DEPLOY_ZIP="$GITHUB_WORKSPACE/backports-mt7921-deploy-$KVER.zip"
           cd "$STAGING"
           zip -r "$DEPLOY_ZIP" .
           echo "Created deployable package: $DEPLOY_ZIP"
+
+      - name: Prepare Magisk module bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Build a Magisk module that bundles the compiled backports modules.
+          # The resulting zip can be flashed via the Magisk app on the target device.
+          KVER="${KERNEL_VER}"
+          STAGING="$GITHUB_WORKSPACE/deploy"
+          MAGISK_DIR="$GITHUB_WORKSPACE/magisk"
+          MODID="mt7921_backports"
+          MODROOT="$MAGISK_DIR/$MODID"
+          # Clean previous build if exists
+          rm -rf "$MODROOT"
+          mkdir -p "$MODROOT"
+          # Copy the lib/modules tree built in the deploy step into our module
+          if [ -d "$STAGING/lib" ]; then
+            cp -r "$STAGING/lib" "$MODROOT/"
+          fi
+          # Generate a timestamp for versionCode and write module.prop using printf to avoid here-doc expansions
+          VC=$(date +%s)
+          printf "id=%s\nname=MT7921 backports for OP11R\nversion=%s\nversionCode=%s\nauthor=CI\ndescription=Backported MT7921U kernel modules for OnePlus 11R built via CI\n" "$MODID" "$KVER" "$VC" > "$MODROOT/module.prop"
+          # Create a service script that loads all modules on boot in correct order
+          cat <<'EOF_SERVICE' > "$MODROOT/service.sh"
+#!/system/bin/sh
+MODDIR=${0%/*}
+# Find the modules directory (should be lib/modules/<kernel>)
+MOD_PATH=$(find "$MODDIR"/lib/modules -maxdepth 2 -type d -print | sort | tail -n1)
+[ -d "$MOD_PATH" ] || exit 0
+# Load in specified order if modules.load exists, otherwise load all .ko files
+if [ -f "$MOD_PATH/modules.load" ]; then
+  while IFS= read -r mod; do
+    base=$(basename "$mod")
+    if [ -f "$MOD_PATH/$base" ]; then
+      insmod "$MOD_PATH/$base" || modprobe "$MOD_PATH/$base" || true
+    fi
+  done < "$MOD_PATH/modules.load"
+else
+  for ko in "$MOD_PATH"/*.ko; do
+    insmod "$ko" || modprobe "$ko" || true
+  done
+fi
+EOF_SERVICE
+          chmod +x "$MODROOT/service.sh"
+          # Package the module into a zip file. Zip the module directory itself (not the parent).
+          cd "$MAGISK_DIR"
+          zip -r "$GITHUB_WORKSPACE/backports-mt7921-magisk-$KVER.zip" "$MODID"
+          echo "Created Magisk module package: backports-mt7921-magisk-$KVER.zip"
 
       - name: Verify useful outputs exist
         if: always()
@@ -441,11 +489,14 @@ jobs:
           if [ -f "$GITHUB_WORKSPACE/deploy/module_metadata.csv" ]; then
             cp "$GITHUB_WORKSPACE/deploy/module_metadata.csv" artifacts/
           fi
+          # Include the Magisk module zip if it exists
+          MAGISK_ZIP="backports-mt7921-magisk-$KERNEL_VER.zip"
+          if [ -f "$GITHUB_WORKSPACE/$MAGISK_ZIP" ]; then
+            cp "$GITHUB_WORKSPACE/$MAGISK_ZIP" artifacts/
+          fi
           echo "===== ARTIFACT CONTENTS ====="
           find artifacts -maxdepth 5 -type f | sort || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
-        with:
-          name: op11r-backports-mt7921-stable
-          path: artifacts
+    
