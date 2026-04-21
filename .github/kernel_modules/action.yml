@@ -392,7 +392,7 @@ runs:
         cd "$MSM/drivers/net/wireless/mediatek/"
         rm -rf mt76
         git clone https://github.com/morrownr/mt76.git
-        sed -i 's/$(CONFIG_MT76)/m/g' Makefile
+        sed -i 's/$(CONFIG_mt76)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/mediatek\/mt76\/Kconfig"$/s/.*/ /' Kconfig
 
     - name: Detect Clang (toolchain for build)
