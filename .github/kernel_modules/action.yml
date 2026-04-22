@@ -413,15 +413,6 @@ runs:
         grep -q 'mt76/' Makefile || \
           printf '\nobj-$(CONFIG_WLAN_VENDOR_MEDIATEK) += mt76/\n' >> Makefile
 
-    - name: Refresh config after injecting external wireless trees
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-
-        cd "$MSM"
-        make O=out ARCH=arm64 olddefconfig
 
     - name: Detect Clang (toolchain for build)
       shell: bash
