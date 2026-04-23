@@ -259,16 +259,13 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
 
-        # Vendor menus + small helpers only
+        # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK \
-          --enable CONFIG_WLAN_VENDOR_ATH \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --module CONFIG_MAC80211_LEDS \
-          --module CONFIG_CAN_SLCAN
+          --enable CONFIG_WLAN_VENDOR_REALTEK
 
-        # ATH drivers only
+        # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_ATH \
           --module CONFIG_ATH_COMMON \
           --module CONFIG_ATH9K \
           --module CONFIG_ATH9K_HW \
@@ -277,6 +274,30 @@ runs:
           --module CONFIG_ATH10K \
           --module CONFIG_ATH10K_USB \
           --module CONFIG_ATH11K
+
+        # Mediatek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_USB \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT76x02_USB \
+          --module CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT7603E \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x0_COMMON \
+          --module CONFIG_MT7615_COMMON \
+          --module CONFIG_MT7915E \
+          --module CONFIG_MT7921_COMMON \
+          --module CONFIG_MT7921E \
+          --module CONFIG_MT7921S \
+          --module CONFIG_MT7921U
+
+        # Other configs
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --module CONFIG_MAC80211_LEDS \
+          --module CONFIG_CAN_SLCAN
 
     - name: Add my kernel patches to msm kernel
       if: env.SOC == 'waipio'
@@ -393,26 +414,36 @@ runs:
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
-    - name: Add mt76 modules
+    - name: Replace mt76 with prepared zip tree
       shell: bash
       run: |
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
+        TMPDIR="$(mktemp -d)"
 
         cd "$MSM/drivers/net/wireless/mediatek"
-
         rm -rf mt76
-        git clone --depth=1 https://github.com/openwrt/mt76.git mt76
 
-        # Ensure Kconfig points to the injected mt76 tree
+        curl -L \
+          -o "$TMPDIR/mt76.zip" \
+          https://github.com/docdry0001/EmberHeart_OnePlus11/raw/refs/heads/main/.github/mt76.zip
+
+        unzip -q "$TMPDIR/mt76.zip" -d "$TMPDIR"
+
+        test -d "$TMPDIR/mt76" || { echo "mt76 directory not found in zip"; exit 1; }
+        test -f "$TMPDIR/mt76/Makefile" || { echo "mt76 Makefile not found"; exit 1; }
+        test -f "$TMPDIR/mt76/Kconfig" || { echo "mt76 Kconfig not found"; exit 1; }
+
+        mv "$TMPDIR/mt76" ./mt76
+
         grep -q '^source "drivers/net/wireless/mediatek/mt76/Kconfig"$' Kconfig || \
           echo 'source "drivers/net/wireless/mediatek/mt76/Kconfig"' >> Kconfig
 
-        # Ensure Makefile descends into mt76 subtree
         grep -q 'mt76/' Makefile || \
           printf '\nobj-$(CONFIG_WLAN_VENDOR_MEDIATEK) += mt76/\n' >> Makefile
 
+        rm -rf "$TMPDIR"
 
     - name: Detect Clang (toolchain for build)
       shell: bash
