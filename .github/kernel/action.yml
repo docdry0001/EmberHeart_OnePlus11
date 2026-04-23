@@ -706,33 +706,33 @@ runs:
         echo "Nethunter configs applied"
         echo "::endgroup::"
 
-   - name: Integrate backports into common tree
-     shell: bash
-     run: |
-      set -euo pipefail
-      echo "::group::Integrating backports..."
+    - name: Integrate backports into common tree
+      shell: bash
+      run: |
+       set -euo pipefail
+       echo "::group::Integrating backports..."
 
-      WORK="$GITHUB_WORKSPACE"
-      COMMON="$WORK/$CONFIG/kernel_platform/common"
+       WORK="$GITHUB_WORKSPACE"
+       COMMON="$WORK/$CONFIG/kernel_platform/common"
 
-      cd "$WORK"
-      rm -rf backports-src linux-future
-
-      git clone --depth=1 https://github.com/docdry0001/backports.git backports-src
-      git clone --depth=1 --branch v6.6 https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-future
-
-      cd "$WORK/backports-src"
-      python3 ./gentree.py \
-        --integrate \
-        --clean \
-        "$WORK/linux-future" \
-        "$COMMON"
-
-      echo "[*] Integration traces:"
-      find "$COMMON" -maxdepth 4 \( -iname '*backport*' -o -iname '*backports*' \) | sort || true
-      grep -Rni "backport" "$COMMON" | head -n 100 || true
-
-      echo "::endgroup::"
+        cd "$WORK"
+        rm -rf backports-src linux-future
+  
+        git clone --depth=1 https://github.com/docdry0001/backports.git backports-src
+        git clone --depth=1 --branch v6.6 https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux-future
+  
+        cd "$WORK/backports-src"
+        python3 ./gentree.py \
+          --integrate \
+          --clean \
+          "$WORK/linux-future" \
+          "$COMMON"
+  
+        echo "[*] Integration traces:"
+        find "$COMMON" -maxdepth 4 \( -iname '*backport*' -o -iname '*backports*' \) | sort || true
+        grep -Rni "backport" "$COMMON" | head -n 100 || true
+  
+        echo "::endgroup::"
 
     - name: Configure MT7921U-only backports stack
       shell: bash
