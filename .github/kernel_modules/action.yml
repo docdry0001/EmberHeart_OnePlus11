@@ -439,7 +439,6 @@ runs:
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
-
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
