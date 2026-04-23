@@ -364,35 +364,35 @@ runs:
         make defconfig KLIB_BUILD="$OUT" KLIB="$OUT"
 
         cat >> .config <<'EOF'
-CPTCFG_CFG80211=m
-CPTCFG_MAC80211=m
-CPTCFG_MT7601U=m
-CPTCFG_MT76_CORE=m
-CPTCFG_MT76_USB=m
-CPTCFG_MT76x02_LIB=m
-CPTCFG_MT76x02_USB=m
-CPTCFG_MT76_CONNAC_LIB=m
-CPTCFG_MT76x2_COMMON=m
-CPTCFG_MT76x0_COMMON=m
-CPTCFG_MT7615_COMMON=m
-CPTCFG_MT7915E=m
-CPTCFG_MT7921_COMMON=m
-CPTCFG_MT7921E=m
-CPTCFG_MT7921S=m
-CPTCFG_MT7921U=m
-CPTCFG_RT2X00=m
-CPTCFG_RT2X00_LIB=m
-CPTCFG_RT2X00_LIB_FIRMWARE=m
-CPTCFG_RT2X00_USB=m
-CPTCFG_RT2800LIB=m
-CPTCFG_RT2800USB=m
-CPTCFG_RT2800USB_RT33XX=m
-CPTCFG_RT2800USB_RT35XX=m
-CPTCFG_RT2800USB_RT3573=m
-CPTCFG_RT2800USB_RT53XX=m
-CPTCFG_RT2800USB_RT55XX=m
-CPTCFG_RT2800USB_UNKNOWN=m
-EOF
+          CPTCFG_CFG80211=m
+          CPTCFG_MAC80211=m
+          CPTCFG_MT7601U=m
+          CPTCFG_MT76_CORE=m
+          CPTCFG_MT76_USB=m
+          CPTCFG_MT76x02_LIB=m
+          CPTCFG_MT76x02_USB=m
+          CPTCFG_MT76_CONNAC_LIB=m
+          CPTCFG_MT76x2_COMMON=m
+          CPTCFG_MT76x0_COMMON=m
+          CPTCFG_MT7615_COMMON=m
+          CPTCFG_MT7915E=m
+          CPTCFG_MT7921_COMMON=m
+          CPTCFG_MT7921E=m
+          CPTCFG_MT7921S=m
+          CPTCFG_MT7921U=m
+          CPTCFG_RT2X00=m
+          CPTCFG_RT2X00_LIB=m
+          CPTCFG_RT2X00_LIB_FIRMWARE=m
+          CPTCFG_RT2X00_USB=m
+          CPTCFG_RT2800LIB=m
+          CPTCFG_RT2800USB=m
+          CPTCFG_RT2800USB_RT33XX=m
+          CPTCFG_RT2800USB_RT35XX=m
+          CPTCFG_RT2800USB_RT3573=m
+          CPTCFG_RT2800USB_RT53XX=m
+          CPTCFG_RT2800USB_RT55XX=m
+          CPTCFG_RT2800USB_UNKNOWN=m
+          EOF
 
         yes "" | make oldconfig KLIB_BUILD="$OUT" KLIB="$OUT"
 
@@ -496,77 +496,77 @@ EOF
         find "$ART_DIR" -type f -name "*.ko" -exec cp {} "$MOD_DIR/system/vendor/lib/modules/" \;
 
         cat > "$MOD_DIR/module.prop" <<EOF
-id=backports_mt76
-name=Backports MT76 Wireless Stack
-version=6.1.97-1
-versionCode=1
-author=docdry0001
-description=Full backported cfg80211/mac80211 + mt76 + ralink drivers
-EOF
-
+          id=backports_mt76
+          name=Backports MT76 Wireless Stack
+          version=6.1.97-1
+          versionCode=1
+          author=docdry0001
+          description=Full backported cfg80211/mac80211 + mt76 + ralink drivers
+          EOF
+          
         cat > "$MOD_DIR/post-fs-data.sh" <<'EOF'
-#!/system/bin/sh
-MODDIR=${0%/*}
-MODPATH="$MODDIR/system/vendor/lib/modules"
-
-load_if_present() {
-  if [ -f "$MODPATH/$1" ]; then
-    insmod "$MODPATH/$1" 2>/dev/null || true
-  fi
-}
-
-# unload likely conflicting stock modules if they were built as modules
-rmmod mt7921u 2>/dev/null || true
-rmmod mt7921_common 2>/dev/null || true
-rmmod mt76_usb 2>/dev/null || true
-rmmod mt76 2>/dev/null || true
-rmmod rt2800usb 2>/dev/null || true
-rmmod rt2x00usb 2>/dev/null || true
-rmmod rt2x00lib 2>/dev/null || true
-rmmod mac80211 2>/dev/null || true
-rmmod cfg80211 2>/dev/null || true
-
-# backports wireless stack first
-load_if_present compat.ko
-load_if_present cfg80211.ko
-load_if_present mac80211.ko
-
-# common mt76 layers
-load_if_present mt76.ko
-load_if_present mt76-usb.ko
-load_if_present mt76x02-lib.ko
-load_if_present mt76x02-usb.ko
-load_if_present mt76-connac-lib.ko
-load_if_present mt7921-common.ko
-load_if_present mt7921u.ko
-
-# legacy / ralink path
-load_if_present rt2x00lib.ko
-load_if_present rt2x00usb.ko
-load_if_present rt2800lib.ko
-load_if_present rt2800usb.ko
-load_if_present mt7601u.ko
-EOF
+          #!/system/bin/sh
+          MODDIR=${0%/*}
+          MODPATH="$MODDIR/system/vendor/lib/modules"
+          
+          load_if_present() {
+            if [ -f "$MODPATH/$1" ]; then
+              insmod "$MODPATH/$1" 2>/dev/null || true
+            fi
+          }
+          
+          # unload likely conflicting stock modules if they were built as modules
+          rmmod mt7921u 2>/dev/null || true
+          rmmod mt7921_common 2>/dev/null || true
+          rmmod mt76_usb 2>/dev/null || true
+          rmmod mt76 2>/dev/null || true
+          rmmod rt2800usb 2>/dev/null || true
+          rmmod rt2x00usb 2>/dev/null || true
+          rmmod rt2x00lib 2>/dev/null || true
+          rmmod mac80211 2>/dev/null || true
+          rmmod cfg80211 2>/dev/null || true
+          
+          # backports wireless stack first
+          load_if_present compat.ko
+          load_if_present cfg80211.ko
+          load_if_present mac80211.ko
+          
+          # common mt76 layers
+          load_if_present mt76.ko
+          load_if_present mt76-usb.ko
+          load_if_present mt76x02-lib.ko
+          load_if_present mt76x02-usb.ko
+          load_if_present mt76-connac-lib.ko
+          load_if_present mt7921-common.ko
+          load_if_present mt7921u.ko
+          
+          # legacy / ralink path
+          load_if_present rt2x00lib.ko
+          load_if_present rt2x00usb.ko
+          load_if_present rt2800lib.ko
+          load_if_present rt2800usb.ko
+          load_if_present mt7601u.ko
+          EOF
         chmod +x "$MOD_DIR/post-fs-data.sh"
 
         cat > "$MOD_DIR/service.sh" <<'EOF'
-#!/system/bin/sh
-sleep 10
-MODDIR=${0%/*}
-MODPATH="$MODDIR/system/vendor/lib/modules"
-
-for m in "$MODPATH"/*.ko; do
-  [ -f "$m" ] || continue
-  insmod "$m" 2>/dev/null || true
-done
-EOF
+          #!/system/bin/sh
+          sleep 10
+          MODDIR=${0%/*}
+          MODPATH="$MODDIR/system/vendor/lib/modules"
+          
+          for m in "$MODPATH"/*.ko; do
+            [ -f "$m" ] || continue
+            insmod "$m" 2>/dev/null || true
+          done
+          EOF
         chmod +x "$MOD_DIR/service.sh"
 
         cat > "$MOD_DIR/customize.sh" <<'EOF'
-#!/system/bin/sh
-ui_print "Installing backports wireless stack..."
-ui_print "Modules will be placed under /system/vendor/lib/modules"
-EOF
+          #!/system/bin/sh
+          ui_print "Installing backports wireless stack..."
+          ui_print "Modules will be placed under /system/vendor/lib/modules"
+          EOF
         chmod +x "$MOD_DIR/customize.sh"
 
         cd "$MOD_DIR"
