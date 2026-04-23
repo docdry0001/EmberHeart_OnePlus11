@@ -251,31 +251,31 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
-- name: Replace mt76 with prepared zip tree
-  shell: bash
-  run: |
-    set -euo pipefail
-    KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-    MSM="$KERNEL_PATH/msm-kernel"
-    TMPDIR="$(mktemp -d)"
-
-    cd "$MSM/drivers/net/wireless/mediatek"
-    rm -rf mt76
-
-    curl -L \
-      -o "$TMPDIR/mt76.zip" \
-      https://github.com/docdry0001/EmberHeart_OnePlus11/raw/refs/heads/main/.github/mt76.zip
-
-    unzip -q "$TMPDIR/mt76.zip" -d "$TMPDIR"
-
-    test -d "$TMPDIR/mt76" || { echo "mt76 directory not found in zip"; exit 1; }
-    test -f "$TMPDIR/mt76/Makefile" || { echo "mt76 Makefile not found"; exit 1; }
-    test -f "$TMPDIR/mt76/Kconfig" || { echo "mt76 Kconfig not found"; exit 1; }
-
-    mv "$TMPDIR/mt76" ./mt76
-
-    rm -rf "$TMPDIR"
-
+    - name: Replace mt76 with prepared zip tree
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        TMPDIR="$(mktemp -d)"
+    
+        cd "$MSM/drivers/net/wireless/mediatek"
+        rm -rf mt76
+    
+        curl -L \
+          -o "$TMPDIR/mt76.zip" \
+          https://github.com/docdry0001/EmberHeart_OnePlus11/raw/refs/heads/main/.github/mt76.zip
+    
+        unzip -q "$TMPDIR/mt76.zip" -d "$TMPDIR"
+    
+        test -d "$TMPDIR/mt76" || { echo "mt76 directory not found in zip"; exit 1; }
+        test -f "$TMPDIR/mt76/Makefile" || { echo "mt76 Makefile not found"; exit 1; }
+        test -f "$TMPDIR/mt76/Kconfig" || { echo "mt76 Kconfig not found"; exit 1; }
+    
+        mv "$TMPDIR/mt76" ./mt76
+    
+        rm -rf "$TMPDIR"
+    
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
