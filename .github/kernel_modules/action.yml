@@ -289,6 +289,9 @@ runs:
         export SUBARCH=arm64
         export LLVM=1
         export LLVM_IAS=1
+        export CLANG_TRIPLE=aarch64-linux-gnu-
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
         export CC="$CLANG_BIN_PATH/clang"
         export LD=ld.lld
         export AR=llvm-ar
@@ -303,8 +306,30 @@ runs:
 
         cd "$MSM"
 
-        make O="$OUT" ARCH="$ARCH" olddefconfig
-        make O="$OUT" ARCH="$ARCH" prepare modules_prepare
+        MAKE_ARGS=(
+          O="$OUT"
+          ARCH="$ARCH"
+          SUBARCH="$SUBARCH"
+          LLVM="$LLVM"
+          LLVM_IAS="$LLVM_IAS"
+          CLANG_TRIPLE="$CLANG_TRIPLE"
+          CROSS_COMPILE="$CROSS_COMPILE"
+          CROSS_COMPILE_COMPAT="$CROSS_COMPILE_COMPAT"
+          CC="$CC"
+          LD="$LD"
+          AR="$AR"
+          NM="$NM"
+          OBJCOPY="$OBJCOPY"
+          OBJDUMP="$OBJDUMP"
+          STRIP="$STRIP"
+          HOSTCC="$HOSTCC"
+          HOSTCXX="$HOSTCXX"
+          DTC="$DTC"
+          DEPMOD="$DEPMOD"
+        )
+
+        make "${MAKE_ARGS[@]}" olddefconfig
+        make "${MAKE_ARGS[@]}" prepare modules_prepare
 
         test -f "$OUT/include/generated/autoconf.h"
         test -f "$OUT/include/config/auto.conf"
@@ -349,6 +374,9 @@ runs:
         export SUBARCH=arm64
         export LLVM=1
         export LLVM_IAS=1
+        export CLANG_TRIPLE=aarch64-linux-gnu-
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
         export CC="$CLANG_BIN_PATH/clang"
         export LD=ld.lld
         export AR=llvm-ar
@@ -412,6 +440,9 @@ runs:
         export SUBARCH=arm64
         export LLVM=1
         export LLVM_IAS=1
+        export CLANG_TRIPLE=aarch64-linux-gnu-
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
         export CC="$CLANG_BIN_PATH/clang"
         export LD=ld.lld
         export AR=llvm-ar
@@ -429,8 +460,12 @@ runs:
           KLIB_BUILD="$OUT" \
           KLIB="$OUT" \
           ARCH="$ARCH" \
+          SUBARCH="$SUBARCH" \
           LLVM="$LLVM" \
           LLVM_IAS="$LLVM_IAS" \
+          CLANG_TRIPLE="$CLANG_TRIPLE" \
+          CROSS_COMPILE="$CROSS_COMPILE" \
+          CROSS_COMPILE_COMPAT="$CROSS_COMPILE_COMPAT" \
           CC="$CC" \
           LD="$LD" \
           AR="$AR" \
@@ -503,7 +538,7 @@ runs:
           author=docdry0001
           description=Full backported cfg80211/mac80211 + mt76 + ralink drivers
           EOF
-          
+
         cat > "$MOD_DIR/post-fs-data.sh" <<'EOF'
           #!/system/bin/sh
           MODDIR=${0%/*}
@@ -515,7 +550,6 @@ runs:
             fi
           }
           
-          # unload likely conflicting stock modules if they were built as modules
           rmmod mt7921u 2>/dev/null || true
           rmmod mt7921_common 2>/dev/null || true
           rmmod mt76_usb 2>/dev/null || true
@@ -526,12 +560,10 @@ runs:
           rmmod mac80211 2>/dev/null || true
           rmmod cfg80211 2>/dev/null || true
           
-          # backports wireless stack first
           load_if_present compat.ko
           load_if_present cfg80211.ko
           load_if_present mac80211.ko
           
-          # common mt76 layers
           load_if_present mt76.ko
           load_if_present mt76-usb.ko
           load_if_present mt76x02-lib.ko
@@ -540,7 +572,6 @@ runs:
           load_if_present mt7921-common.ko
           load_if_present mt7921u.ko
           
-          # legacy / ralink path
           load_if_present rt2x00lib.ko
           load_if_present rt2x00usb.ko
           load_if_present rt2800lib.ko
