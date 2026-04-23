@@ -17,6 +17,10 @@ inputs:
     required: true
     type: string
     default: OOS16
+  backports_release:
+    required: false
+    type: string
+    default: backports-6.1.97-1
 
 runs:
   using: composite
@@ -30,588 +34,437 @@ runs:
         echo "Parsed config:"
         jq '.' /tmp/config.json
 
-    - name: Set Manifest
+    - name: Set manifest
       shell: bash
       run: |
         set -euo pipefail
         echo "MANIFEST=$MANIFEST_${{ inputs.manifest }}_MODULES" >> "$GITHUB_ENV"
 
-    - name: Validate Inputs
+    - name: Validate inputs
       shell: bash
       run: |
         set -euo pipefail
-        echo "::group::Validate inputs"
-        model="$MODEL"
-        soc="$SOC"
-        branch="$BRANCH"
-        manifest="$MANIFEST"
-        optimize='${{ inputs.optimize_level }}'
+        [[ -n "${MODEL:-}" ]] || { echo "MODEL is empty"; exit 1; }
+        [[ -n "${SOC:-}" ]] || { echo "SOC is empty"; exit 1; }
+        [[ -n "${BRANCH:-}" ]] || { echo "BRANCH is empty"; exit 1; }
+        [[ -n "${MANIFEST:-}" ]] || { echo "MANIFEST is empty"; exit 1; }
+        [[ -n "${CONFIG:-}" ]] || { echo "CONFIG is empty"; exit 1; }
 
-        [[ -n "$model" ]] || { echo "Input 'model' cannot be empty"; exit 1; }
-        [[ -n "$soc" ]] || { echo "Input 'soc' cannot be empty"; exit 1; }
-        [[ -n "$branch" ]] || { echo "Input 'branch' cannot be empty"; exit 1; }
-        [[ -n "$manifest" ]] || { echo "Input 'manifest' cannot be empty"; exit 1; }
-
-        if ! [[ "$soc" =~ ^[A-Za-z0-9_-]+$ ]]; then
-          echo "Input 'soc' contains invalid characters. Allowed: letters, digits, underscore, dash"
-          exit 1
-        fi
-
-        if ! [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-          echo "Input 'branch' contains invalid characters. Allowed: letters, digits, ., _, -, /"
-          exit 1
-        fi
-
-        if [[ "$manifest" == http*://* ]]; then
-          if ! [[ "$manifest" =~ ^https:// ]]; then
-            echo "Manifest URL must be HTTPS"
-            exit 1
-          fi
-          if ! [[ "$manifest" =~ \.xml($|\?) ]]; then
-            echo "Manifest URL should point to an XML file (.xml)"
-            exit 1
-          fi
-        else
-          if ! [[ "$manifest" =~ \.xml$ ]]; then
-            echo "Manifest filename must end with .xml"
-            exit 1
-          fi
-          if [[ "$manifest" =~ [[:space:]] ]]; then
-            echo "Manifest filename cannot contain spaces"
-            exit 1
-          fi
-        fi
-
-        case "$optimize" in
-          O2|O3) ;;
-          *)
-            echo "optimize_level must be O2 or O3; got '$optimize'"
-            exit 1
-            ;;
-        esac
-        echo "Input validation OK."
-        echo "::endgroup::"
-
-    - name: Aggressive cleanup
+    - name: Cleanup runner
       shell: bash
       run: |
         set -euo pipefail
-        echo "::group::Cleanup space"
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/share/swift
-        sudo rm -rf /usr/local/.ghcup
-        sudo rm -rf /usr/local/julia*
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /usr/local/share/chromium
-        sudo rm -rf /opt/microsoft /opt/google
-        sudo rm -rf /opt/az
-        sudo rm -rf /usr/local/share/powershell
-        sudo rm -rf /opt/hostedtoolcache
+        sudo rm -rf /usr/share/dotnet /usr/share/swift /usr/local/.ghcup /usr/local/julia* \
+          /usr/local/lib/android /usr/local/share/chromium /opt/microsoft /opt/google \
+          /opt/az /usr/local/share/powershell /opt/hostedtoolcache || true
         docker system prune -af || true
         docker builder prune -af || true
         df -h
-        echo "::endgroup::"
 
-    - name: Install Minimal Dependencies
+    - name: Install dependencies
       shell: bash
       run: |
         set -euo pipefail
-        echo "::group::Install deps"
-        sudo apt-get -o Acquire::Retries=3 update -qq
+        sudo apt-get update -qq
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           git curl ca-certificates build-essential clang lld llvm flex bison \
           libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache jq xz-utils bc kmod zip
+          libxml2-utils rsync unzip dwarves file python3 ccache wget patch jq \
+          coccinelle kmod bc perl xz-utils zip
         sudo apt-get clean
-        echo "::endgroup::"
 
-    - name: Setup Base Environment
+    - name: Install repo tool
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG="$MODEL"
-        echo "CONFIG=$CONFIG" >> "$GITHUB_ENV"
+        sudo curl -L https://storage.googleapis.com/git-repo-downloads/repo -o /usr/local/bin/repo
+        sudo chmod +x /usr/local/bin/repo
+        repo --version
 
-        REPO="/usr/local/bin/repo"
-        if [ ! -x "$REPO" ]; then
-          curl -s https://storage.googleapis.com/git-repo-downloads/repo -o "$REPO"
-          chmod +x "$REPO"
-        fi
-        echo "REPO=$REPO" >> "$GITHUB_ENV"
-
-        CLANG_BIN_PATH="$(dirname "$(command -v clang)")"
-        echo "CLANG_BIN_PATH=$CLANG_BIN_PATH" >> "$GITHUB_ENV"
-
-    - name: Initialize and Sync Kernel Source
+    - name: Sync kernel source
       shell: bash
       run: |
         set -euo pipefail
-        echo "Creating folder for configuration: $CONFIG"
         mkdir -p "$CONFIG"
         cd "$CONFIG"
 
-        echo "Initializing and syncing kernel source..."
-        if [[ "$MANIFEST" == https://* ]]; then
-          mkdir -p .repo/manifests
-          curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-        else
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
-        fi
+        repo init -u https://github.com/OnePlusOSS/kernel_manifest.git \
+          -b "$BRANCH" \
+          -m "$MANIFEST" \
+          --repo-rev=v2.16 \
+          --depth=1 \
+          --no-clone-bundle \
+          --no-tags
 
-        "$REPO" --version
-        success=false
+        ok=false
         for i in 1 2 3; do
-          if "$REPO" sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
-            success=true
+          if repo sync -c --no-clone-bundle --no-tags --optimized-fetch -j"$(nproc --all)" --fail-fast; then
+            ok=true
             break
           fi
-          echo "repo sync attempt $i failed; retrying..."
-          sleep 30
+          echo "repo sync attempt $i failed"
+          sleep 20
         done
-        $success || { echo "repo sync failed after 3 attempts"; exit 1; }
+        $ok || { echo "repo sync failed"; exit 1; }
 
-    - name: Get Kernel Version Info
+    - name: Detect kernel version and prepare msm tree
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        ARTIFACTS_DIR="$CONFIG_DIR/artifacts"
-        mkdir -p "$ARTIFACTS_DIR"
-
-        cd "$CONFIG_DIR/kernel_platform/msm-kernel"
-
-        CONFIG_FILES=("build.config.common" "build.config.constants")
-        BRANCH_LINE=""
-        for f in "${CONFIG_FILES[@]}"; do
-          if [ -f "$f" ]; then
-            l=$(grep '^[[:space:]]*BRANCH=' "$f" || true)
-            if [ -n "$l" ]; then
-              BRANCH_LINE="$l"
-              break
-            fi
-          fi
-        done
-
-        if [ -z "$BRANCH_LINE" ]; then
-          echo "Error: No BRANCH= found"
-          exit 1
-        fi
-
-        BRANCH_VALUE="${BRANCH_LINE#*=}"
-        ANDROID_VERSION="${BRANCH_VALUE%-*}"
-        if [ -z "$ANDROID_VERSION" ]; then
-          echo "Could not parse android version from BRANCH=$BRANCH_VALUE"
-          exit 1
-        fi
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        cd "$MSM"
 
         VERSION=$(grep '^VERSION *=' Makefile | awk '{print $3}')
         PATCHLEVEL=$(grep '^PATCHLEVEL *=' Makefile | awk '{print $3}')
         SUBLEVEL=$(grep '^SUBLEVEL *=' Makefile | awk '{print $3}')
-        FULL_VERSION="$VERSION.$PATCHLEVEL.$SUBLEVEL"
+        echo "KERNEL_VER=$VERSION.$PATCHLEVEL.$SUBLEVEL" >> "$GITHUB_ENV"
 
-        cd "$ARTIFACTS_DIR"
-        echo "ANDROID_VER=$ANDROID_VERSION" >> "$GITHUB_ENV"
-        echo "KERNEL_VER=$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
-        echo "KERNEL_FULL_VER=$ANDROID_VERSION-$FULL_VERSION" >> "$GITHUB_ENV"
-        echo "SUSFS_KERNEL_BRANCH=gki-$ANDROID_VERSION-$VERSION.$PATCHLEVEL" >> "$GITHUB_ENV"
-
-    - name: Setup ccache
-      uses: hendrikmuhs/ccache-action@v1.2.19
-      with:
-        key: ${{ env.CONFIG }}-modules-${{ env.KERNEL_FULL_VER }}
-        max-size: 5G
-        append-timestamp: false
-        create-symlink: true
-        job-summary: 'CCache stats'
-        evict-old-files: 'job'
-
-    - name: Clean Up ABI Protected Exports
-      shell: bash
-      run: |
-        set -euo pipefail
-        cd "$CONFIG/kernel_platform"
-        rm -f msm-kernel/android/abi_gki_protected_exports_* || true
-        df -h
-
-    - name: Disable stock wireless stack for full backports
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-
-        cd "$MSM"
-        chmod +x ./scripts/config
-
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --disable CONFIG_CFG80211 \
-          --disable CONFIG_MAC80211 \
-          --disable CONFIG_MT76_CORE \
-          --disable CONFIG_MT7601U \
-          --disable CONFIG_RT2X00 \
-          --disable CONFIG_RT2800USB || true
-
-        echo "[+] Stock wireless stack disabled in gki_defconfig"
-        grep -E 'CONFIG_(CFG80211|MAC80211|MT76_CORE|MT7601U|RT2X00|RT2800USB)' \
-          arch/arm64/configs/gki_defconfig || true
-
-    - name: Merge kernel defconfig
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        OUT=out
-
-        cd "$MSM"
         make ARCH=arm64 mrproper
-        mkdir -p "$OUT"
+        mkdir -p out
 
-        ./scripts/kconfig/merge_config.sh -O "$OUT" -m \
+        ./scripts/kconfig/merge_config.sh -O out -m \
           arch/arm64/configs/gki_defconfig \
           arch/arm64/configs/vendor/${SOC}_GKI.config
 
-        cp "$OUT/.config" arch/arm64/configs/gki_defconfig
-        rm "$OUT/.config"
+        cp out/.config arch/arm64/configs/gki_defconfig
+        make O=out ARCH=arm64 olddefconfig </dev/null
 
-        echo "[+] Kernel defconfig merged"
-
-    - name: Prepare kernel tree for external modules
+    - name: Detect clang
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        MSM="$CONFIG_DIR/kernel_platform/msm-kernel"
+        KP="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        FOUND=false
+        for base in "$KP/prebuilts" "$KP/prebuilts-master"; do
+          [ -d "$base/clang/host/linux-x86" ] || continue
+          latest=$(ls -d "$base"/clang/host/linux-x86/clang-r*/ 2>/dev/null | sort -V | tail -n1 || true)
+          if [ -n "$latest" ] && [ -x "$latest/bin/clang" ]; then
+            echo "CLANG_BIN=$latest/bin" >> "$GITHUB_ENV"
+            FOUND=true
+            break
+          fi
+        done
+        if ! $FOUND; then
+          echo "CLANG_BIN=$(dirname "$(command -v clang)")" >> "$GITHUB_ENV"
+        fi
+
+    - name: Build kernel prepare targets for backports
+      shell: bash
+      run: |
+        set -euo pipefail
+        MSM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
         OUT="$MSM/out"
 
-        export ARCH=arm64
-        export SUBARCH=arm64
-        export LLVM=1
-        export LLVM_IAS=1
-        export CLANG_TRIPLE=aarch64-linux-gnu-
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-        export CC="$CLANG_BIN_PATH/clang"
-        export LD=ld.lld
-        export AR=llvm-ar
-        export NM=llvm-nm
-        export OBJCOPY=llvm-objcopy
-        export OBJDUMP=llvm-objdump
-        export STRIP=llvm-strip
-        export HOSTCC="$CLANG_BIN_PATH/clang"
-        export HOSTCXX="$CLANG_BIN_PATH/clang++"
-        export DTC=dtc
-        export DEPMOD=depmod
+        if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+          export PATH="${CLANG_BIN}:$PATH"
+        fi
+        export PATH="/usr/lib/ccache:$PATH"
 
-        cd "$MSM"
-
-        MAKE_ARGS=(
-          O="$OUT"
-          ARCH="$ARCH"
-          SUBARCH="$SUBARCH"
-          LLVM="$LLVM"
-          LLVM_IAS="$LLVM_IAS"
-          CLANG_TRIPLE="$CLANG_TRIPLE"
-          CROSS_COMPILE="$CROSS_COMPILE"
-          CROSS_COMPILE_COMPAT="$CROSS_COMPILE_COMPAT"
-          CC="$CC"
-          LD="$LD"
-          AR="$AR"
-          NM="$NM"
-          OBJCOPY="$OBJCOPY"
-          OBJDUMP="$OBJDUMP"
-          STRIP="$STRIP"
-          HOSTCC="$HOSTCC"
-          HOSTCXX="$HOSTCXX"
-          DTC="$DTC"
-          DEPMOD="$DEPMOD"
+        MAKE_FLAGS=(
+          LLVM=1
+          LLVM_IAS=1
+          ARCH=arm64
+          SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          LD=ld.lld
+          HOSTLD=ld.lld
+          AR=llvm-ar
+          NM=llvm-nm
+          OBJCOPY=llvm-objcopy
+          OBJDUMP=llvm-objdump
+          DEPMOD=depmod
+          DTC=dtc
+          STRIP=llvm-strip
+          HOSTCC=clang
+          HOSTCXX=clang++
+          CC=ccache\ clang
         )
 
-        make "${MAKE_ARGS[@]}" olddefconfig
-        make "${MAKE_ARGS[@]}" prepare modules_prepare
+        cd "$MSM"
+        mkdir -p "$OUT"
 
-        test -f "$OUT/include/generated/autoconf.h"
-        test -f "$OUT/include/config/auto.conf"
+        make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
-        echo "[+] Kernel tree prepared for external modules"
+        if [ -x ./scripts/config ]; then
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_CFI_CLANG || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_LTO_CLANG_THIN || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_SHADOW_CALL_STACK || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_SW_TAGS || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_KASAN_HW_TAGS || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_TRAP || true
+          ./scripts/config --file "$OUT/.config" --disable CONFIG_UBSAN_BOUNDS || true
+        fi
 
-    - name: Download and extract official backports
+        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig </dev/null
+        make "${MAKE_FLAGS[@]}" O="$OUT" prepare
+        make "${MAKE_FLAGS[@]}" O="$OUT" modules_prepare
+
+        ls -l "$OUT/include/generated/autoconf.h" || true
+        ls -l "$OUT/include/config/auto.conf" || true
+        ls -ld "$OUT/arch/arm64/include/generated" || true
+        grep -E 'CONFIG_(CFI|CFI_CLANG|LTO_CLANG|LTO_CLANG_THIN|SHADOW_CALL_STACK|KASAN|UBSAN)=' "$OUT/.config" || true
+
+    - name: Download stable backports release
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        BP_DIR="$CONFIG_DIR/backports-src"
+        RELEASE="${{ inputs.backports_release }}"
+        URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/${RELEASE}.tar.xz"
 
-        rm -rf "$BP_DIR"
-        mkdir -p "$BP_DIR"
-        cd "$CONFIG_DIR"
+        wget -O backports.tar.xz "$URL"
+        tar -xf backports.tar.xz
+        rm -rf backports-stable
+        mv "$RELEASE" backports-stable
 
-        curl -L \
-          -o backports-6.1.97-1.tar.xz \
-          https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz
-
-        tar -xJf backports-6.1.97-1.tar.xz -C "$BP_DIR" --strip-components=1
-
-        test -f "$BP_DIR/Makefile"
-        test -d "$BP_DIR/compat"
-        test -d "$BP_DIR/net"
-        test -d "$BP_DIR/drivers"
-
-        echo "[+] Official backports unpacked"
-        find "$BP_DIR" -maxdepth 2 -type d | sort | sed -n '1,120p'
-
-    - name: Configure official backports package
+    - name: Inspect stable backports package
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        BP_DIR="$CONFIG_DIR/backports-src"
-        MSM="$CONFIG_DIR/kernel_platform/msm-kernel"
-        OUT="$MSM/out"
+        cd "$GITHUB_WORKSPACE/backports-stable"
 
-        export ARCH=arm64
-        export SUBARCH=arm64
-        export LLVM=1
-        export LLVM_IAS=1
-        export CLANG_TRIPLE=aarch64-linux-gnu-
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-        export CC="$CLANG_BIN_PATH/clang"
-        export LD=ld.lld
-        export AR=llvm-ar
-        export NM=llvm-nm
-        export OBJCOPY=llvm-objcopy
-        export OBJDUMP=llvm-objdump
-        export STRIP=llvm-strip
-        export HOSTCC="$CLANG_BIN_PATH/clang"
-        export HOSTCXX="$CLANG_BIN_PATH/clang++"
+        echo "===== RELEVANT FILES ====="
+        find . -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' | head -300 || true
 
-        cd "$BP_DIR"
+        echo "===== RELEVANT CONFIG ENTRIES ====="
+        grep -Rns "config .*MT7921\|config .*MT76\|config .*CFG80211\|config .*MAC80211" . || true
 
-        make defconfig KLIB_BUILD="$OUT" KLIB="$OUT"
-
-        cat >> .config <<'EOF'
-          CPTCFG_CFG80211=m
-          CPTCFG_MAC80211=m
-          CPTCFG_MT7601U=m
-          CPTCFG_MT76_CORE=m
-          CPTCFG_MT76_USB=m
-          CPTCFG_MT76x02_LIB=m
-          CPTCFG_MT76x02_USB=m
-          CPTCFG_MT76_CONNAC_LIB=m
-          CPTCFG_MT76x2_COMMON=m
-          CPTCFG_MT76x0_COMMON=m
-          CPTCFG_MT7615_COMMON=m
-          CPTCFG_MT7915E=m
-          CPTCFG_MT7921_COMMON=m
-          CPTCFG_MT7921E=m
-          CPTCFG_MT7921S=m
-          CPTCFG_MT7921U=m
-          CPTCFG_RT2X00=m
-          CPTCFG_RT2X00_LIB=m
-          CPTCFG_RT2X00_LIB_FIRMWARE=m
-          CPTCFG_RT2X00_USB=m
-          CPTCFG_RT2800LIB=m
-          CPTCFG_RT2800USB=m
-          CPTCFG_RT2800USB_RT33XX=m
-          CPTCFG_RT2800USB_RT35XX=m
-          CPTCFG_RT2800USB_RT3573=m
-          CPTCFG_RT2800USB_RT53XX=m
-          CPTCFG_RT2800USB_RT55XX=m
-          CPTCFG_RT2800USB_UNKNOWN=m
-          EOF
-
-        yes "" | make oldconfig KLIB_BUILD="$OUT" KLIB="$OUT"
-
-        echo "[+] Backports config ready"
-        grep -E 'CPTCFG_(CFG80211|MAC80211|MT76|MT7921|MT7601|RT2X00|RT2800)' .config || true
-
-    - name: Build official backports modules
+    - name: Configure stable backports for MT7921U
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        BP_DIR="$CONFIG_DIR/backports-src"
-        MSM="$CONFIG_DIR/kernel_platform/msm-kernel"
-        OUT="$MSM/out"
+        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
 
-        export ARCH=arm64
-        export SUBARCH=arm64
-        export LLVM=1
-        export LLVM_IAS=1
-        export CLANG_TRIPLE=aarch64-linux-gnu-
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-        export CC="$CLANG_BIN_PATH/clang"
-        export LD=ld.lld
-        export AR=llvm-ar
-        export NM=llvm-nm
-        export OBJCOPY=llvm-objcopy
-        export OBJDUMP=llvm-objdump
-        export STRIP=llvm-strip
-        export HOSTCC="$CLANG_BIN_PATH/clang"
-        export HOSTCXX="$CLANG_BIN_PATH/clang++"
-        export KCFLAGS="-Wno-error"
+        if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+          export PATH="${CLANG_BIN}:$PATH"
+        fi
+        export PATH="/usr/lib/ccache:$PATH"
 
-        cd "$BP_DIR"
+        MAKE_FLAGS=(
+          LLVM=1
+          LLVM_IAS=1
+          ARCH=arm64
+          SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          LD=ld.lld
+          HOSTLD=ld.lld
+          AR=llvm-ar
+          NM=llvm-nm
+          OBJCOPY=llvm-objcopy
+          OBJDUMP=llvm-objdump
+          DEPMOD=depmod
+          DTC=dtc
+          STRIP=llvm-strip
+          HOSTCC=clang
+          HOSTCXX=clang++
+          CC=clang
+        )
 
-        make -j"$(nproc --all)" \
-          KLIB_BUILD="$OUT" \
-          KLIB="$OUT" \
-          ARCH="$ARCH" \
-          SUBARCH="$SUBARCH" \
-          LLVM="$LLVM" \
-          LLVM_IAS="$LLVM_IAS" \
-          CLANG_TRIPLE="$CLANG_TRIPLE" \
-          CROSS_COMPILE="$CROSS_COMPILE" \
-          CROSS_COMPILE_COMPAT="$CROSS_COMPILE_COMPAT" \
-          CC="$CC" \
-          LD="$LD" \
-          AR="$AR" \
-          NM="$NM" \
-          OBJCOPY="$OBJCOPY" \
-          OBJDUMP="$OBJDUMP" \
-          STRIP="$STRIP" \
-          HOSTCC="$HOSTCC" \
-          HOSTCXX="$HOSTCXX" \
-          modules
+        cd "$GITHUB_WORKSPACE/backports-stable"
 
-        echo "[+] Built backports modules"
-        find . -type f -name '*.ko' | sort
+        make "${MAKE_FLAGS[@]}" \
+          KLIB="$KERNEL_BUILD" \
+          KLIB_BUILD="$KERNEL_BUILD" \
+          allnoconfig
 
-    - name: Collect official backports modules
+        printf '%s\n' \
+        'CPTCFG_WLAN=y' \
+        'CPTCFG_CFG80211=y' \
+        'CPTCFG_MAC80211=y' \
+        'CPTCFG_WLAN_VENDOR_MEDIATEK=y' \
+        'CPTCFG_MT76_CORE=m' \
+        'CPTCFG_MT76_USB=m' \
+        'CPTCFG_MT76_CONNAC_LIB=m' \
+        'CPTCFG_MT792x_LIB=m' \
+        'CPTCFG_MT792x_USB=m' \
+        'CPTCFG_MT7921_COMMON=m' \
+        'CPTCFG_MT7921U=m' \
+        'CPTCFG_USB=y' \
+        'CPTCFG_PCI=y' \
+        'CPTCFG_NL80211_TESTMODE=y' >> .config
+
+        make "${MAKE_FLAGS[@]}" \
+          KLIB="$KERNEL_BUILD" \
+          KLIB_BUILD="$KERNEL_BUILD" \
+          olddefconfig </dev/null || true
+
+        grep -E 'CPTCFG_MT7921U|CPTCFG_MT7921_COMMON|CPTCFG_MT792x_USB|CPTCFG_MT792x_LIB|CPTCFG_MT76_USB|CPTCFG_MT76_CORE|CPTCFG_CFG80211|CPTCFG_MAC80211|CPTCFG_WLAN_VENDOR_MEDIATEK|CPTCFG_WLAN=' .config || true
+
+        if ! grep -q '^CPTCFG_MT7921U=m' .config && ! grep -q '^CPTCFG_MT7921U=y' .config; then
+          echo "MT7921U symbol is NOT enabled."
+          exit 1
+        fi
+
+    - name: Patch backports compat for OnePlus CFI macros
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        BP_DIR="$CONFIG_DIR/backports-src"
-        ART_DIR="$CONFIG_DIR/artifacts/backports-modules"
+        cd "$GITHUB_WORKSPACE/backports-stable"
 
-        rm -rf "$ART_DIR"
-        mkdir -p "$ART_DIR"
+        FILE="backport-include/linux/module.h"
+        grep -n "__CFI_ADDRESSABLE" "$FILE" || true
 
-        while IFS= read -r -d '' f; do
-          cp "$f" "$ART_DIR/"
-        done < <(find "$BP_DIR" -type f -name '*.ko' -print0)
+        sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
+        sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
 
-        cp "$BP_DIR/Module.symvers" "$ART_DIR/" 2>/dev/null || true
-        cp "$BP_DIR/modules.order" "$ART_DIR/" 2>/dev/null || true
+        grep -n "__CFI_ADDRESSABLE" "$FILE" || true
 
-        echo "[+] Collected backports artifacts"
-        find "$ART_DIR" -type f | sort
-
-    - name: Create official backports zip
+    - name: Build stable backports against OP11R kernel tree
       shell: bash
       run: |
         set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        ART_DIR="$CONFIG_DIR/artifacts/backports-modules"
-        ZIP_OUT="$CONFIG_DIR/artifacts/backports-6.1.97-1-modules.zip"
+        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
 
-        cd "$ART_DIR"
-        zip -r "$ZIP_OUT" .
+        if [ -n "${CLANG_BIN:-}" ] && [ -x "${CLANG_BIN}/clang" ]; then
+          export PATH="${CLANG_BIN}:$PATH"
+        fi
+        export PATH="/usr/lib/ccache:$PATH"
 
-        echo "[+] Created $ZIP_OUT"
-        ls -lh "$ZIP_OUT"
+        MAKE_FLAGS=(
+          LLVM=1
+          LLVM_IAS=1
+          ARCH=arm64
+          SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          LD=ld.lld
+          HOSTLD=ld.lld
+          AR=llvm-ar
+          NM=llvm-nm
+          OBJCOPY=llvm-objcopy
+          OBJDUMP=llvm-objdump
+          DEPMOD=depmod
+          DTC=dtc
+          STRIP=llvm-strip
+          HOSTCC=clang
+          HOSTCXX=clang++
+          CC=clang
+        )
 
-    - name: Create Magisk module from backports modules
+        cd "$GITHUB_WORKSPACE/backports-stable"
+
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
+          KLIB="$KERNEL_BUILD" \
+          KLIB_BUILD="$KERNEL_BUILD" \
+          V=1 \
+          2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log"
+
+        KO_COUNT=$(find . -type f -name '*.ko' | wc -l || true)
+        echo "KO_COUNT=$KO_COUNT"
+
+        if [ "$KO_COUNT" -eq 0 ]; then
+          echo "Build completed without producing any .ko modules."
+          exit 1
+        fi
+
+    - name: Collect artifacts
+      if: always()
       shell: bash
       run: |
         set -euo pipefail
+        mkdir -p artifacts
 
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        ART_DIR="$CONFIG_DIR/artifacts/backports-modules"
-        MOD_DIR="$CONFIG_DIR/artifacts/magisk-module"
-        ZIP_OUT="$CONFIG_DIR/artifacts/backports-magisk-module.zip"
+        [ -f "$GITHUB_WORKSPACE/backports-stable/.config" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/.config" artifacts/backports.config || true
+        [ -f "$GITHUB_WORKSPACE/backports-build.log" ] && cp -f "$GITHUB_WORKSPACE/backports-build.log" artifacts/ || true
+        [ -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" ] && cp -f "$GITHUB_WORKSPACE/backports-stable/Module.symvers" artifacts/ || true
 
-        rm -rf "$MOD_DIR"
-        mkdir -p "$MOD_DIR/system/vendor/lib/modules"
+        find "$GITHUB_WORKSPACE/backports-stable" -type f -name '*.ko' -exec cp --parents {} artifacts/ \; || true
+        find "$GITHUB_WORKSPACE/backports-stable" -type f | grep -E 'mt7921|mt76|cfg80211|mac80211' > artifacts/relevant-files.txt || true
 
-        find "$ART_DIR" -type f -name "*.ko" -exec cp {} "$MOD_DIR/system/vendor/lib/modules/" \;
+        cd artifacts
+        zip -r "$GITHUB_WORKSPACE/$CONFIG/artifacts/backports-mt7921-build.zip" . || true
 
-        cat > "$MOD_DIR/module.prop" <<EOF
-          id=backports_mt76
-          name=Backports MT76 Wireless Stack
-          version=6.1.97-1
+    - name: Create Magisk module for built backports
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        MODDIR="$GITHUB_WORKSPACE/$CONFIG/artifacts/magisk-mt7921u"
+        SRCDIR="$GITHUB_WORKSPACE/backports-stable"
+        ZIPOUT="$GITHUB_WORKSPACE/$CONFIG/artifacts/mt7921u-backports-magisk.zip"
+
+        rm -rf "$MODDIR"
+        mkdir -p "$MODDIR/system/vendor/lib/modules"
+
+        find "$SRCDIR" -type f -name '*.ko' -exec cp {} "$MODDIR/system/vendor/lib/modules/" \;
+
+        cat > "$MODDIR/module.prop" <<'EOF'
+          id=mt7921u_backports
+          name=MT7921U Backports for OP11R
+          version=1.0
           versionCode=1
           author=docdry0001
-          description=Full backported cfg80211/mac80211 + mt76 + ralink drivers
+          description=Backports-built MT7921U stack for OP11R
           EOF
 
-        cat > "$MOD_DIR/post-fs-data.sh" <<'EOF'
+        cat > "$MODDIR/post-fs-data.sh" <<'EOF'
           #!/system/bin/sh
           MODDIR=${0%/*}
           MODPATH="$MODDIR/system/vendor/lib/modules"
           
           load_if_present() {
-            if [ -f "$MODPATH/$1" ]; then
-              insmod "$MODPATH/$1" 2>/dev/null || true
-            fi
+            [ -f "$MODPATH/$1" ] && insmod "$MODPATH/$1" 2>/dev/null || true
           }
-          
-          rmmod mt7921u 2>/dev/null || true
-          rmmod mt7921_common 2>/dev/null || true
-          rmmod mt76_usb 2>/dev/null || true
-          rmmod mt76 2>/dev/null || true
-          rmmod rt2800usb 2>/dev/null || true
-          rmmod rt2x00usb 2>/dev/null || true
-          rmmod rt2x00lib 2>/dev/null || true
-          rmmod mac80211 2>/dev/null || true
-          rmmod cfg80211 2>/dev/null || true
           
           load_if_present compat.ko
           load_if_present cfg80211.ko
           load_if_present mac80211.ko
-          
           load_if_present mt76.ko
           load_if_present mt76-usb.ko
-          load_if_present mt76x02-lib.ko
-          load_if_present mt76x02-usb.ko
           load_if_present mt76-connac-lib.ko
+          load_if_present mt792x-lib.ko
+          load_if_present mt792x-usb.ko
           load_if_present mt7921-common.ko
           load_if_present mt7921u.ko
-          
-          load_if_present rt2x00lib.ko
-          load_if_present rt2x00usb.ko
-          load_if_present rt2800lib.ko
-          load_if_present rt2800usb.ko
-          load_if_present mt7601u.ko
           EOF
-        chmod +x "$MOD_DIR/post-fs-data.sh"
+        chmod +x "$MODDIR/post-fs-data.sh"
 
-        cat > "$MOD_DIR/service.sh" <<'EOF'
+        cat > "$MODDIR/service.sh" <<'EOF'
           #!/system/bin/sh
-          sleep 10
+          sleep 8
           MODDIR=${0%/*}
           MODPATH="$MODDIR/system/vendor/lib/modules"
           
-          for m in "$MODPATH"/*.ko; do
-            [ -f "$m" ] || continue
-            insmod "$m" 2>/dev/null || true
+          for m in \
+            compat.ko \
+            cfg80211.ko \
+            mac80211.ko \
+            mt76.ko \
+            mt76-usb.ko \
+            mt76-connac-lib.ko \
+            mt792x-lib.ko \
+            mt792x-usb.ko \
+            mt7921-common.ko \
+            mt7921u.ko
+          do
+            [ -f "$MODPATH/$m" ] && insmod "$MODPATH/$m" 2>/dev/null || true
           done
           EOF
-        chmod +x "$MOD_DIR/service.sh"
+        chmod +x "$MODDIR/service.sh"
 
-        cat > "$MOD_DIR/customize.sh" <<'EOF'
+        cat > "$MODDIR/customize.sh" <<'EOF'
           #!/system/bin/sh
-          ui_print "Installing backports wireless stack..."
-          ui_print "Modules will be placed under /system/vendor/lib/modules"
+          ui_print "Installing MT7921U backports module"
           EOF
-        chmod +x "$MOD_DIR/customize.sh"
+        chmod +x "$MODDIR/customize.sh"
 
-        cd "$MOD_DIR"
-        zip -r "$ZIP_OUT" .
+        cd "$MODDIR"
+        zip -r "$ZIPOUT" .
 
-        echo "[+] Magisk module created:"
-        ls -lh "$ZIP_OUT"
-
-    - name: Upload module artifacts
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ env.CONFIG }}-backports-modules
+        name: ${{ env.CONFIG }}-backports-mt7921-stable
         path: |
-          ${{ github.workspace }}/${{ env.CONFIG }}/artifacts/backports-6.1.97-1-modules.zip
-          ${{ github.workspace }}/${{ env.CONFIG }}/artifacts/backports-magisk-module.zip
-        if-no-files-found: error
-        compression-level: 0
+          artifacts
+          ${{ github.workspace }}/${{ env.CONFIG }}/artifacts/backports-mt7921-build.zip
+          ${{ github.workspace }}/${{ env.CONFIG }}/artifacts/mt7921u-backports-magisk.zip
+        if-no-files-found: warn
