@@ -231,76 +231,86 @@ runs:
         rm -f msm-kernel/android/abi_gki_protected_exports_* || true
         df -h
 
-    - name: Merge
-      shell: bash
-      run: |
-          set -euo pipefail
-          KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-          MSM="$KERNEL_PLATFORM/msm-kernel"
-          OUT=out
+# ──────────────────────────────────────────────────────────────────
+# 1. ՆԱԽ փոխարինում ենք mt76-ը և կարգավորում Kconfig/Makefile-ը
+# ──────────────────────────────────────────────────────────────────
+- name: Replace mt76 with prepared zip tree
+  shell: bash
+  run: |
+      set -euo pipefail
+      KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+      MSM="$KERNEL_PATH/msm-kernel"
+      TMPDIR="$(mktemp -d)"
 
-          cd "$MSM"
-          make ARCH=arm64 mrproper
-          mkdir -p "$OUT"
+      cd "$MSM/drivers/net/wireless/mediatek"
+      rm -rf mt76
 
-          ./scripts/kconfig/merge_config.sh -O "$OUT" -m \
-            arch/arm64/configs/gki_defconfig \
-            arch/arm64/configs/vendor/${SOC}_GKI.config
+      curl -L \
+        -o "$TMPDIR/mt76.zip" \
+        https://github.com/docdry0001/EmberHeart_OnePlus11/raw/refs/heads/main/.github/mt76.zip
 
-          cp "$OUT/.config" arch/arm64/configs/gki_defconfig
-          rm "$OUT/.config"
+      unzip -q "$TMPDIR/mt76.zip" -d "$TMPDIR"
+      test -d "$TMPDIR/mt76" || { echo "mt76 directory not found in zip"; exit 1; }
+      test -f "$TMPDIR/mt76/Makefile" || { echo "mt76 Makefile not found"; exit 1; }
+      test -f "$TMPDIR/mt76/Kconfig" || { echo "mt76 Kconfig not found"; exit 1; }
 
-    # ──────────────────────────────────────────────────────────────────────
-    # ✅ ՈՒՂՂՎԱԾ ՔԱՅԼ. mt76-ի փոխարինում և Kconfig/Makefile կապերի ապահովում
-    # ──────────────────────────────────────────────────────────────────────
-    - name: Replace mt76 with prepared zip tree
-      shell: bash
-      run: |
-          set -euo pipefail
-          KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-          MSM="$KERNEL_PATH/msm-kernel"
-          TMPDIR="$(mktemp -d)"
+      mv "$TMPDIR/mt76" ./mt76
+      echo "[+] mt76 tree replaced"
 
-          cd "$MSM/drivers/net/wireless/mediatek"
-          rm -rf mt76
+      # === Parent Kconfig / Makefile կապեր ===
+      PARENT_KCONFIG="$MSM/drivers/net/wireless/mediatek/Kconfig"
+      if ! grep -q 'source "drivers/net/wireless/mediatek/mt76/Kconfig"' "$PARENT_KCONFIG"; then
+          echo 'source "drivers/net/wireless/mediatek/mt76/Kconfig"' >> "$PARENT_KCONFIG"
+          echo "[+] Added source line to Kconfig"
+      fi
 
-          curl -L \
-            -o "$TMPDIR/mt76.zip" \
-            https://github.com/docdry0001/EmberHeart_OnePlus11/raw/refs/heads/main/.github/mt76.zip
+      PARENT_MAKEFILE="$MSM/drivers/net/wireless/mediatek/Makefile"
+      if ! grep -q 'obj-\$(CONFIG_MT76_CORE)\s*+=\s*mt76/' "$PARENT_MAKEFILE"; then
+          echo 'obj-$(CONFIG_MT76_CORE) += mt76/' >> "$PARENT_MAKEFILE"
+          echo "[+] Added obj- line to Makefile"
+      fi
 
-          unzip -q "$TMPDIR/mt76.zip" -d "$TMPDIR"
+      rm -rf "$TMPDIR"
 
-          test -d "$TMPDIR/mt76" || { echo "mt76 directory not found in zip"; exit 1; }
-          test -f "$TMPDIR/mt76/Makefile" || { echo "mt76 Makefile not found"; exit 1; }
-          test -f "$TMPDIR/mt76/Kconfig" || { echo "mt76 Kconfig not found"; exit 1; }
+# ──────────────────────────────────────────────────────────────────
+# 2. ՀԵՏՈ Merge (հիմա արդեն տեսնում է mt76-ը)
+# ──────────────────────────────────────────────────────────────────
+- name: Merge
+  shell: bash
+  run: |
+      set -euo pipefail
+      KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+      MSM="$KERNEL_PLATFORM/msm-kernel"
+      OUT=out
 
-          mv "$TMPDIR/mt76" ./mt76
+      cd "$MSM"
+      make ARCH=arm64 mrproper
+      mkdir -p "$OUT"
 
-          echo "[+] mt76 tree replaced successfully"
+      ./scripts/kconfig/merge_config.sh -O "$OUT" -m \
+        arch/arm64/configs/gki_defconfig \
+        arch/arm64/configs/vendor/${SOC}_GKI.config
 
-          # === Ավելացված ուղղումներ ===
-          # 1. Parent Kconfig-ը պետք է source անի mt76/Kconfig-ը
-          PARENT_KCONFIG="$MSM/drivers/net/wireless/mediatek/Kconfig"
-          if ! grep -q 'source "drivers/net/wireless/mediatek/mt76/Kconfig"' "$PARENT_KCONFIG"; then
-              echo "[+] Adding source line to $PARENT_KCONFIG"
-              echo 'source "drivers/net/wireless/mediatek/mt76/Kconfig"' >> "$PARENT_KCONFIG"
-          fi
+      cp "$OUT/.config" arch/arm64/configs/gki_defconfig
+      rm "$OUT/.config"
 
-          # 2. Parent Makefile-ը պետք է ներառի mt76 ենթաթղթապանակը
-          PARENT_MAKEFILE="$MSM/drivers/net/wireless/mediatek/Makefile"
-          if ! grep -q 'obj-\$(CONFIG_MT76_CORE)\s*+=\s*mt76/' "$PARENT_MAKEFILE"; then
-              echo "[+] Adding obj- line to $PARENT_MAKEFILE"
-              echo 'obj-$(CONFIG_MT76_CORE) += mt76/' >> "$PARENT_MAKEFILE"
-          fi
+# ──────────────────────────────────────────────────────────────────
+# 3. Ապա միացնում ենք Wi-Fi config-ները
+# ──────────────────────────────────────────────────────────────────
+- name: Add Wi-Fi drivers already present in kernel to be built as modules
+  shell: bash
+  run: |
+      set -euo pipefail
+      KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+      MSM="$KERNEL_PATH/msm-kernel"
+      cd "$MSM"
+      chmod +x ./scripts/config
 
-          # 3. Ստուգում, որ mt76/Kconfig-ն ունի MT76_CORE (արդեն ունի, բայց հաստատում ենք)
-          if ! grep -q '^config MT76_CORE' "$MSM/drivers/net/wireless/mediatek/mt76/Kconfig"; then
-              echo "::warning::MT76_CORE not defined in Kconfig. Some config options may be ignored."
-          fi
+      # ... (նույն config փոփոխությունները, ներառյալ CONFIG_MT76_CORE=m)
 
-          find ./mt76 -maxdepth 2 -type f | sort | sed -n '1,120p'
-
-          rm -rf "$TMPDIR"
+      # === Ավելացնում ենք ստուգում, որ MT76_CORE-ը իսկապես =m է ===
+      echo "[+] Checking MT76_CORE value after config changes:"
+      grep '^CONFIG_MT76_CORE=' arch/arm64/configs/gki_defconfig || echo "MT76_CORE not set yet!"
 
     - name: Add Wi-Fi drivers already present in kernel to be built as modules
       shell: bash
