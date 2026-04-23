@@ -251,31 +251,6 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
 
-    - name: Replace mt76 with prepared zip tree
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        TMPDIR="$(mktemp -d)"
-    
-        cd "$MSM/drivers/net/wireless/mediatek"
-        rm -rf mt76
-    
-        curl -L \
-          -o "$TMPDIR/mt76.zip" \
-          https://github.com/docdry0001/EmberHeart_OnePlus11/raw/refs/heads/main/.github/mt76.zip
-    
-        unzip -q "$TMPDIR/mt76.zip" -d "$TMPDIR"
-    
-        test -d "$TMPDIR/mt76" || { echo "mt76 directory not found in zip"; exit 1; }
-        test -f "$TMPDIR/mt76/Makefile" || { echo "mt76 Makefile not found"; exit 1; }
-        test -f "$TMPDIR/mt76/Kconfig" || { echo "mt76 Kconfig not found"; exit 1; }
-    
-        mv "$TMPDIR/mt76" ./mt76
-    
-        rm -rf "$TMPDIR"
-    
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -283,7 +258,7 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
-
+        
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK
@@ -305,6 +280,7 @@ runs:
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --module CONFIG_MT7601U \
           --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_USB \
           --module CONFIG_MT76x02_LIB \
           --module CONFIG_MT76x02_USB \
@@ -314,10 +290,7 @@ runs:
           --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
-          --module CONFIG_MT7921_COMMON \
-          --module CONFIG_MT7921E \
-          --module CONFIG_MT7921S \
-          --module CONFIG_MT7921U
+          --module CONFIG_MT7921E
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
