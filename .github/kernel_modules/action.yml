@@ -232,7 +232,7 @@ runs:
         df -h
 
     # ──────────────────────────────────────────────────────────────────
-    # 1. ՆԱԽ փոխարինում ենք mt76-ը և ուղղում parent Makefile-ը
+    # 1. ՏԵՂԱԴՐԵԼ MT76-Ը (ՄԻՆՉ MERGE-Ը)
     # ──────────────────────────────────────────────────────────────────
     - name: Replace mt76 with prepared zip tree
       shell: bash
@@ -257,20 +257,11 @@ runs:
 
           mv "$TMPDIR/mt76" ./mt76
 
-          echo "[+] mt76 tree replaced"
-
-          # === ՈՒՂՂՈՒՄ. parent Makefile-ում CPTCFG_ -> CONFIG_ ===
-          PARENT_MAKEFILE="$MSM/drivers/net/wireless/mediatek/Makefile"
-          sed -i 's/CPTCFG_/CONFIG_/g' "$PARENT_MAKEFILE"
-          echo "[+] Fixed CPTCFG_ -> CONFIG_ in $PARENT_MAKEFILE"
-
-          echo "[+] Verifying parent Makefile content:"
-          cat "$PARENT_MAKEFILE"
-
+          echo "[+] mt76 tree replaced successfully"
           rm -rf "$TMPDIR"
 
     # ──────────────────────────────────────────────────────────────────
-    # 2. ՀԵՏՈ Merge (այժմ Kconfig/Makefile-ը ճիշտ են)
+    # 2. MERGE (ՀԻՄԱ ԱՐԴԵՆ ՏԵՍՆՈՒՄ Է MT76/KCONFIG-Ը)
     # ──────────────────────────────────────────────────────────────────
     - name: Merge
       shell: bash
@@ -291,6 +282,9 @@ runs:
           cp "$OUT/.config" arch/arm64/configs/gki_defconfig
           rm "$OUT/.config"
 
+    # ──────────────────────────────────────────────────────────────────
+    # 3. ԱՎԵԼԱՑՆԵԼ WI-FI CONFIG-ՆԵՐԸ
+    # ──────────────────────────────────────────────────────────────────
     - name: Add Wi-Fi drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -363,8 +357,6 @@ runs:
             --module CONFIG_MAC80211_LEDS \
             --module CONFIG_CAN_SLCAN
 
-          echo "[+] Wi-Fi configs added to gki_defconfig"
-
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
       shell: bash
@@ -372,7 +364,10 @@ runs:
         set -euo pipefail
         cd "$CONFIG/kernel_platform/msm-kernel/mm"
 
+        echo "[+] Cleaning old broken injections..."
         sed -i '/bool scan_adjusted = false;/d' vmscan.c
+
+        echo "[+] Patching exact declaration block in shrink_lruvec()..."
         perl -0pi -e 's/(unsigned long nr_reclaimed = 0;\n\s*unsigned long nr_to_reclaim = sc->nr_to_reclaim;\n\s*)bool proportional_reclaim;/$1bool proportional_reclaim __maybe_unused;\n\tbool scan_adjusted = false;/s' vmscan.c
 
     - name: FIX thermal kvzalloc kvfree (waipio)
@@ -382,6 +377,7 @@ runs:
         set -euo pipefail
         export FILE="$CONFIG/kernel_platform/msm-kernel/drivers/thermal/thermal_sysfs.c"
 
+        echo "[+] Patching $FILE"
         python3 - <<'PY'
         import os
         from pathlib import Path
@@ -417,13 +413,16 @@ runs:
         set -euo pipefail
         FILE="$CONFIG/kernel_platform/msm-kernel/drivers/android/binder_alloc.c"
 
+        echo "[+] Cleaning previous broken binder edits..."
         sed -i '/^#include <linux\/mm.h>$/d' "$FILE"
         sed -i '/HAVE_MMGET_STILL_VALID_COMPAT/,+5d' "$FILE"
         sed -i 's/mmget_still_valid_still_valid/mmget_still_valid/g' "$FILE"
 
+        echo "[+] Ensuring correct mm header..."
         grep -q '^#include <linux/sched/mm.h>$' "$FILE" || \
           sed -i '/^#include <linux\/list.h>$/a #include <linux/sched/mm.h>' "$FILE"
 
+        echo "[+] Adding local compat shim only for mmget_still_valid()..."
         grep -q 'HAVE_MMGET_STILL_VALID_COMPAT' "$FILE" || \
           perl -0pi -e 's@(#include <linux/sched/mm.h>\n)@$1#ifndef HAVE_MMGET_STILL_VALID_COMPAT\n#define HAVE_MMGET_STILL_VALID_COMPAT\nstatic inline bool mmget_still_valid(struct mm_struct *mm)\n{\n\treturn likely(!mm->core_state);\n}\n#endif\n@' "$FILE"
 
@@ -457,12 +456,14 @@ runs:
         if ! $CLANG_FOUND && command -v clang >/dev/null 2>&1; then
           CLANG_BIN="$(dirname "$(command -v clang)")"
           CLANG_FOUND=true
+          echo "Using system clang."
         fi
 
         $CLANG_FOUND || { echo "No clang toolchain found"; exit 1; }
         echo "CLANG_BIN_PATH=$CLANG_BIN" >> "$GITHUB_ENV"
         CLANG_VERSION="$("$CLANG_BIN/clang" --version | head -n1)"
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
+        echo "Detected Clang: $CLANG_VERSION"
 
     - name: Build Kernel Modules
       shell: bash
@@ -503,6 +504,9 @@ runs:
 
         make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
+        # ──────────────────────────────────────────────────────────────
+        # ԱՊԱՀՈՎԱԳՐԵԼ, ՈՐ MT76_CORE-Ը ՄԻԱՑԱԾ Է
+        # ──────────────────────────────────────────────────────────────
         ./scripts/config --file "$OUT/.config" \
           --enable CONFIG_LTO_CLANG_THIN \
           --enable CONFIG_LTO_CLANG \
@@ -511,9 +515,15 @@ runs:
 
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
 
-        # Ստուգենք MT76_CORE-ը
-        echo "[+] Checking MT76_CORE in .config:"
-        grep 'CONFIG_MT76_CORE' "$OUT/.config" || echo "WARNING: MT76_CORE not set!"
+        # Ստիպողաբար միացնում ենք, եթե olddefconfig-ը հանել է
+        if ! grep -q '^CONFIG_MT76_CORE=m' "$OUT/.config"; then
+          echo "::warning::MT76_CORE not set to m, forcing it"
+          ./scripts/config --file "$OUT/.config" --module CONFIG_MT76_CORE
+          make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
+        fi
+
+        echo "[!] Final CONFIG_MT76_CORE:"
+        grep 'CONFIG_MT76_CORE' "$OUT/.config" || echo "ERROR: MT76_CORE is not set!"
 
         echo "Building in-tree kernel modules..."
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
@@ -522,8 +532,15 @@ runs:
         echo "Building external rtl8812au..."
         RTL8812AU_DIR="$KERNEL_PLATFORM/external/rtl8812au"
         if [ -d "$RTL8812AU_DIR" ] && [ -f "$RTL8812AU_DIR/Makefile" ]; then
-          make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules || echo "Build failed for rtl8812au"
-          make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install || echo "Install failed for rtl8812au"
+          if ! make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" modules; then
+            echo "Build failed for rtl8812au, skipping"
+          else
+            if ! make -C "$MSM" M="$RTL8812AU_DIR" O="$MSM/out" -j"$(nproc --all)" "${MAKE_FLAGS[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
+              echo "Install failed for rtl8812au, skipping"
+            fi
+          fi
+        else
+          echo "rtl8812au source missing or Makefile missing, skipping"
         fi
 
     - name: Filter modules
