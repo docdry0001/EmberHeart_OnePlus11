@@ -34,6 +34,15 @@ runs:
         echo "Parsed config:"
         jq '.' /tmp/config.json
 
+    - name: Set CONFIG fallback
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${CONFIG:-}" ]; then
+          echo "CONFIG=$MODEL" >> "$GITHUB_ENV"
+        fi
+        echo "CONFIG=${CONFIG:-$MODEL}"
+
     - name: Set manifest
       shell: bash
       run: |
@@ -48,7 +57,13 @@ runs:
         [[ -n "${SOC:-}" ]] || { echo "SOC is empty"; exit 1; }
         [[ -n "${BRANCH:-}" ]] || { echo "BRANCH is empty"; exit 1; }
         [[ -n "${MANIFEST:-}" ]] || { echo "MANIFEST is empty"; exit 1; }
-        [[ -n "${CONFIG:-}" ]] || { echo "CONFIG is empty"; exit 1; }
+        [[ -n "${CONFIG:-$MODEL}" ]] || { echo "CONFIG is empty"; exit 1; }
+
+        echo "MODEL=$MODEL"
+        echo "CONFIG=${CONFIG:-$MODEL}"
+        echo "SOC=$SOC"
+        echo "BRANCH=$BRANCH"
+        echo "MANIFEST=$MANIFEST"
 
     - name: Cleanup runner
       shell: bash
