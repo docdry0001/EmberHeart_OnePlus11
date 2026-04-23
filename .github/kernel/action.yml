@@ -706,9 +706,9 @@ runs:
         echo "Nethunter configs applied"
         echo "::endgroup::"
 
-  - name: Integrate backports into common tree
-    shell: bash
-    run: |
+   - name: Integrate backports into common tree
+     shell: bash
+     run: |
       set -euo pipefail
       echo "::group::Integrating backports..."
 
