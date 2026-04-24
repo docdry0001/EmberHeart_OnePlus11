@@ -821,12 +821,14 @@ runs:
         echo "::endgroup::"
 
     # ==================== NEW: Build OpenWrt backports v6.19 – FULL Wi-Fi STACK ====================
+
+    
     - name: Build Backports v6.19 (Full Wi-Fi driver set)
       shell: bash
       run: |
         set -euo pipefail
         RELEASE="${{ inputs.backports_release }}"
-        URL="https://github.com/openwrt/backports/releases/download/backports-v6.19/${RELEASE}.tar.zst"
+        URL="https://github.com/openwrt/backports/releases/download/backports-v6.18/${RELEASE}.tar.zst"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
 
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
