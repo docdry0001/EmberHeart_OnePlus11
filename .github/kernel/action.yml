@@ -32,7 +32,7 @@ inputs:
   backports_release:
     required: false
     type: string
-    default: backports-6.1.97-1
+    default: backports-6.19
 
 outputs:
   kernel_version:
@@ -130,7 +130,7 @@ runs:
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           git curl ca-certificates build-essential clang lld flex bison \
           libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache
+          libxml2-utils rsync unzip dwarves file python3 ccache zstd
         sudo apt-get clean
         echo "::endgroup::"
 
@@ -321,11 +321,7 @@ runs:
         echo "KernelSU Next added (commit: ${KSUN_COMMIT_SHA:0:8}) ✅"
         echo "::endgroup::"
 
-    # - name: Apply SUSFS Patches
-    #   if: inputs.susfs_commit_hash_or_branch != ''
-    #   shell: bash
-    #   run: |
-    #     ... (your SUSFS steps, commented out as in original)
+    # SUSFS patch (commented out, as in original)
 
     - name: Add BBG
       shell: bash
@@ -627,6 +623,9 @@ runs:
           --set-val CONFIG_FRAME_WARN 0 \
           --enable CONFIG_TRACEPOINTS
 
+        # ** ԿՐԹԱԿԱՆ ՓՈՓՈԽՈՒԹՅՈՒՆ ** – mac80211-ը դարձնել մոդուլ, որպեսզի backports-ի mac80211-ը կարողանա բեռնվել
+        ./scripts/config --file arch/arm64/configs/gki_defconfig --module CONFIG_MAC80211
+
         if [ "${{ inputs.optimize_level }}" = "O3" ]; then
           ./scripts/config --file arch/arm64/configs/gki_defconfig \
             --disable CC_OPTIMIZE_FOR_PERFORMANCE \
@@ -719,26 +718,15 @@ runs:
 
         export PATH="/usr/lib/ccache:$PATH"
 
-        MAKE_FLAGS+=(
-          LLVM=1
-          LLVM_IAS=1
-          ARCH=arm64
-          SUBARCH=arm64
+        MAKE_FLAGS=(
+          LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
           CLANG_TRIPLE=aarch64-linux-gnu-
           CROSS_COMPILE=aarch64-linux-gnu-
           CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld
-          HOSTLD=ld.lld
-          AR=llvm-ar
-          NM=llvm-nm
-          OBJCOPY=llvm-objcopy
-          OBJDUMP=llvm-objdump
-          DEPMOD=depmod
-          DTC=dtc
-          STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC=clang
+          LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm
+          OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump
+          DEPMOD=depmod DTC=dtc STRIP=llvm-strip
+          HOSTCC=clang HOSTCXX=clang++ CC=clang
         )
 
         OUT=out
@@ -832,13 +820,13 @@ runs:
         echo "Build stats collected ✅"
         echo "::endgroup::"
 
-    # ==================== NEW: Build backports against the SAME out ====================
-    - name: Build Backports for MT7921U
+    # ==================== NEW: Build OpenWrt backports v6.19 – FULL Wi-Fi STACK ====================
+    - name: Build Backports v6.19 (Full Wi-Fi driver set)
       shell: bash
       run: |
         set -euo pipefail
         RELEASE="${{ inputs.backports_release }}"
-        URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/${RELEASE}.tar.xz"
+        URL="https://github.com/openwrt/backports/releases/download/backports-v6.19/${RELEASE}.tar.zst"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
 
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
@@ -847,248 +835,221 @@ runs:
         export PATH="/usr/lib/ccache:$PATH"
 
         MAKE_FLAGS=(
-          LLVM=1
-          LLVM_IAS=1
-          ARCH=arm64
-          SUBARCH=arm64
+          LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
           CLANG_TRIPLE=aarch64-linux-gnu-
           CROSS_COMPILE=aarch64-linux-gnu-
           CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld
-          HOSTLD=ld.lld
-          AR=llvm-ar
-          NM=llvm-nm
-          OBJCOPY=llvm-objcopy
-          OBJDUMP=llvm-objdump
-          DEPMOD=depmod
-          DTC=dtc
-          STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC=clang
+          LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm
+          OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump
+          DEPMOD=depmod DTC=dtc STRIP=llvm-strip
+          HOSTCC=clang HOSTCXX=clang++ CC=clang
         )
 
         cd "$GITHUB_WORKSPACE"
-        wget -q -O backports.tar.xz "$URL"
-        tar -xf backports.tar.xz
+        wget -q -O backports.tar.zst "$URL"
+        tar --zstd -xf backports.tar.zst
         rm -rf backports-stable
         mv "$RELEASE" backports-stable
         cd backports-stable
 
-        # Patch CFI macro (same as before)
+        # Patch CFI macro
         FILE="backport-include/linux/module.h"
         sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
         sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
 
-        # Configure only for MT7921U
-        make "${MAKE_FLAGS[@]}" \
-          KLIB="$KERNEL_BUILD" \
-          KLIB_BUILD="$KERNEL_BUILD" \
-          allnoconfig
+        make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
 
-        cat >> .config <<'EOF'
-        
-          # ========== Բազային Wireless Stack ==========
-          CPTCFG_CFG80211=m
-          CPTCFG_CFG80211_DEFAULT_PS=y
-          CPTCFG_CFG80211_DEBUGFS=y
-          CPTCFG_CFG80211_WEXT=y
-          CPTCFG_MAC80211=m
-          CPTCFG_MAC80211_LEDS=y
-          CPTCFG_MAC80211_MESH=y
-          CPTCFG_MAC80211_DEBUGFS=y
-          CPTCFG_MAC80211_MESSAGE_TRACING=y
-          CPTCFG_WLAN=y
-          CPTCFG_NL80211_TESTMODE=y
-          CPTCFG_USB=y
-          CPTCFG_PCI=y
-          
-          # ========== MediaTek MT76 (defconfig-ը included) ==========
-          CPTCFG_WLAN_VENDOR_MEDIATEK=y
-          CPTCFG_MT76_CORE=m
-          CPTCFG_MT76_USB=m
-          CPTCFG_MT76_PCI=m
-          CPTCFG_MT76_SDIO=m
-          CPTCFG_MT76_CONNAC_LIB=m
-          CPTCFG_MT76x0_COMMON=m
-          CPTCFG_MT76x0U=m
-          CPTCFG_MT76x0E=m
-          CPTCFG_MT76x2_COMMON=m
-          CPTCFG_MT76x2U=m
-          CPTCFG_MT76x2E=m
-          CPTCFG_MT7601U=m
-          CPTCFG_MT7603E=m
-          CPTCFG_MT7615_COMMON=m
-          CPTCFG_MT7615E=m
-          CPTCFG_MT7663_USB_SDIO_COMMON=m
-          CPTCFG_MT7663U=m
-          CPTCFG_MT7663S=m
-          CPTCFG_MT7915E=m
-          CPTCFG_MT7921_COMMON=m
-          CPTCFG_MT7921U=m
-          CPTCFG_MT7921S=m
-          CPTCFG_MT7921E=m
-          CPTCFG_MT7925_COMMON=m
-          CPTCFG_MT7925U=m
-          CPTCFG_MT7925E=m
-          CPTCFG_MT7996E=m
-          
-          # ========== Realtek RTLWIFI (defconfig-ից) ==========
-          CPTCFG_WLAN_VENDOR_REALTEK=y
-          CPTCFG_RTLWIFI=m
-          CPTCFG_RTLWIFI_DEBUG=y
-          CPTCFG_RTL8192CE=m
-          CPTCFG_RTL8192SE=m
-          CPTCFG_RTL8192DE=m
-          CPTCFG_RTL8723AE=m
-          CPTCFG_RTL8723BE=m
-          CPTCFG_RTL8188EE=m
-          CPTCFG_RTL8192CU=m
-          CPTCFG_RTL8192CC_COMMON=m
-          CPTCFG_RTL8192EE=m
-          CPTCFG_RTL8821AE=m
-          CPTCFG_RTL8XXXU=m
-          CPTCFG_RTL8XXXU_UNTESTED=y
-          # + rtl8xxxu-ից այլ ընտրանքներ
-          CPTCFG_RTL8180=m
-          CPTCFG_RTL8187=m
-          # rtw88
-          CPTCFG_RTW88=m
-          CPTCFG_RTW88_CORE=m
-          CPTCFG_RTW88_PCI=m
-          CPTCFG_RTW88_USB=m
-          CPTCFG_RTW88_8822B=m
-          CPTCFG_RTW88_8822BU=m
-          CPTCFG_RTW88_8822C=m
-          CPTCFG_RTW88_8822CU=m
-          CPTCFG_RTW88_8723D=m
-          CPTCFG_RTW88_8723DU=m
-          CPTCFG_RTW88_8821C=m
-          CPTCFG_RTW88_8821CU=m
-          CPTCFG_RTW88_8723X=m
-          CPTCFG_RT2800USB_RT33XX=y
-          CPTCFG_RT2800USB_RT35XX=y
-          CPTCFG_RT2800USB_RT3573=y
-          CPTCFG_RT2800USB_RT53XX=y
-          CPTCFG_RT2800USB_RT55XX=y
-          CPTCFG_RT2800USB_UNKNOWN=y
-          CPTCFG_RT2500USB=m
-          CPTCFG_RT73USB=m
-          CPTCFG_RT2400PCI=m
-          CPTCFG_RT2500PCI=m
-          CPTCFG_RT2800PCI=m
-          CPTCFG_RT2800PCI_RT33XX=y
-          CPTCFG_RT2800PCI_RT35XX=y
-          CPTCFG_RT2800PCI_RT53XX=y
-          CPTCFG_RT2800PCI_RT3290=y
-          
-          # ========== Atheros/Qualcomm (defconfig-ներից) ==========
-          CPTCFG_WLAN_VENDOR_ATH=y
-          CPTCFG_ATH_COMMON=m
-          CPTCFG_ATH_CARDS=m
-          # ath5k
-          CPTCFG_ATH5K=m
-          # ath9k
-          CPTCFG_ATH9K=m
-          CPTCFG_ATH9K_HW=m
-          CPTCFG_ATH9K_COMMON=m
-          CPTCFG_ATH9K_COMMON_DEBUG=y
-          CPTCFG_ATH9K_DEBUGFS=y
-          CPTCFG_ATH9K_HTC=m
-          CPTCFG_ATH9K_HTC_DEBUGFS=y
-          # ath6kl
-          CPTCFG_ATH6KL=m
-          CPTCFG_ATH6KL_USB=m
-          CPTCFG_ATH6KL_SDIO=m
-          # carl9170
-          CPTCFG_CARL9170=m
-          # ar5523
-          CPTCFG_AR5523=m
-          # wil6210
-          CPTCFG_WIL6210=m
-          # ath10k
-          CPTCFG_ATH10K=m
-          CPTCFG_ATH10K_PCI=m
-          CPTCFG_ATH10K_SDIO=m
-          CPTCFG_ATH10K_USB=m
-          CPTCFG_ATH10K_DEBUG=y
-          CPTCFG_ATH10K_DEBUGFS=y
-          # ath11k
-          CPTCFG_ATH11K=m
-          CPTCFG_ATH11K_PCI=m
-          CPTCFG_ATH11K_DEBUG=y
-          CPTCFG_ATH11K_DEBUGFS=y
-          # wcn36xx
-          CPTCFG_WCN36XX=m
-          CPTCFG_WCN36XX_DEBUGFS=y
-          
-          # ========== Broadcom (defconfig-ներից) ==========
-          CPTCFG_WLAN_VENDOR_BROADCOM=y
-          CPTCFG_B43=m
-          CPTCFG_B43_USB=y
-          CPTCFG_B43_PCI=y
-          CPTCFG_B43LEGACY=m
-          CPTCFG_BRCMSMAC=m
-          CPTCFG_BRCMFMAC=m
-          CPTCFG_BRCMFMAC_USB=y
-          CPTCFG_BRCMFMAC_PCIE=y
-          
-          # ========== Intel (defconfig-ից) ==========
-          CPTCFG_WLAN_VENDOR_INTEL=y
-          CPTCFG_IWLWIFI=m
-          CPTCFG_IWLMVM=m
-          CPTCFG_IWLDVM=m
-          CPTCFG_IWLWIFI_DEBUG=y
-          
-          # ========== Intersil / Marvell / ZyDAS ==========
-          CPTCFG_WLAN_VENDOR_INTERSIL=y
-          CPTCFG_HOSTAP=m
-          CPTCFG_P54_COMMON=m
-          CPTCFG_P54_USB=m
-          CPTCFG_P54_PCI=m
-          
-          CPTCFG_WLAN_VENDOR_MARVELL=y
-          CPTCFG_LIBERTAS=m
-          CPTCFG_LIBERTAS_USB=m
-          CPTCFG_MWIFIEX=m
-          CPTCFG_MWIFIEX_PCIE=m
-          CPTCFG_MWIFIEX_USB=m
-          
-          CPTCFG_WLAN_VENDOR_ZYDAS=y
-          CPTCFG_ZD1211RW=m
-          
-          # ========== MHI / QRTR (Qualcomm-ի համար) ==========
-          CPTCFG_MHI_BUS=m
-          CPTCFG_QRTR=m
-          CPTCFG_QRTR_MHI=m
-          EOF
-        
+        # ====== FULL CPTCFG LIST (merged from all defconfigs + additional) ======
+        cat >> .config <<'CPTCFGEOF'
+        CPTCFG_CFG80211=m
+        CPTCFG_CFG80211_DEFAULT_PS=y
+        CPTCFG_CFG80211_DEBUGFS=y
+        CPTCFG_CFG80211_WEXT=y
+        CPTCFG_MAC80211=m
+        CPTCFG_MAC80211_LEDS=y
+        CPTCFG_MAC80211_MESH=y
+        CPTCFG_MAC80211_DEBUGFS=y
+        CPTCFG_MAC80211_MESSAGE_TRACING=y
+        CPTCFG_WLAN=y
+        CPTCFG_NL80211_TESTMODE=y
+        CPTCFG_USB=y
+        CPTCFG_PCI=y
 
-        make "${MAKE_FLAGS[@]}" \
-          KLIB="$KERNEL_BUILD" \
-          KLIB_BUILD="$KERNEL_BUILD" \
-          olddefconfig </dev/null || true
+        CPTCFG_WLAN_VENDOR_MEDIATEK=y
+        CPTCFG_MT76_CORE=m
+        CPTCFG_MT76_USB=m
+        CPTCFG_MT76_PCI=m
+        CPTCFG_MT76_SDIO=m
+        CPTCFG_MT76_CONNAC_LIB=m
+        CPTCFG_MT76x0_COMMON=m
+        CPTCFG_MT76x0U=m
+        CPTCFG_MT76x0E=m
+        CPTCFG_MT76x2_COMMON=m
+        CPTCFG_MT76x2U=m
+        CPTCFG_MT76x2E=m
+        CPTCFG_MT7601U=m
+        CPTCFG_MT7603E=m
+        CPTCFG_MT7615_COMMON=m
+        CPTCFG_MT7615E=m
+        CPTCFG_MT7663_USB_SDIO_COMMON=m
+        CPTCFG_MT7663U=m
+        CPTCFG_MT7663S=m
+        CPTCFG_MT7915E=m
+        CPTCFG_MT7921_COMMON=m
+        CPTCFG_MT7921U=m
+        CPTCFG_MT7921S=m
+        CPTCFG_MT7921E=m
+        CPTCFG_MT7925_COMMON=m
+        CPTCFG_MT7925U=m
+        CPTCFG_MT7925E=m
+        CPTCFG_MT7996E=m
 
-        # Build
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" \
-          KLIB="$KERNEL_BUILD" \
-          KLIB_BUILD="$KERNEL_BUILD" \
-          V=1 2>&1 | tee "$GITHUB_WORKSPACE/backports-build.log"
+        CPTCFG_WLAN_VENDOR_REALTEK=y
+        CPTCFG_RTLWIFI=m
+        CPTCFG_RTLWIFI_DEBUG=y
+        CPTCFG_RTL8192CE=m
+        CPTCFG_RTL8192SE=m
+        CPTCFG_RTL8192DE=m
+        CPTCFG_RTL8723AE=m
+        CPTCFG_RTL8723BE=m
+        CPTCFG_RTL8188EE=m
+        CPTCFG_RTL8192CU=m
+        CPTCFG_RTL8192CC_COMMON=m
+        CPTCFG_RTL8192EE=m
+        CPTCFG_RTL8821AE=m
+        CPTCFG_RTL8XXXU=m
+        CPTCFG_RTL8XXXU_UNTESTED=y
+        CPTCFG_RTL8180=m
+        CPTCFG_RTL8187=m
+        CPTCFG_RTW88=m
+        CPTCFG_RTW88_CORE=m
+        CPTCFG_RTW88_PCI=m
+        CPTCFG_RTW88_USB=m
+        CPTCFG_RTW88_8822B=m
+        CPTCFG_RTW88_8822BU=m
+        CPTCFG_RTW88_8822C=m
+        CPTCFG_RTW88_8822CU=m
+        CPTCFG_RTW88_8723D=m
+        CPTCFG_RTW88_8723DU=m
+        CPTCFG_RTW88_8821C=m
+        CPTCFG_RTW88_8821CU=m
+        CPTCFG_RTW88_8723X=m
+        CPTCFG_RTW88_8723XU=m
+        CPTCFG_RTW89=m
+        CPTCFG_RTW89_CORE=m
+        CPTCFG_RTW89_PCI=m
+        CPTCFG_RTW89_8852A=m
+        CPTCFG_RTW89_8852B=m
+        CPTCFG_RTW89_8852C=m
+        CPTCFG_RTW89_8851BE=m
+        CPTCFG_RTW89_8922AE=m
 
-        KO_COUNT=$(find . -type f -name '*.ko' | wc -l || true)
-        echo "KO_COUNT=$KO_COUNT"
-        if [ "$KO_COUNT" -eq 0 ]; then
-          echo "Backports build failed – no .ko files"
-          exit 1
-        fi
+        CPTCFG_WLAN_VENDOR_RALINK=y
+        CPTCFG_RT2X00=m
+        CPTCFG_RT2X00_LIB=m
+        CPTCFG_RT2X00_LIB_FIRMWARE=y
+        CPTCFG_RT2X00_USB=m
+        CPTCFG_RT2X00_PCI=m
+        CPTCFG_RT2800LIB=m
+        CPTCFG_RT2800USB=m
+        CPTCFG_RT2800USB_RT33XX=y
+        CPTCFG_RT2800USB_RT35XX=y
+        CPTCFG_RT2800USB_RT3573=y
+        CPTCFG_RT2800USB_RT53XX=y
+        CPTCFG_RT2800USB_RT55XX=y
+        CPTCFG_RT2800USB_UNKNOWN=y
+        CPTCFG_RT2500USB=m
+        CPTCFG_RT73USB=m
+        CPTCFG_RT2400PCI=m
+        CPTCFG_RT2500PCI=m
+        CPTCFG_RT2800PCI=m
+        CPTCFG_RT2800PCI_RT33XX=y
+        CPTCFG_RT2800PCI_RT35XX=y
+        CPTCFG_RT2800PCI_RT53XX=y
+        CPTCFG_RT2800PCI_RT3290=y
 
-        # Copy artifacts
-        mkdir -p "$GITHUB_WORKSPACE/backports-artifacts"
-        find . -type f -name '*.ko' -exec cp --parents {} "$GITHUB_WORKSPACE/backports-artifacts/" \;
-        cp .config "$GITHUB_WORKSPACE/backports-artifacts/backports.config"
-        cp "$GITHUB_WORKSPACE/backports-build.log" "$GITHUB_WORKSPACE/backports-artifacts/"
+        CPTCFG_WLAN_VENDOR_ATH=y
+        CPTCFG_ATH_COMMON=m
+        CPTCFG_ATH_CARDS=m
+        CPTCFG_ATH5K=m
+        CPTCFG_ATH9K=m
+        CPTCFG_ATH9K_HW=m
+        CPTCFG_ATH9K_COMMON=m
+        CPTCFG_ATH9K_COMMON_DEBUG=y
+        CPTCFG_ATH9K_DEBUGFS=y
+        CPTCFG_ATH9K_HTC=m
+        CPTCFG_ATH9K_HTC_DEBUGFS=y
+        CPTCFG_ATH6KL=m
+        CPTCFG_ATH6KL_USB=m
+        CPTCFG_ATH6KL_SDIO=m
+        CPTCFG_CARL9170=m
+        CPTCFG_AR5523=m
+        CPTCFG_WIL6210=m
+        CPTCFG_ATH10K=m
+        CPTCFG_ATH10K_PCI=m
+        CPTCFG_ATH10K_SDIO=m
+        CPTCFG_ATH10K_USB=m
+        CPTCFG_ATH10K_DEBUG=y
+        CPTCFG_ATH10K_DEBUGFS=y
+        CPTCFG_ATH11K=m
+        CPTCFG_ATH11K_PCI=m
+        CPTCFG_ATH11K_DEBUG=y
+        CPTCFG_ATH11K_DEBUGFS=y
+        CPTCFG_WCN36XX=m
+        CPTCFG_WCN36XX_DEBUGFS=y
 
-    # ---------------- Create Magisk module for backports ----------------
+        CPTCFG_WLAN_VENDOR_BROADCOM=y
+        CPTCFG_B43=m
+        CPTCFG_B43_USB=y
+        CPTCFG_B43_PCI=y
+        CPTCFG_B43LEGACY=m
+        CPTCFG_BRCMSMAC=m
+        CPTCFG_BRCMFMAC=m
+        CPTCFG_BRCMFMAC_USB=y
+        CPTCFG_BRCMFMAC_PCIE=y
+
+        CPTCFG_WLAN_VENDOR_INTEL=y
+        CPTCFG_IWLWIFI=m
+        CPTCFG_IWLMVM=m
+        CPTCFG_IWLDVM=m
+        CPTCFG_IWLWIFI_DEBUG=y
+
+        CPTCFG_WLAN_VENDOR_INTERSIL=y
+        CPTCFG_HOSTAP=m
+        CPTCFG_P54_COMMON=m
+        CPTCFG_P54_USB=m
+        CPTCFG_P54_PCI=m
+
+        CPTCFG_WLAN_VENDOR_MARVELL=y
+        CPTCFG_LIBERTAS=m
+        CPTCFG_LIBERTAS_USB=m
+        CPTCFG_MWIFIEX=m
+        CPTCFG_MWIFIEX_PCIE=m
+        CPTCFG_MWIFIEX_USB=m
+
+        CPTCFG_WLAN_VENDOR_ZYDAS=y
+        CPTCFG_ZD1211RW=m
+
+        CPTCFG_MHI_BUS=m
+        CPTCFG_QRTR=m
+        CPTCFG_QRTR_MHI=m
+        CPTCFGEOF
+
+        make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
+
+        make -j$(nproc --all) "${MAKE_FLAGS[@]}" \
+          KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" \
+          V=1 2>&1 | tee ../backports-build.log
+
+        KO_COUNT=$(find . -name '*.ko' | wc -l)
+        echo "Backports built .ko count: $KO_COUNT"
+        [ "$KO_COUNT" -gt 0 ] || exit 1
+
+        mkdir -p ../backports-artifacts
+        find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
+        cp .config ../backports-artifacts/backports.config
+        cp ../backports-build.log ../backports-artifacts/
+
     - name: Create Magisk module for backports
       shell: bash
       run: |
@@ -1142,7 +1103,6 @@ runs:
         zip -r "$ZIPOUT" .
         echo "Magisk module created: $ZIPOUT"
 
-    # ------------------ Original Create Kernel ZIP --------------------
     - name: Create Kernel ZIP
       id: create_zip
       shell: bash
