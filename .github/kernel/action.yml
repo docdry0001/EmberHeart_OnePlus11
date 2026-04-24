@@ -851,14 +851,38 @@ runs:
         rm -rf backports-stable
         mv "$RELEASE" backports-stable
         cd backports-stable
-
         # Patch CFI macro
         FILE="backport-include/linux/module.h"
         sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
         sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
 
-        make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
+        # Create missing args.h for RTW89 (needs kernel >= 5.17 macro)
+        ARGS_H="backport-include/linux/args.h"
+        if [ ! -f "$ARGS_H" ]; then
+          cat > "$ARGS_H" <<'ARGSHEADER'
+        /* SPDX-License-Identifier: GPL-2.0-only */
+        #ifndef _BACKPORT_LINUX_ARGS_H
+        #define _BACKPORT_LINUX_ARGS_H
+        
+        #define __args(args...) args
+        
+        #define __struct_group(TAG, NAME, ATTRS, INIT...) \
+        	struct TAG { ATTRS } NAME; \
+        	INIT
+        
+        #define struct_group_attr(ATTRS, NAME) \
+        	__struct_group(/* no tag */, NAME, ATTRS, /* no init */)
+        
+        #define STRUCT_GROUP_ATTR(ATTRS, NAME) \
+        	struct_group_attr(ATTRS, NAME)
+        
+        #endif /* _BACKPORT_LINUX_ARGS_H */
+        ARGSHEADER
+          echo "Created backport-include/linux/args.h"
+        fi
 
+        make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
+        
         # ====== FULL CPTCFG LIST (merged from all defconfigs + additional) ======
         cat >> .config <<'CPTCFGEOF'
         CPTCFG_CFG80211=m
