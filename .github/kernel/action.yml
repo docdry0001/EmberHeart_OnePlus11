@@ -32,7 +32,7 @@ inputs:
   backports_release:
     required: false
     type: string
-    default: backports-6.18
+    default: backports-6.1.97-1
 
 outputs:
   kernel_version:
@@ -821,12 +821,12 @@ runs:
     # ==================== NEW: Build OpenWrt backports v6.19 – FULL Wi-Fi STACK ====================
 
     
-    - name: Build Backports v6.18 (Full Wi-Fi driver set)
+    - name: Build Backports v6.1.97-1 (Full Wi-Fi driver set)
       shell: bash
       run: |
         set -euo pipefail
         RELEASE="${{ inputs.backports_release }}"
-        URL="https://github.com/openwrt/backports/releases/download/backports-v6.18/backports-6.18.tar.zst"
+        URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/backports-6.1.97-1.tar.xz"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
 
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
@@ -845,23 +845,24 @@ runs:
           HOSTCC=clang HOSTCXX=clang++ CC=clang
         )
 
+       
         cd "$GITHUB_WORKSPACE"
-        wget -q -O backports.tar.zst "$URL"
-        tar --zstd -xf backports.tar.zst
+        wget -q -O backports.tar.xz "$URL"
+        tar -xf backports.tar.xz
         rm -rf backports-stable
         mv "$RELEASE" backports-stable
         cd backports-stable
-        # Patch CFI macro
+
+        # Patch CFI macro (same as before)
         FILE="backport-include/linux/module.h"
         sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
         sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
 
-      
 
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
         
         # ====== FULL CPTCFG LIST (merged from all defconfigs + additional) ======
-        cat >>.config<<'EOF'
+        cat >> .config <<'EOF'
         
         CPTCFG_CFG80211=m
         CPTCFG_CFG80211_DEFAULT_PS=y
