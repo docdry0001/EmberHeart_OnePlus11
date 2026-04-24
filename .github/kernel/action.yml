@@ -32,7 +32,7 @@ inputs:
   backports_release:
     required: false
     type: string
-    default: backports-6.19
+    default: backports-6.18
 
 outputs:
   kernel_version:
@@ -607,6 +607,7 @@ runs:
         echo "IP  SET support added ✅"
         echo "::endgroup::"
 
+
     - name: Add Build based configs
       shell: bash
       run: |
@@ -622,9 +623,6 @@ runs:
           --enable CONFIG_OPTIMIZE_INLINING \
           --set-val CONFIG_FRAME_WARN 0 \
           --enable CONFIG_TRACEPOINTS
-
-        # ** ԿՐԹԱԿԱՆ ՓՈՓՈԽՈՒԹՅՈՒՆ ** – mac80211-ը դարձնել մոդուլ, որպեսզի backports-ի mac80211-ը կարողանա բեռնվել
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --module CONFIG_MAC80211
 
         if [ "${{ inputs.optimize_level }}" = "O3" ]; then
           ./scripts/config --file arch/arm64/configs/gki_defconfig \
