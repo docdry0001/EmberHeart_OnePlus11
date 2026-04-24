@@ -175,7 +175,7 @@ runs:
         fi
         export PATH="/usr/lib/ccache:$PATH"
 
-        MAKE_FLAGS=(
+a        MAKE_FLAGS=(
           LLVM=1
           LLVM_IAS=1
           ARCH=arm64
