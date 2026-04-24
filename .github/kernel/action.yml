@@ -954,64 +954,19 @@ runs:
         # =========================
         
         CPTCFG_WLAN_VENDOR_REALTEK=y
-        
+
+        CPTCFG_EEPROM_93CX6=m
+
         CPTCFG_RTL8187=m
         CPTCFG_RTL8187_LEDS=y
-        
+
+        CPTCFG_RTLWIFI=m
+        CPTCFG_RTLWIFI_USB=m
+        CPTCFG_RTL8192CU=m
+        CPTCFG_RTLWIFI_DEBUG=y
+
         CPTCFG_RTL8XXXU=m
         CPTCFG_RTL8XXXU_UNTESTED=y
-        
-        
-        # RTW88
-        CPTCFG_RTW88=m
-        CPTCFG_RTW88_CORE=m
-        CPTCFG_RTW88_USB=m
-        
-        CPTCFG_RTW88_88XXA=m
-        CPTCFG_RTW88_8812A=m
-        CPTCFG_RTW88_8821A=m
-        
-        CPTCFG_RTW88_8812AU=m
-        CPTCFG_RTW88_8821AU=m
-        
-        CPTCFG_RTW88_8822B=m
-        CPTCFG_RTW88_8822BU=m
-        
-        CPTCFG_RTW88_8822C=m
-        CPTCFG_RTW88_8822CU=m
-        
-        CPTCFG_RTW88_8723X=m
-        CPTCFG_RTW88_8723D=m
-        CPTCFG_RTW88_8723DU=m
-        
-        CPTCFG_RTW88_8814A=m
-        CPTCFG_RTW88_8814AU=m
-        
-        CPTCFG_RTW88_DEBUG=y
-        CPTCFG_RTW88_DEBUGFS=y
-        
-        
-        # RTW89
-        CPTCFG_RTW89=m
-        CPTCFG_RTW89_CORE=m
-        CPTCFG_RTW89_USB=m
-        
-        CPTCFG_RTW89_8851B=m
-        CPTCFG_RTW89_8851BU=m
-        
-        CPTCFG_RTW89_8852A=m
-        CPTCFG_RTW89_8852AU=m
-        
-        CPTCFG_RTW89_8852B_COMMON=m
-        CPTCFG_RTW89_8852B=m
-        CPTCFG_RTW89_8852BU=m
-        
-        CPTCFG_RTW89_8852C=m
-        CPTCFG_RTW89_8852CU=m
-        
-        CPTCFG_RTW89_DEBUG=y
-        CPTCFG_RTW89_DEBUGFS=y
-        
         
         # =========================
         # ATHEROS / QUALCOMM
