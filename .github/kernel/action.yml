@@ -323,7 +323,7 @@ runs:
 
     # SUSFS patch (commented out, as in original)
 
-        - name: Apply SUSFS Patches
+    - name: Apply SUSFS Patches
       shell: bash
       run: |
         set -euo pipefail
