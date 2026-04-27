@@ -298,7 +298,7 @@ runs:
           --module CONFIG_CAN_SLCAN
 
     - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'valod'
       shell: bash
       run: |
         set -euo pipefail
@@ -318,7 +318,7 @@ runs:
         fi
     
     - name: FIX vmscan scan_adjusted (waipio)
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'valod'
       shell: bash
       run: |
         set -euo pipefail
@@ -336,7 +336,7 @@ runs:
         grep -n "scan_adjusted" vmscan.c | head -20
 
     - name: FIX thermal kvzalloc kvfree (waipio)
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'valod'
       shell: bash
       run: |
         set -euo pipefail
