@@ -41,7 +41,7 @@ runs:
       run: |
         set -euo pipefail
         echo "::group::Validate inputs"
- 3       model="$MODEL"
+        model="$MODEL"
         soc="$SOC"
         branch="$BRANCH"
         manifest="$MANIFEST"
