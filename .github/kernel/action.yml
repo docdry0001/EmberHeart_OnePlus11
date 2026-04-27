@@ -322,7 +322,7 @@ runs:
         echo "::endgroup::"
 
     # SUSFS patch (commented out, as in original)
-    - name: Apply SUSFS Patches (gki-android12-5.10 / SUSFS v2.1.0)
+    - name: Apply SUSFS Patches (gki-android12-5.10 / SUSFS v1.4.2)
       if: inputs.susfs_commit_hash_or_branch != ''
       shell: bash
       run: |
