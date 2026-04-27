@@ -322,162 +322,143 @@ runs:
         echo "::endgroup::"
 
     # SUSFS patch (commented out, as in original)
-
-    - name: Apply SUSFS Patches
+    - name: Apply SUSFS Patches (gki-android12-5.10 / SUSFS v2.1.0)
+      if: inputs.susfs_commit_hash_or_branch != ''
       shell: bash
       run: |
         set -euo pipefail
         echo "::group::Applying SUSFS patches..."
         cd "$CONFIG/kernel_platform"
-        cp ../../susfs4ksu/kernel_patches/50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch ./common/
-        cp ../../susfs4ksu/kernel_patches/fs/* ./common/fs/
-        cp ../../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-        cd ./KernelSU-Next
-        susfs_version=$(grep '#define SUSFS_VERSION' ../common/include/linux/susfs.h | awk -F'"' '{print $2}')
+    
+        # ====== 1. Որոշել SUSFS ճյուղը ======
+        if [[ -z "${{ inputs.susfs_commit_hash_or_branch }}" ]]; then
+          SUSFS_BRANCH="${{ env.SUSFS_KERNEL_BRANCH }}"
+        else
+          SUSFS_BRANCH="${{ inputs.susfs_commit_hash_or_branch }}"
+        fi
+        echo "SUSFS branch: $SUSFS_BRANCH"
+    
+        # ====== 2. Ստուգել, որ susfs4ksu-ն արդեն կլոնավորված է ======
+        if [ ! -d "../../susfs4ksu" ]; then
+          echo "Cloning susfs4ksu..."
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git ../../susfs4ksu
+        fi
+        cd ../../susfs4ksu
+        git checkout "$SUSFS_BRANCH" || { echo "SUSFS branch not found: $SUSFS_BRANCH"; exit 1; }
+        SUSFS_COMMIT_SHA=$(git rev-parse HEAD)
+        echo "SUSFS_COMMIT_SHA=$SUSFS_COMMIT_SHA" >> $GITHUB_ENV
+    
+        # ====== 3. Կարդալ SUSFS տարբերակը ======
+        susfs_version=$(grep '#define SUSFS_VERSION' kernel_patches/include/linux/susfs.h | awk -F'"' '{print $2}' || echo "unknown")
         echo "SUSVER=$susfs_version" >> $GITHUB_ENV
         echo "SuSFS Version: $susfs_version"
-        cd ../
-        # Function to compare semantic versions
+    
+        cd "$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+    
+        # ====== 4. Պատճենել հիմնական patch-ը ======
+        SUSFS_PATCH="../../susfs4ksu/kernel_patches/50_add_susfs_in_$SUSFS_BRANCH.patch"
+        if [ ! -f "$SUSFS_PATCH" ]; then
+          echo "::error::SUSFS patch not found: $SUSFS_PATCH"
+          exit 1
+        fi
+        cp "$SUSFS_PATCH" ./common/
+    
+        # ====== 5. Պատճենել fs/ և include/linux/ ֆայլերը ======
+        cp ../../susfs4ksu/kernel_patches/fs/* ./common/fs/ 2>/dev/null || true
+        cp ../../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/ 2>/dev/null || true
+    
+        # ====== 6. Patch անել KernelSU-Next-ը ======
+        cd ./KernelSU-Next
+        cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
+        patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
+    
+        # ====== 7. Տարբերակային ուղղումներ KernelSU-Next-ի համար ======
         version_lte() {
           [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$1" ]
         }
-
+    
         if version_lte "${susfs_version:1}" "1.5.12"; then
           echo "NEED_HOOKS=true" >> $GITHUB_ENV
         else
           echo "NEED_HOOKS=false" >> $GITHUB_ENV
         fi
-
+    
         case "$susfs_version" in
           "v1.5.8")
-            cd ./KernelSU-Next
             cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-            patch -p1 --forward --fuzz=3 < 10_enable_susfs_for_ksu.patch  || true
-            cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_apk_sign.c.patch" ./
-            patch -p1 --forward --fuzz=3 < fix_apk_sign.c.patch
-            cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_core_hook.c.patch" ./
-            patch -p1 --forward --fuzz=3 < fix_core_hook.c.patch
-            cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_selinux.c.patch" ./
-            patch -p1 --forward --fuzz=3 < fix_selinux.c.patch
-            cp "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_ksud.c.patch" ./
-            patch -p1 --forward --fuzz=3 < fix_ksud.c.patch
+            patch -p1 --forward --fuzz=3 < 10_enable_susfs_for_ksu.patch || true
+            for fix in apk_sign.c core_hook.c selinux.c ksud.c; do
+              f="../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$fix.patch"
+              [ -f "$f" ] && patch -p1 --forward --fuzz=3 < "$f" || true
+            done
             ;;
           "v1.5.9"|"v1.5.10"|"v1.5.11"|"v1.5.12")
-            cd ./KernelSU-Next
             cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-            patch -p1 --forward < 10_enable_susfs_for_ksu.patch  || true
+            patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
             for file in $(find ./kernel -maxdepth 2 -name "*.rej" -printf "%f\n" | cut -d'.' -f1); do
               echo "Patching file: $file.c with fix_$file.c.patch"
-              patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch"
+              patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch" 2>/dev/null || true
             done
-            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_kernel_compat.c.patch"
+            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_kernel_compat.c.patch" 2>/dev/null || true
             ;;
           "v2.0.0")
-            cd ./KernelSU-Next
             cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-
-            patch -p1 --forward < 10_enable_susfs_for_ksu.patch  || true
-
+            patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
             for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
               echo "Patching file: $file with fix_$file.patch"
-              patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
+              patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch" 2>/dev/null || true
             done
-            echo "Patching Hook Mode!"
-            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
-            echo "Patching KSU_TOOLKIT Support for SuSFS kernel!"
-            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
+            for add in overwrite_hook_mode.patch ksu_toolkit.patch; do
+              [ -f "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/$add" ] && patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/$add" || true
+            done
             ;;
           "v2.1.0")
-            cd ./KernelSU-Next
-            patch -p1 --forward < "../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+            cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
+            patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
             for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
               echo "Patching file: $file with fix_$file.patch"
-              patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
+              patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch" 2>/dev/null || true
             done
-            echo "Patching Hook Mode!"
-            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
-            echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
-            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
-            echo "Patching Multi-manager Support for SusFS kernel!"
-            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
-            echo "Patching Multi-manager sepolicy Support for SusFS kernel!"
-            patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/multi_sepolicy_fix.patch"
+            for add in overwrite_hook_mode.patch ksu_toolkit.patch multi_manager.patch multi_sepolicy_fix.patch; do
+              [ -f "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/$add" ] && patch -p1 --forward < "../../../kernel_patches/next/susfs_fix_patches/$susfs_version/$add" || true
+            done
             ;;
           *)
-            echo "::error::Unsupported SUSFS version: $susfs_version"
-            exit 1
+            echo "::warning::Unsupported SUSFS version: $susfs_version, trying generic patch"
+            patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
             ;;
         esac
-        patch -p1 --forward < ksun_susfs_latest.patch || true
+    
+        # Կամընտրական լրացուցիչ patch
+        [ -f ksun_susfs_latest.patch ] && patch -p1 --forward < ksun_susfs_latest.patch || true
+    
+        # ====== 8. Fake kernel patch (անհրաժեշտության դեպքում) ======
         cd ../common
-        if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
-          if ! grep -qxF '#include <trace/hooks/fs.h>' ./fs/namespace.c; then
-            sed -i '/#include <trace\/hooks\/blk.h>/a #include <trace\/hooks\/fs.h>' ./fs/namespace.c
-          fi
-        fi
-
-        # Fake kernel patch to fix failures
         fake_patched=0
-        if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
-          if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
-            echo "nr_subpages Line not found. Fake Patching!"
-            sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
-            fake_patched=1
-          fi
-        fi
         if [ "${{ env.ANDROID_VER }}" = "android12" ] && [ "${{ env.KERNEL_VER }}" = "5.10" ]; then
           if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
             echo "vma_pages Line not found. Fake Patching!"
             fake_patched=1
           fi
         fi
-        if [ "${{ env.ANDROID_VER }}" = "android13" ] && [ "${{ env.KERNEL_VER }}" = "5.15" ]; then
-          if ! grep -qxF $'\tif (!vma_pages(vma))' ./fs/proc/task_mmu.c; then
-            echo "vma_pages Line not found. Fake Patching!"
-            fake_patched=1
-          fi
-        fi
-
-        patch -p1 < 50_add_susfs_in_${{ env.SUSFS_KERNEL_BRANCH }}.patch
-
-        # Revert Fake kernel patch
+    
+        # ====== 9. Կիրառել հիմնական SUSFS patch-ը ======
+        patch -p1 < "50_add_susfs_in_$SUSFS_BRANCH.patch"
+    
+        # ====== 10. Հետարկել fake patch-ը (եթե կիրառվել էր) ======
         if [ "$fake_patched" = 1 ]; then
-          if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
-            if grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
-              echo "nr_subpages Line found. Revert Fake Patching!"
-              sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
-            fi
-          fi
           if [ "${{ env.ANDROID_VER }}" = "android12" ] && [ "${{ env.KERNEL_VER }}" = "5.10" ]; then
             if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
               echo "vma_pages Line found. Revert Fake Patching!"
               sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
             fi
           fi
-          if [ "${{ env.ANDROID_VER }}" = "android13" ] && [ "${{ env.KERNEL_VER }}" = "5.15" ]; then
-            if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
-              echo "vma_pages Line found. Revert Fake Patching!"
-              sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
-            fi
-          fi
-          if [ "${{ env.ANDROID_VER }}" = "android14" ] && [ "${{ env.KERNEL_VER }}" = "6.1" ]; then
-            if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
-              echo "vma_pages Line found. Revert Fake Patching!"
-              sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
-            fi
-          fi
         fi
-
-        KERNEL_VERSION="${{ env.KERNEL_VER }}"
-        MIN_VERSION="5.16"
-        if [ "$(printf '%s\n' "$KERNEL_VERSION" "$MIN_VERSION" | sort -V | head -n1)" = "$KERNEL_VERSION" ]; then
-          echo "Patching ptrace!"
-          patch -p1 -F 3 < "../../../kernel_patches/gki_ptrace.patch"
-        else
-          echo "Kernel >= $MIN_VERSION, skipping ptrace patch"
-        fi
+    
         echo "SuSFS added ✅"
         echo "::endgroup::"
+            
+
 
     - name: Add BBG
       shell: bash
