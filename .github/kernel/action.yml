@@ -542,27 +542,7 @@ runs:
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
 
-    - name: Create Magisk Module for Backports
-      shell: bash
-      run: |
-        MODDIR="$GITHUB_WORKSPACE/magisk-wifi"
-        mkdir -p "$MODDIR/system/vendor/lib/modules"
-        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} "$MODDIR/system/vendor/lib/modules/" \;
-        cat > "$MODDIR/module.prop" <<'EOF'
-        id=wifi_backports
-        name=Wi-Fi Backports
-        version=1.0
-        versionCode=1
-        author=docdry
-        EOF
-        cat > "$MODDIR/service.sh" <<'EOF'
-        #!/system/bin/sh
-        for m in compat cfg80211 mac80211 mt76 mt76-usb mt76-connac-lib mt792x-lib mt792x-usb mt7921-common mt7921u; do
-          insmod "$MODDIR/system/vendor/lib/modules/${m}.ko" 2>/dev/null
-        done
-        EOF
-        chmod +x "$MODDIR/service.sh"
-        zip -r "$ARTIFACTS_FOLDER/backports-magisk.zip" "$MODDIR"
+
 
     - name: Create AnyKernel3 ZIP
       id: create_zip
