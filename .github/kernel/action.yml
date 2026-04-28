@@ -9,13 +9,18 @@ inputs:
     description: 'JSON string containing full device config'
     required: true
     type: string
-  ksu_branch_or_hash:
+  ksun_branch_or_hash:
     description: 'KernelSU Next branch or commit hash (empty = auto)'
     required: false
     type: string
     default: ""
   susfs_commit_hash_or_branch:
     description: 'SUSFS branch or commit hash (empty = auto-detect by kernel version)'
+    required: false
+    type: string
+    default: ""
+  manifest:
+    description: 'Override manifest file name (empty = auto-select from config)'
     required: false
     type: string
     default: ""
@@ -55,6 +60,26 @@ runs:
         jq -r 'to_entries[] | "OP_\(.key | ascii_upcase)=\(.value)"' /tmp/config.json >> "$GITHUB_ENV"
         echo "Parsed config:"
         jq '.' /tmp/config.json
+
+    - name: Select Manifest
+      shell: bash
+      run: |
+        # If user provided manifest input, use it; else auto-select
+        if [ -n "${{ inputs.manifest }}" ]; then
+          echo "OP_MANIFEST=${{ inputs.manifest }}" >> "$GITHUB_ENV"
+        else
+          # Prioritize OOS16 > OOS15 > OOS14
+          if [ -n "${OP_MANIFEST_OOS16:-}" ]; then
+            echo "OP_MANIFEST=${OP_MANIFEST_OOS16}" >> "$GITHUB_ENV"
+          elif [ -n "${OP_MANIFEST_OOS15:-}" ]; then
+            echo "OP_MANIFEST=${OP_MANIFEST_OOS15}" >> "$GITHUB_ENV"
+          elif [ -n "${OP_MANIFEST_OOS14:-}" ]; then
+            echo "OP_MANIFEST=${OP_MANIFEST_OOS14}" >> "$GITHUB_ENV"
+          else
+            echo "No manifest found in config"; exit 1
+          fi
+        fi
+        echo "Selected manifest: $OP_MANIFEST"
 
     - name: Validate Inputs
       shell: bash
@@ -208,7 +233,7 @@ runs:
       shell: bash
       run: |
         cd "$KERNEL_PLATFORM_FOLDER"
-        KSU_INPUT="${{ inputs.ksu_branch_or_hash }}"
+        KSU_INPUT="${{ inputs.ksun_branch_or_hash }}"
         if [ -z "$KSU_INPUT" ]; then
           curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
         else
@@ -249,8 +274,8 @@ runs:
         fi
         # Fix implicit declarations
         cd kernel
-        sed -i 's/ksu_sucompat_init();/\/\* SUSFS fix \*\/ \/\/ ksu_sucompat_init();/' init.c
-        sed -i 's/ksu_setuid_hook_init();/\/\* SUSFS fix \*\/ \/\/ ksu_setuid_hook_init();/' init.c
+        sed -i 's/ksu_sucompat_init();/\/\* SUSFS fix \*\/ \/\/ ksu_sucompat_init();/' core/init.c
+        sed -i 's/ksu_setuid_hook_init();/\/\* SUSFS fix \*\/ \/\/ ksu_setuid_hook_init();/' core/init.c
         cd "$COMMON_KERNEL_FOLDER"
         patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_$SUSFS_KERNEL_BRANCH.patch"
         cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<EOF
@@ -435,18 +460,16 @@ runs:
         rm -rf backports-stable
         mv "$RELEASE" backports-stable
         cd backports-stable
-        # patch CFI
         sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' backport-include/linux/module.h
         sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' backport-include/linux/module.h
-        # args.h fix
         cat > backport-include/linux/args.h <<'EOF'
-          #ifndef _BACKPORT_LINUX_ARGS_H
-          #define _BACKPORT_LINUX_ARGS_H
-          #define __args(args...) args
-          #define __struct_group(TAG, NAME, ATTRS, INIT...) struct TAG { ATTRS } NAME; INIT
-          #define struct_group_attr(ATTRS, NAME) __struct_group(, NAME, ATTRS, )
-          #define STRUCT_GROUP_ATTR(ATTRS, NAME) struct_group_attr(ATTRS, NAME)
-          #endif
+        #ifndef _BACKPORT_LINUX_ARGS_H
+        #define _BACKPORT_LINUX_ARGS_H
+        #define __args(args...) args
+        #define __struct_group(TAG, NAME, ATTRS, INIT...) struct TAG { ATTRS } NAME; INIT
+        #define struct_group_attr(ATTRS, NAME) __struct_group(, NAME, ATTRS, )
+        #define STRUCT_GROUP_ATTR(ATTRS, NAME) struct_group_attr(ATTRS, NAME)
+        #endif
         EOF
         make LLVM=1 ARCH=arm64 KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
         cat >> .config <<'CPTCFGEOF'
