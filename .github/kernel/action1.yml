@@ -484,8 +484,9 @@ runs:
         #define STRUCT_GROUP_ATTR(ATTRS, NAME) struct_group_attr(ATTRS, NAME)
         #endif
         EOF
+        
         make LLVM=1 ARCH=arm64 KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
-        cat >> .config <<'CPTCFGEOF'
+        cat >> .config <<'EOF'
         CPTCFG_CFG80211=m
         CPTCFG_MAC80211=m
         CPTCFG_WLAN=y
@@ -535,7 +536,8 @@ runs:
         CPTCFG_MWIFIEX_USB=m
         CPTCFG_WLAN_VENDOR_ZYDAS=y
         CPTCFG_ZD1211RW=m
-        CPTCFGEGEOF
+        EOF
+        
         make LLVM=1 ARCH=arm64 KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
         make -j$(nproc --all) LLVM=1 ARCH=arm64 KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD"
         mkdir -p ../backports-artifacts
