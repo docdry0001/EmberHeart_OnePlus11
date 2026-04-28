@@ -93,21 +93,6 @@ runs:
         echo "OP_MANIFEST=$manifest_file" >> "$GITHUB_ENV"
         echo "Using manifest file: $manifest_file"
 
-    - name: Validate Inputs
-      shell: bash
-      run: |
-        set -euo pipefail
-        model="$OP_MODEL"
-        soc="$OP_SOC"
-        branch="$OP_BRANCH"
-        manifest="$OP_MANIFEST"
-        optimize='${{ inputs.optimize_level }}'
-        [ -n "$model" ] || { echo "model empty"; exit 1; }
-        [ -n "$soc" ] || { echo "soc empty"; exit 1; }
-        [ -n "$branch" ] || { echo "branch empty"; exit 1; }
-        [ -n "$manifest" ] || { echo "manifest empty"; exit 1; }
-        case "$optimize" in O2|O3) ;; *) echo "optimize must be O2 or O3"; exit 1; ;; esac
-        echo "✅ Validation passed"
 
     - name: Validate Inputs
       shell: bash
