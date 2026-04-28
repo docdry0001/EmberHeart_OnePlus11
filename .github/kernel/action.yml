@@ -1346,7 +1346,7 @@ runs:
           echo "Kernel Uname: ${{ env.KERNEL_UNAME }}"
           echo "KSUN Version: ${KSUVER:-unknown}"
           echo "KSUN commit SHA: ${{ env.KSUN_COMMIT_SHA }}"
-          echo "SUSFS Version: ${SUSVER:-disable}"
+          echo "SUSFS Version: ${SUSVER:-unknown}"
           echo "SUSFS commit SHA: ${{ env.SUSFS_COMMIT_SHA }}"
           echo "Optimization: ${{ inputs.optimize_level }}"
           echo "Image SHA256: ${{ steps.collect_stats.outputs.image_sha256 }}"
