@@ -113,13 +113,31 @@ runs:
       run: |
         set -euo pipefail
         echo "::group::Cleanup space"
-        sudo rm -rf /usr/share/dotnet /usr/share/swift /usr/local/.ghcup /usr/local/julia* \
-          /usr/local/lib/android /usr/local/share/chromium /opt/microsoft /opt/google \
-          /opt/az /usr/local/share/powershell /opt/hostedtoolcache || true
+        # Remove .NET SDKs
+        sudo rm -rf /usr/share/dotnet
+        # Remove Swift toolchain
+        sudo rm -rf /usr/share/swift
+        # Remove Haskell (GHC)
+        sudo rm -rf /usr/local/.ghcup
+        # Remove Julia
+        sudo rm -rf /usr/local/julia*
+        # Remove Android SDKs
+        sudo rm -rf /usr/local/lib/android
+        # Remove Chromium (optional if not using for browser tests)
+        sudo rm -rf /usr/local/share/chromium
+        # Remove Microsoft/Edge and Google Chrome builds
+        sudo rm -rf /opt/microsoft /opt/google
+        # Remove Azure CLI
+        sudo rm -rf /opt/az
+        # Remove PowerShell
+        sudo rm -rf /usr/local/share/powershell
+        # Remove CodeQL and other toolcaches
+        sudo rm -rf /opt/hostedtoolcache
         docker system prune -af || true
         docker builder prune -af || true
         df -h
         echo "::endgroup::"
+
 
     - name: Install Minimal Dependencies
       shell: bash
@@ -617,6 +635,9 @@ runs:
         
         cd "$KERNEL_DIR"
 
+
+
+        # Bluetooth configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_BT_HCIBTUSB \
           --enable CONFIG_BT_HCIBTUSB_BCM \
@@ -626,10 +647,12 @@ runs:
           --enable CONFIG_BT_HCIBPA10X \
           --enable CONFIG_BT_HCIBFUSB
 
+        # Airspy & HackRF
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_USB_AIRSPY \
           --enable CONFIG_USB_HACKRF
 
+        # CAN
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_CAN \
           --enable CONFIG_CAN_DEV \
@@ -639,26 +662,31 @@ runs:
           --enable CONFIG_CAN_GRCAN \
           --enable CONFIG_CAN_XILINXCAN
 
+        # Bosch C_CAN/D_CAN devices
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_CAN_C_CAN \
           --enable CONFIG_CAN_C_CAN_PLATFORM \
           --enable CONFIG_CAN_C_CAN_PCI
 
+        # Bosch CC770 and Intel AN82527 devices
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_CAN_CC770 \
           --enable CONFIG_CAN_CC770_ISA \
           --enable CONFIG_CAN_CC770_PLATFORM
 
+        # Bosch M_CAN devices
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_CAN_M_CAN \
           --enable CONFIG_CAN_M_CAN_PCI \
           --enable CONFIG_CAN_M_CAN_PLATFORM \
           --enable CONFIG_CAN_M_CAN_TCAN4X5X
 
+        # CAN SPI interfaces
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_CAN_HI311X \
           --enable CONFIG_CAN_MCP251X
 
+        # CAN USB interfaces
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_CAN_8DEV_USB \
           --enable CONFIG_CAN_EMS_USB \
@@ -667,12 +695,14 @@ runs:
           --enable CONFIG_CAN_KVASER_USB \
           --enable CONFIG_CAN_PEAK_USB
 
+        # CAN - Networking
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_NETLINK_DIAG \
           --enable CONFIG_VSOCKETS \
           --enable CONFIG_NET_SCHED \
           --enable CONFIG_NET_EMATCH_CANID
 
+        # USB Serial Converter
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_USB_SERIAL \
           --enable CONFIG_USB_SERIAL_CONSOLE \
@@ -680,21 +710,6 @@ runs:
           --enable CONFIG_USB_SERIAL_CH341 \
           --enable CONFIG_USB_SERIAL_FTDI_SIO \
           --enable CONFIG_USB_SERIAL_PL2303
-
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_RALINK \
-          --module CONFIG_RT2X00 \
-          --module CONFIG_RT2X00_LIB \
-          --module CONFIG_RT2X00_LIB_FIRMWARE \
-          --module CONFIG_RT2X00_USB \
-          --module CONFIG_RT2800LIB \
-          --module CONFIG_RT2800USB \
-          --module CONFIG_RT2800USB_RT33XX \
-          --module CONFIG_RT2800USB_RT35XX \
-          --module CONFIG_RT2800USB_RT3573 \
-          --module CONFIG_RT2800USB_RT53XX \
-          --module CONFIG_RT2800USB_RT55XX \
-          --module CONFIG_RT2800USB_UNKNOWN
 
         echo "Nethunter configs applied"
         echo "::endgroup::"
