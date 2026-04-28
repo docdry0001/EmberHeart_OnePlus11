@@ -20,10 +20,10 @@ inputs:
     type: string
     default: ""
   manifest:
-    description: 'Override manifest file name (empty = auto-select from config)'
+    description: 'Manifest selection (OOS14, OOS15, OOS16, etc.)'
     required: false
     type: string
-    default: ""
+    default: "OOS16"
   optimize_level:
     description: 'Compiler optimization level (O2 or O3)'
     required: false
@@ -61,25 +61,53 @@ runs:
         echo "Parsed config:"
         jq '.' /tmp/config.json
 
-    - name: Select Manifest
+    - name: Map Manifest Choice to XML
       shell: bash
       run: |
-        # If user provided manifest input, use it; else auto-select
-        if [ -n "${{ inputs.manifest }}" ]; then
-          echo "OP_MANIFEST=${{ inputs.manifest }}" >> "$GITHUB_ENV"
-        else
-          # Prioritize OOS16 > OOS15 > OOS14
-          if [ -n "${OP_MANIFEST_OOS16:-}" ]; then
-            echo "OP_MANIFEST=${OP_MANIFEST_OOS16}" >> "$GITHUB_ENV"
-          elif [ -n "${OP_MANIFEST_OOS15:-}" ]; then
-            echo "OP_MANIFEST=${OP_MANIFEST_OOS15}" >> "$GITHUB_ENV"
-          elif [ -n "${OP_MANIFEST_OOS14:-}" ]; then
-            echo "OP_MANIFEST=${OP_MANIFEST_OOS14}" >> "$GITHUB_ENV"
-          else
-            echo "No manifest found in config"; exit 1
-          fi
+        choice="${{ inputs.manifest }}"
+        # Convert choice to uppercase for matching, and map to corresponding config variable
+        case "${choice^^}" in
+          OOS14)
+            var="OP_MANIFEST_OOS14"
+            ;;
+          OOS15)
+            var="OP_MANIFEST_OOS15"
+            ;;
+          FAST_BUILD_OOS15|OOS15_FAST)
+            var="OP_MANIFEST_OOS15_MODULES"
+            ;;
+          OOS16)
+            var="OP_MANIFEST_OOS16"
+            ;;
+          OOS16_CUSTOM)
+            var="OP_MANIFEST_OOS16_CUSTOM"
+            ;;
+          *)
+            echo "Unknown manifest choice: $choice"; exit 1
+            ;;
+        esac
+        manifest_file="${!var}"
+        if [ -z "$manifest_file" ]; then
+          echo "Manifest variable $var is empty. Check your config JSON."; exit 1
         fi
-        echo "Selected manifest: $OP_MANIFEST"
+        echo "OP_MANIFEST=$manifest_file" >> "$GITHUB_ENV"
+        echo "Using manifest file: $manifest_file"
+
+    - name: Validate Inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        model="$OP_MODEL"
+        soc="$OP_SOC"
+        branch="$OP_BRANCH"
+        manifest="$OP_MANIFEST"
+        optimize='${{ inputs.optimize_level }}'
+        [ -n "$model" ] || { echo "model empty"; exit 1; }
+        [ -n "$soc" ] || { echo "soc empty"; exit 1; }
+        [ -n "$branch" ] || { echo "branch empty"; exit 1; }
+        [ -n "$manifest" ] || { echo "manifest empty"; exit 1; }
+        case "$optimize" in O2|O3) ;; *) echo "optimize must be O2 or O3"; exit 1; ;; esac
+        echo "✅ Validation passed"
 
     - name: Validate Inputs
       shell: bash
