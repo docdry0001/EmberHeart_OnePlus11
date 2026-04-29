@@ -441,7 +441,7 @@ runs:
         make O="$OUT" olddefconfig
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
 
-         - name: Build Backports v6.19 (Full Wi‑Fi)
+    - name: Build Backports v6.19 (Full Wi‑Fi)
       shell: bash
       run: |
         set -euo pipefail
