@@ -446,7 +446,10 @@ runs:
       run: |
         set -euo pipefail
         RELEASE="backports-6.19"
-        URL="https://github.com/openwrt/backports/releases/download/backports-v6.19/${RELEASE}.tar.zst"
+
+        
+
+        URL="https://github.com/openwrt/backports/releases/download/backports-v6.19/backports-6.19.tar.zst"
         KERNEL_BUILD="$COMMON_KERNEL_FOLDER/out"
         export PATH="/usr/lib/ccache:${CLANG_BIN_PATH}:$PATH"
         cd "$GITHUB_WORKSPACE"
@@ -457,7 +460,8 @@ runs:
         cd backports-stable
         sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' backport-include/linux/module.h
         sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' backport-include/linux/module.h
-        cat > backport-include/linux/args.h <<'EOF'
+      
+        # cat > backport-include/linux/args.h <<'EOF'
         #ifndef _BACKPORT_LINUX_ARGS_H
         #define _BACKPORT_LINUX_ARGS_H
         #define __args(args...) args
@@ -465,7 +469,8 @@ runs:
         #define struct_group_attr(ATTRS, NAME) __struct_group(, NAME, ATTRS, )
         #define STRUCT_GROUP_ATTR(ATTRS, NAME) struct_group_attr(ATTRS, NAME)
         #endif
-        EOF
+        #EOF
+        
         make LLVM=1 ARCH=arm64 KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
         # Write backports config using a heredoc that is indented properly for YAML
         cat > .config.append <<'CPTCFGEOF'
