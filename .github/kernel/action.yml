@@ -262,10 +262,12 @@ runs:
         susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
         echo "SUSVER=$susfs_version" >> $GITHUB_ENV
         cd "$KSUN_FOLDER"
+        
         patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
         for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
           patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
         done
+        
         patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
         patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
         if [ "$KSUVER" -le 33095 ]; then
@@ -485,7 +487,7 @@ runs:
         # Create missing args.h for RTW89
         ARGS_H="backport-include/linux/args.h"
         if [ ! -f "$ARGS_H" ]; then
-          cat > "$ARGS_H" <<'ARGSHEADER'
+          cat > "$ARGS_H" <<EOF
           /* SPDX-License-Identifier: GPL-2.0-only */
           #ifndef _BACKPORT_LINUX_ARGS_H
           #define _BACKPORT_LINUX_ARGS_H
@@ -503,7 +505,8 @@ runs:
           	struct_group_attr(ATTRS, NAME)
     
           #endif /* _BACKPORT_LINUX_ARGS_H */
-          ARGSHEADER
+          EOF
+          
           echo "Created backport-include/linux/args.h"
         fi
     
@@ -512,7 +515,8 @@ runs:
         AIROHA_H="$AIROHA_DIR/airoha_offload.h"
         if [ ! -f "$AIROHA_H" ]; then
           mkdir -p "$AIROHA_DIR"
-          cat > "$AIROHA_H" <<'AIROHAHEADER'
+          
+          cat > "$AIROHA_H" <<EOF
           /* SPDX-License-Identifier: GPL-2.0-only */
           #ifndef _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
           #define _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
@@ -522,14 +526,16 @@ runs:
           static inline void airoha_offload_exit(struct airoha_offload_data *d) { }
     
           #endif /* _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H */
-          AIROHAHEADER
+          EOF
+          
+          
           echo "Created backport-include/linux/soc/airoha/airoha_offload.h"
         fi
     
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
     
         # ====== FULL CPTCFG LIST (all Wi-Fi drivers) ======
-        cat >> .config <<'CPTCFGEOF'
+        cat >> .config <<EOF
         CPTCFG_CFG80211=m
         CPTCFG_CFG80211_DEFAULT_PS=y
         CPTCFG_CFG80211_DEBUGFS=y
@@ -702,7 +708,7 @@ runs:
         CPTCFG_MHI_BUS=m
         CPTCFG_QRTR=m
         CPTCFG_QRTR_MHI=m
-        CPTCFGEOF
+        EOF
     
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
     
