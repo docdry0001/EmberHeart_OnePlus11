@@ -508,16 +508,16 @@ runs:
         if [ ! -f "$AIROHA_H" ]; then
           mkdir -p "$AIROHA_DIR"
           cat > "$AIROHA_H" <<'AIROHAHEADER'
-/* SPDX-License-Identifier: GPL-2.0-only */
-#ifndef _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
-#define _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
-
-struct airoha_offload_data { int dummy; };
-static inline int airoha_offload_init(struct airoha_offload_data *d) { return 0; }
-static inline void airoha_offload_exit(struct airoha_offload_data *d) { }
-
-#endif /* _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H */
-AIROHAHEADER
+            /* SPDX-License-Identifier: GPL-2.0-only */
+            #ifndef _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
+            #define _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
+            
+            struct airoha_offload_data { int dummy; };
+            static inline int airoha_offload_init(struct airoha_offload_data *d) { return 0; }
+            static inline void airoha_offload_exit(struct airoha_offload_data *d) { }
+            
+            #endif /* _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H */
+          AIROHAHEADER
           echo "Created backport-include/linux/soc/airoha/airoha_offload.h"
         fi
 
