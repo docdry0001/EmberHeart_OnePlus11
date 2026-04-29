@@ -487,24 +487,24 @@ runs:
         ARGS_H="backport-include/linux/args.h"
         if [ ! -f "$ARGS_H" ]; then
           cat > "$ARGS_H" <<'ARGSHEADER'
-            /* SPDX-License-Identifier: GPL-2.0-only */
-            #ifndef _BACKPORT_LINUX_ARGS_H
-            #define _BACKPORT_LINUX_ARGS_H
-            
-            #define __args(args...) args
-            
-            #define __struct_group(TAG, NAME, ATTRS, INIT...) \
-            	struct TAG { ATTRS } NAME; \
-            	INIT
-            
-            #define struct_group_attr(ATTRS, NAME) \
-            	__struct_group(/* no tag */, NAME, ATTRS, /* no init */)
-            
-            #define STRUCT_GROUP_ATTR(ATTRS, NAME) \
-            	struct_group_attr(ATTRS, NAME)
-            
-            #endif /* _BACKPORT_LINUX_ARGS_H */
-          ARGSHEADER
+/* SPDX-License-Identifier: GPL-2.0-only */
+#ifndef _BACKPORT_LINUX_ARGS_H
+#define _BACKPORT_LINUX_ARGS_H
+
+#define __args(args...) args
+
+#define __struct_group(TAG, NAME, ATTRS, INIT...) \
+	struct TAG { ATTRS } NAME; \
+	INIT
+
+#define struct_group_attr(ATTRS, NAME) \
+	__struct_group(/* no tag */, NAME, ATTRS, /* no init */)
+
+#define STRUCT_GROUP_ATTR(ATTRS, NAME) \
+	struct_group_attr(ATTRS, NAME)
+
+#endif /* _BACKPORT_LINUX_ARGS_H */
+ARGSHEADER
           echo "Created backport-include/linux/args.h"
         fi
 
@@ -514,16 +514,16 @@ runs:
         if [ ! -f "$AIROHA_H" ]; then
           mkdir -p "$AIROHA_DIR"
           cat > "$AIROHA_H" <<'AIROHAHEADER'
-            /* SPDX-License-Identifier: GPL-2.0-only */
-            #ifndef _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
-            #define _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
-            
-            struct airoha_offload_data { int dummy; };
-            static inline int airoha_offload_init(struct airoha_offload_data *d) { return 0; }
-            static inline void airoha_offload_exit(struct airoha_offload_data *d) { }
-            
-            #endif /* _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H */
-          AIROHAHEADER
+/* SPDX-License-Identifier: GPL-2.0-only */
+#ifndef _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
+#define _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
+
+struct airoha_offload_data { int dummy; };
+static inline int airoha_offload_init(struct airoha_offload_data *d) { return 0; }
+static inline void airoha_offload_exit(struct airoha_offload_data *d) { }
+
+#endif /* _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H */
+AIROHAHEADER
           echo "Created backport-include/linux/soc/airoha/airoha_offload.h"
         fi
 
@@ -719,6 +719,8 @@ runs:
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
+
+        
 
     - name: Create Magisk Module for Backports
       if: success()
