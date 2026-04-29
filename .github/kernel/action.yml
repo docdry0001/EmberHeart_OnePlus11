@@ -441,40 +441,54 @@ runs:
         make O="$OUT" olddefconfig
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
 
-    - name: Build Backports v6.19 (Full Wi‑Fi)
+     - name: Build Backports v6.19 (Full Wi‑Fi)
       shell: bash
       run: |
         set -euo pipefail
         RELEASE="backports-6.19"
-
-        
-
-        URL="https://github.com/openwrt/backports/releases/download/backports-v6.19/backports-6.19.tar.zst"
+        URL="https://github.com/openwrt/backports/releases/download/backports-v6.19/${RELEASE}.tar.zst"
         KERNEL_BUILD="$COMMON_KERNEL_FOLDER/out"
         export PATH="/usr/lib/ccache:${CLANG_BIN_PATH}:$PATH"
+
+        MAKE_FLAGS=(
+          LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm
+          OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump
+          DEPMOD=depmod DTC=dtc STRIP=llvm-strip
+          HOSTCC=clang HOSTCXX=clang++ CC=clang
+        )
+
         cd "$GITHUB_WORKSPACE"
         wget -q -O backports.tar.zst "$URL"
         tar --zstd -xf backports.tar.zst
         rm -rf backports-stable
         mv "$RELEASE" backports-stable
         cd backports-stable
-        sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' backport-include/linux/module.h
-        sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' backport-include/linux/module.h
-      
-        # cat > backport-include/linux/args.h <<'EOF'
-        #ifndef _BACKPORT_LINUX_ARGS_H
-        #define _BACKPORT_LINUX_ARGS_H
-        #define __args(args...) args
-        #define __struct_group(TAG, NAME, ATTRS, INIT...) struct TAG { ATTRS } NAME; INIT
-        #define struct_group_attr(ATTRS, NAME) __struct_group(, NAME, ATTRS, )
-        #define STRUCT_GROUP_ATTR(ATTRS, NAME) struct_group_attr(ATTRS, NAME)
-        #endif
-        #EOF
-        
-        make LLVM=1 ARCH=arm64 KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
-        # Write backports config using a heredoc that is indented properly for YAML
-        cat > .config.append <<'CPTCFGEOF'
 
+        # Patch CFI macro (Նույնը, ինչ նախկինում)
+        FILE="backport-include/linux/module.h"
+        sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
+        sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+
+        # args.h fix (հին միջուկների համար)
+        cat > backport-include/linux/args.h <<'EOF'
+        ifndef _BACKPORT_LINUX_ARGS_H
+        define _BACKPORT_LINUX_ARGS_H
+        define __args(args...) args
+        define __struct_group(TAG, NAME, ATTRS, INIT...) struct TAG { ATTRS } NAME; INIT
+        define struct_group_attr(ATTRS, NAME) __struct_group(, NAME, ATTRS, )
+        define STRUCT_GROUP_ATTR(ATTRS, NAME) struct_group_attr(ATTRS, NAME)
+        endif
+        EOF
+
+        # 1. allnoconfig
+        make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
+
+        # 2.cat >> .config <<'EOF' (ինչպես նկարում)
+        cat >> .config <<'CPTCFGEOF'
         CPTCFG_CFG80211=m
         CPTCFG_CFG80211_DEFAULT_PS=y
         CPTCFG_CFG80211_DEBUGFS=y
