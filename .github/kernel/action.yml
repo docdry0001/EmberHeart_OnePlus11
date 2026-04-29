@@ -245,13 +245,14 @@ runs:
         evict-old-files: 'job'
 
     - name: Clone AnyKernel3 and Other Dependencies
+    - name: Clone AnyKernel3 and Other Dependencies
       shell: bash
       run: |
         set -euo pipefail
         echo "Cloning AnyKernel3 and other dependencies..."
         ANYKERNEL_BRANCH="gki-2.0"
     
-        # --- SUSFS branch/commit resolution ---
+        # ----- SUSFS branch/commit resolution -----
         SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
         declare -A DEFAULT_SUSFS=(
           ["android12-5.10"]="gki-android12-5.10"
@@ -261,12 +262,18 @@ runs:
           ["android16-6.12"]="gki-android16-6.12"
         )
         KERNEL_KEY="${{ env.ANDROID_VER }}-${{ env.KERNEL_VER }}"
+    
+        # Branch name for PATCH FILE (always from kernel version)
+        SUSFS_PATCH_BRANCH="${DEFAULT_SUSFS[$KERNEL_KEY]:-gki-android15-6.6}"
+        echo "SUSFS_PATCH_BRANCH=$SUSFS_PATCH_BRANCH" >> $GITHUB_ENV
+    
+        # Ref to CHECKOUT (input if given, else same as patch branch)
         if [ -z "$SUSFS_INPUT" ]; then
-          SUSFS_BRANCH="${DEFAULT_SUSFS[$KERNEL_KEY]:-gki-android15-6.6}"
-          echo "ℹ️ Using default SUSFS branch for $KERNEL_KEY: $SUSFS_BRANCH"
+          SUSFS_CHECKOUT_REF="$SUSFS_PATCH_BRANCH"
+          echo "ℹ️ Using default SUSFS checkout ref: $SUSFS_CHECKOUT_REF"
         else
-          SUSFS_BRANCH="$SUSFS_INPUT"
-          echo "🎯 Using resolved SUSFS ref: $SUSFS_BRANCH"
+          SUSFS_CHECKOUT_REF="$SUSFS_INPUT"
+          echo "🎯 Using provided SUSFS checkout ref: $SUSFS_CHECKOUT_REF"
         fi
     
         # Helper to clone with retry
@@ -301,31 +308,29 @@ runs:
         retry_clone "https://github.com/TheWildJames/kernel_patches.git"
         retry_clone "https://github.com/nullptr-t-oss/kernel_patches.git" "main" 0 my_patches
     
-        # --- Clone susfs4ksu (always, as input is non-empty by default) ---
+        # Clone susfs4ksu (full clone, then checkout to our ref)
         retry_clone "https://gitlab.com/simonpunk/susfs4ksu.git" "master" 0
         cd susfs4ksu
         
-        if git rev-parse --verify "origin/$SUSFS_BRANCH" >/dev/null 2>&1; then
-          echo "✅ Checking out remote branch: $SUSFS_BRANCH"
-          git checkout "$SUSFS_BRANCH"
-        elif git rev-parse --verify "$SUSFS_BRANCH" >/dev/null 2>&1; then
-          echo "✅ Checking out ref/commit: $SUSFS_BRANCH"
-          git checkout "$SUSFS_BRANCH"
+        if git rev-parse --verify "origin/$SUSFS_CHECKOUT_REF" >/dev/null 2>&1; then
+          echo "✅ Checking out remote branch: $SUSFS_CHECKOUT_REF"
+          git checkout "$SUSFS_CHECKOUT_REF"
+        elif git rev-parse --verify "$SUSFS_CHECKOUT_REF" >/dev/null 2>&1; then
+          echo "✅ Checking out ref/commit: $SUSFS_CHECKOUT_REF"
+          git checkout "$SUSFS_CHECKOUT_REF"
         else
-          echo "::error::SUSFS branch or commit '$SUSFS_BRANCH' not found"
+          echo "::error::SUSFS ref '$SUSFS_CHECKOUT_REF' not found"
           echo "Available remote branches:"
           git branch -r | head -n 20
           exit 1
         fi
     
         SUSFS_COMMIT_SHA=$(git rev-parse HEAD)
-        SUSFS_BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
         echo "SUSFS_COMMIT_SHA=$SUSFS_COMMIT_SHA" >> $GITHUB_ENV
-        echo "SUSFS_BRANCH_NAME=$SUSFS_BRANCH_NAME" >> $GITHUB_ENV
         cd ..
     
         echo "✅ Dependencies cloned"
-
+        
     - name: Clean Up ABI Protected Exports
       shell: bash
       run: |
@@ -384,32 +389,13 @@ runs:
         echo "::group::Applying SUSFS patches..."
         cd "$CONFIG/kernel_platform"
     
-        # 1. SUSFS branch already resolved in Clone step
-        SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
-        declare -A DEFAULT_SUSFS=(
-          ["android12-5.10"]="gki-android12-5.10"
-          ["android13-5.15"]="gki-android13-5.15"
-          ["android14-6.1"]="gki-android14-6.1"
-          ["android15-6.6"]="gki-android15-6.6"
-          ["android16-6.12"]="gki-android16-6.12"
-        )
-        KERNEL_KEY="${{ env.ANDROID_VER }}-${{ env.KERNEL_VER }}"
-        if [ -z "$SUSFS_INPUT" ]; then
-          SUSFS_BRANCH="${DEFAULT_SUSFS[$KERNEL_KEY]:-gki-android15-6.6}"
-        else
-          SUSFS_BRANCH="$SUSFS_INPUT"
-        fi
+        # 1. Patch branch name (already in env: SUSFS_PATCH_BRANCH)
+        SUSFS_PATCH_BRANCH="${SUSFS_PATCH_BRANCH:-gki-android15-6.6}"
+        echo "Using patch branch: $SUSFS_PATCH_BRANCH"
     
-        # 2. Ensure susfs4ksu is checked out correctly
+        # 2. susfs4ksu already cloned; checkout the correct ref (same as clone step)
         cd "$GITHUB_WORKSPACE/susfs4ksu"
-        if git rev-parse --verify "origin/$SUSFS_BRANCH" >/dev/null 2>&1; then
-          git checkout "$SUSFS_BRANCH"
-        elif git rev-parse --verify "$SUSFS_BRANCH" >/dev/null 2>&1; then
-          git checkout "$SUSFS_BRANCH"
-        else
-          echo "::error::SUSFS ref not found"
-          exit 1
-        fi
+        # No further checkout needed, we assume the clone step left it at the right commit.
         SUSFS_COMMIT_SHA=$(git rev-parse HEAD)
         echo "SUSFS_COMMIT_SHA=$SUSFS_COMMIT_SHA" >> $GITHUB_ENV
     
@@ -420,8 +406,8 @@ runs:
     
         cd "$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
     
-        # 4. Main patch
-        SUSFS_PATCH="$GITHUB_WORKSPACE/susfs4ksu/kernel_patches/50_add_susfs_in_$SUSFS_BRANCH.patch"
+        # 4. Main patch (NAME USES PATCH BRANCH)
+        SUSFS_PATCH="$GITHUB_WORKSPACE/susfs4ksu/kernel_patches/50_add_susfs_in_${SUSFS_PATCH_BRANCH}.patch"
         if [ ! -f "$SUSFS_PATCH" ]; then
           echo "::error::SUSFS patch not found: $SUSFS_PATCH"
           exit 1
@@ -505,8 +491,8 @@ runs:
           fi
         fi
     
-        # 9. Apply main SUSFS
-        patch -p1 < "50_add_susfs_in_$SUSFS_BRANCH.patch"
+        # 9. Apply main SUSFS (using the patch branch name)
+        patch -p1 < "50_add_susfs_in_${SUSFS_PATCH_BRANCH}.patch"
     
         # 10. Revert fake
         if [ "$fake_patched" = 1 ]; then
