@@ -245,7 +245,6 @@ runs:
         evict-old-files: 'job'
 
     - name: Clone AnyKernel3 and Other Dependencies
-    - name: Clone AnyKernel3 and Other Dependencies
       shell: bash
       run: |
         set -euo pipefail
