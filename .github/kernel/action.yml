@@ -35,10 +35,10 @@ inputs:
     type: string
     default: "EmberHeart"
   backports_release:
-    description: 'Backports release tag or branch (e.g. backports-6.19)'
+    description: 'Backports release tag or branch (e.g. backports-6.1.97)'
     required: false
     type: string
-    default: backports-6.19"
+    default: backports-6.1.97-1"
 
 outputs:
   kernel_version:
@@ -489,7 +489,7 @@ runs:
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
         
         # ====== FULL CPTCFG LIST (merged from all defconfigs + additional) ======
-        cat >> .config <<'EOF'
+        cat >> .config <<EOF
         
         CPTCFG_CFG80211=m
         CPTCFG_CFG80211_DEFAULT_PS=y
