@@ -446,7 +446,7 @@ runs:
         ./scripts/config --file "$OUT/.config" --set-str LOCALVERSION "-${ANDROID_VER}-${{ inputs.kernel_uname }}"
         make O="$OUT" olddefconfig
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
-
+		
     - name: Build Backports v6.19 (Full Wi-Fi driver set)
 	  shell: bash
 	  run: |
@@ -469,7 +469,7 @@ runs:
 	      OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump
 	      DEPMOD=depmod DTC=dtc STRIP=llvm-strip
 	      HOSTCC=clang HOSTCXX=clang++ CC=clang
-	    )
+	      )
 	
 	    cd "$GITHUB_WORKSPACE"
 	    wget -q -O backports.tar.zst "$URL"
@@ -487,7 +487,7 @@ runs:
 	
 	    # ====== FULL CPTCFG LIST (all Wi-Fi drivers) ======
 	    
-		cat >> .config <<'CPTCFGEOF'
+		cat >> .config <<EOF
 		CPTCFG_CFG80211=m
 	    CPTCFG_CFG80211_DEFAULT_PS=y
 	    CPTCFG_CFG80211_DEBUGFS=y
@@ -650,7 +650,7 @@ runs:
 	    CPTCFG_MHI_BUS=m
 	    CPTCFG_QRTR=m
 	    CPTCFG_QRTR_MHI=m
-	    CPTCFGEOF
+	    EOF
 	
 	    make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
 	
