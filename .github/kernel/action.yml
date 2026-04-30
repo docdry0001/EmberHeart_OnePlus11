@@ -483,55 +483,12 @@ runs:
 	    sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
 	    sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
 	
-	    # Create missing args.h for RTW89
-	    ARGS_H="backport-include/linux/args.h"
-	    if [ ! -f "$ARGS_H" ]; then
-	      cat > "$ARGS_H" <<'ARGSHEADER'
-	      /* SPDX-License-Identifier: GPL-2.0-only */
-	      #ifndef _BACKPORT_LINUX_ARGS_H
-	      #define _BACKPORT_LINUX_ARGS_H
-	
-	      #define __args(args...) args
-	
-	      #define __struct_group(TAG, NAME, ATTRS, INIT...) \
-	      	struct TAG { ATTRS } NAME; \
-	      	INIT
-	
-	      #define struct_group_attr(ATTRS, NAME) \
-	      	__struct_group(/* no tag */, NAME, ATTRS, /* no init */)
-	
-	      #define STRUCT_GROUP_ATTR(ATTRS, NAME) \
-	      	struct_group_attr(ATTRS, NAME)
-	
-	      #endif /* _BACKPORT_LINUX_ARGS_H */
-	      ARGSHEADER
-	      echo "Created backport-include/linux/args.h"
-	    fi
-	
-	    # Stub for airoha_offload.h (needed by MT76)
-	    AIROHA_DIR="backport-include/linux/soc/airoha"
-	    AIROHA_H="$AIROHA_DIR/airoha_offload.h"
-	    if [ ! -f "$AIROHA_H" ]; then
-	      mkdir -p "$AIROHA_DIR"
-	      cat > "$AIROHA_H" <<'AIROHAHEADER'
-	      /* SPDX-License-Identifier: GPL-2.0-only */
-	      #ifndef _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
-	      #define _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H
-	
-	      struct airoha_offload_data { int dummy; };
-	      static inline int airoha_offload_init(struct airoha_offload_data *d) { return 0; }
-	      static inline void airoha_offload_exit(struct airoha_offload_data *d) { }
-	
-	      #endif /* _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H */
-	      AIROHAHEADER
-	      echo "Created backport-include/linux/soc/airoha/airoha_offload.h"
-	    fi
-	
 	    make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
 	
 	    # ====== FULL CPTCFG LIST (all Wi-Fi drivers) ======
-	    cat >> .config <<'CPTCFGEOF'
-	    CPTCFG_CFG80211=m
+	    
+		cat >> .config <<'CPTCFGEOF'
+		CPTCFG_CFG80211=m
 	    CPTCFG_CFG80211_DEFAULT_PS=y
 	    CPTCFG_CFG80211_DEBUGFS=y
 	    CPTCFG_CFG80211_WEXT=y
@@ -544,7 +501,6 @@ runs:
 	    CPTCFG_NL80211_TESTMODE=y
 	    CPTCFG_USB=y
 	    CPTCFG_PCI=y
-	
 	    CPTCFG_WLAN_VENDOR_MEDIATEK=y
 	    CPTCFG_MT76_CORE=m
 	    CPTCFG_MT76_USB=m
@@ -573,7 +529,6 @@ runs:
 	    CPTCFG_MT7925U=m
 	    CPTCFG_MT7925E=m
 	    CPTCFG_MT7996E=m
-	
 	    CPTCFG_WLAN_VENDOR_REALTEK=y
 	    CPTCFG_RTLWIFI=m
 	    CPTCFG_RTLWIFI_DEBUG=y
@@ -613,7 +568,6 @@ runs:
 	    CPTCFG_RTW89_8852C=m
 	    CPTCFG_RTW89_8851BE=m
 	    CPTCFG_RTW89_8922AE=m
-	
 	    CPTCFG_WLAN_VENDOR_RALINK=y
 	    CPTCFG_RT2X00=m
 	    CPTCFG_RT2X00_LIB=m
@@ -637,7 +591,6 @@ runs:
 	    CPTCFG_RT2800PCI_RT35XX=y
 	    CPTCFG_RT2800PCI_RT53XX=y
 	    CPTCFG_RT2800PCI_RT3290=y
-	
 	    CPTCFG_WLAN_VENDOR_ATH=y
 	    CPTCFG_ATH_COMMON=m
 	    CPTCFG_ATH_CARDS=m
@@ -667,7 +620,6 @@ runs:
 	    CPTCFG_ATH11K_DEBUGFS=y
 	    CPTCFG_WCN36XX=m
 	    CPTCFG_WCN36XX_DEBUGFS=y
-	
 	    CPTCFG_WLAN_VENDOR_BROADCOM=y
 	    CPTCFG_B43=m
 	    CPTCFG_B43_USB=y
@@ -677,29 +629,24 @@ runs:
 	    CPTCFG_BRCMFMAC=m
 	    CPTCFG_BRCMFMAC_USB=y
 	    CPTCFG_BRCMFMAC_PCIE=y
-	
 	    CPTCFG_WLAN_VENDOR_INTEL=y
 	    CPTCFG_IWLWIFI=m
 	    CPTCFG_IWLMVM=m
 	    CPTCFG_IWLDVM=m
 	    CPTCFG_IWLWIFI_DEBUG=y
-	
 	    CPTCFG_WLAN_VENDOR_INTERSIL=y
 	    CPTCFG_HOSTAP=m
 	    CPTCFG_P54_COMMON=m
 	    CPTCFG_P54_USB=m
 	    CPTCFG_P54_PCI=m
-	
 	    CPTCFG_WLAN_VENDOR_MARVELL=y
 	    CPTCFG_LIBERTAS=m
 	    CPTCFG_LIBERTAS_USB=m
 	    CPTCFG_MWIFIEX=m
 	    CPTCFG_MWIFIEX_PCIE=m
 	    CPTCFG_MWIFIEX_USB=m
-	
 	    CPTCFG_WLAN_VENDOR_ZYDAS=y
 	    CPTCFG_ZD1211RW=m
-	
 	    CPTCFG_MHI_BUS=m
 	    CPTCFG_QRTR=m
 	    CPTCFG_QRTR_MHI=m
