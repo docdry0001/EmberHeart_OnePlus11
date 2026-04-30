@@ -38,7 +38,7 @@ inputs:
     description: 'Backports release version (git branch)'
     required: false
     type: string
-    default: backports-6.19
+    default: backports-6.18
 
 outputs:
   kernel_version:
