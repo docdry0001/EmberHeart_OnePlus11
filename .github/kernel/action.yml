@@ -445,7 +445,9 @@ runs:
         make O="$OUT" gki_defconfig
         ./scripts/config --file "$OUT/.config" --set-str LOCALVERSION "-${ANDROID_VER}-${{ inputs.kernel_uname }}"
         make O="$OUT" olddefconfig
+        make -j$(nproc --all) O="$OUT" modules_prepare
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
+        
 
     - name: Build Backports v6.19 (Full Wi-Fi driver set)
       shell: bash
