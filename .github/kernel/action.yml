@@ -38,7 +38,7 @@ inputs:
     description: 'Backports release version (git branch)'
     required: false
     type: string
-    default: backports-6.1.97-1
+    default: backports-6.18
 
 outputs:
   kernel_version:
@@ -448,14 +448,14 @@ runs:
         make -j$(nproc --all) O="$OUT" modules_prepare
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
 
-
-    - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
+    - name: Build Backports v6.18 (Full Wi-Fi driver set)
       shell: bash
       run: |
         set -euo pipefail
         RELEASE="${{ inputs.backports_release }}"
-        URL="https://cdn.kernel.org/pub/linux/kernel/projects/backports/stable/v6.1.97/${RELEASE}.tar.xz"
+        URL="https://github.com/openwrt/backports/releases/download/backports-v6.18/${RELEASE}.tar.zst"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
+        KERNEL_SRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common"
     
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
           export PATH="${CLANG_BIN_PATH}:$PATH"
@@ -474,8 +474,8 @@ runs:
         )
     
         cd "$GITHUB_WORKSPACE"
-        wget -q -O backports.tar.xz "$URL"
-        tar -xf backports.tar.xz
+        wget -q -O backports.tar.zst "$URL"
+        tar --zstd -xf backports.tar.zst
         rm -rf backports-stable
         mv "$RELEASE" backports-stable
         cd backports-stable
@@ -484,6 +484,60 @@ runs:
         FILE="backport-include/linux/module.h"
         sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
         sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
+    
+        # Fix missing ieee80211-ht.h
+        if [ -f "$KERNEL_SRC/include/uapi/linux/ieee80211-ht.h" ]; then
+          cp "$KERNEL_SRC/include/uapi/linux/ieee80211-ht.h" include/linux/
+        elif [ -f "$KERNEL_SRC/include/linux/ieee80211-ht.h" ]; then
+          cp "$KERNEL_SRC/include/linux/ieee80211-ht.h" include/linux/
+        else
+          echo "::warning::ieee80211-ht.h not found, creating empty stub"
+          touch include/linux/ieee80211-ht.h
+        fi
+    
+        # Create missing args.h
+        ARGS_H="backport-include/linux/args.h"
+        if [ ! -f "$ARGS_H" ]; then
+          printf '%s\n' \
+            '/* SPDX-License-Identifier: GPL-2.0-only */' \
+            '#ifndef _BACKPORT_LINUX_ARGS_H' \
+            '#define _BACKPORT_LINUX_ARGS_H' \
+            '' \
+            '#define __args(args...) args' \
+            '' \
+            '#define __struct_group(TAG, NAME, ATTRS, INIT...) \' \
+            '	struct TAG { ATTRS } NAME; \' \
+            '	INIT' \
+            '' \
+            '#define struct_group_attr(ATTRS, NAME) \' \
+            '	__struct_group(/* no tag */, NAME, ATTRS, /* no init */)' \
+            '' \
+            '#define STRUCT_GROUP_ATTR(ATTRS, NAME) \' \
+            '	struct_group_attr(ATTRS, NAME)' \
+            '' \
+            '#endif /* _BACKPORT_LINUX_ARGS_H */' \
+            > "$ARGS_H"
+          echo "Created backport-include/linux/args.h"
+        fi
+    
+        # Stub for airoha_offload.h
+        AIROHA_DIR="backport-include/linux/soc/airoha"
+        AIROHA_H="$AIROHA_DIR/airoha_offload.h"
+        if [ ! -f "$AIROHA_H" ]; then
+          mkdir -p "$AIROHA_DIR"
+          printf '%s\n' \
+            '/* SPDX-License-Identifier: GPL-2.0-only */' \
+            '#ifndef _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H' \
+            '#define _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H' \
+            '' \
+            'struct airoha_offload_data { int dummy; };' \
+            'static inline int airoha_offload_init(struct airoha_offload_data *d) { return 0; }' \
+            'static inline void airoha_offload_exit(struct airoha_offload_data *d) { }' \
+            '' \
+            '#endif /* _BACKPORT_LINUX_SOC_AIROHA_OFFLOAD_H */' \
+            > "$AIROHA_H"
+          echo "Created backport-include/linux/soc/airoha/airoha_offload.h"
+        fi
     
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
     
