@@ -672,7 +672,7 @@ runs:
         CPTCFG_QRTR_MHI=m
         EOF
 
-      make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig    
+          
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
     
         make -j$(nproc --all) "${MAKE_FLAGS[@]}" \
@@ -687,6 +687,7 @@ runs:
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
+        
     - name: Create Magisk Module for Backports
       if: success()
       shell: bash
