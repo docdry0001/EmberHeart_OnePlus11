@@ -472,7 +472,7 @@ runs:
           DEPMOD=depmod DTC=dtc STRIP=llvm-strip
           HOSTCC=clang HOSTCXX=clang++ CC=clang
         )
-    
+        make -C "$KERNEL_BUILD" "${MAKE_FLAGS[@]}" modules_prepare 2>/dev/null || true
         cd "$GITHUB_WORKSPACE"
         wget -q -O backports.tar.zst "$URL"
         tar --zstd -xf backports.tar.zst
