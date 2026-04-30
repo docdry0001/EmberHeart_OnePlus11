@@ -452,13 +452,14 @@ runs:
       run: |
         set -euo pipefail
         RELEASE="${{ inputs.backports_release }}"
+        URL="https://github.com/openwrt/backports/releases/download/backports-v6.19/${RELEASE}.tar.zst"
         KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-
+    
         if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
           export PATH="${CLANG_BIN_PATH}:$PATH"
         fi
         export PATH="/usr/lib/ccache:$PATH"
-
+    
         MAKE_FLAGS=(
           LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
           CLANG_TRIPLE=aarch64-linux-gnu-
@@ -469,17 +470,19 @@ runs:
           DEPMOD=depmod DTC=dtc STRIP=llvm-strip
           HOSTCC=clang HOSTCXX=clang++ CC=clang
         )
-
+    
         cd "$GITHUB_WORKSPACE"
+        wget -q -O backports.tar.zst "$URL"
+        tar --zstd -xf backports.tar.zst
         rm -rf backports-stable
-        git clone --depth=1 --branch "$RELEASE" https://github.com/openwrt/backports.git backports-stable
+        mv "$RELEASE" backports-stable
         cd backports-stable
-
+    
         # Patch CFI macro
         FILE="backport-include/linux/module.h"
         sed -i 's/__CFI_ADDRESSABLE(init_module, __initdata)/__CFI_ADDRESSABLE(init_module)/g' "$FILE"
         sed -i 's/__CFI_ADDRESSABLE(cleanup_module, __exitdata)/__CFI_ADDRESSABLE(cleanup_module)/g' "$FILE"
-
+    
         # Create missing args.h for RTW89
         ARGS_H="backport-include/linux/args.h"
         if [ ! -f "$ARGS_H" ]; then
@@ -504,7 +507,7 @@ runs:
           ARGSHEADER
           echo "Created backport-include/linux/args.h"
         fi
-
+    
         # Stub for airoha_offload.h (needed by MT76)
         AIROHA_DIR="backport-include/linux/soc/airoha"
         AIROHA_H="$AIROHA_DIR/airoha_offload.h"
@@ -523,9 +526,9 @@ runs:
           AIROHAHEADER
           echo "Created backport-include/linux/soc/airoha/airoha_offload.h"
         fi
-
+    
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
-
+    
         # Full CPTCFG list
         cat >> .config <<-'EOF'
         	CPTCFG_CFG80211=m
@@ -691,22 +694,21 @@ runs:
         	CPTCFG_QRTR=m
         	CPTCFG_QRTR_MHI=m
         EOF
-
+    
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" olddefconfig
-
+    
         make -j$(nproc --all) "${MAKE_FLAGS[@]}" \
           KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" \
           V=1 2>&1 | tee ../backports-build.log
-
+    
         KO_COUNT=$(find . -name '*.ko' | wc -l)
         echo "Backports built .ko count: $KO_COUNT"
         [ "$KO_COUNT" -gt 0 ] || exit 1
-
+    
         mkdir -p ../backports-artifacts
         find . -name '*.ko' -exec cp --parents {} ../backports-artifacts/ \;
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
-
     - name: Create Magisk Module for Backports
       if: success()
       shell: bash
