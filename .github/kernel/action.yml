@@ -433,19 +433,19 @@ runs:
 
     - name: Build Kernel
       shell: bash
-      run: |
-        export LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
-        export PATH="/usr/lib/ccache:${CLANG_BIN_PATH}:$PATH"
-        export CC="ccache clang" HOSTCC="ccache clang" HOSTCXX="ccache clang++"
-        cd "$COMMON_KERNEL_FOLDER"
-        : > .scmversion
-        OUT=out
-        mkdir -p "$OUT"
-        make O="$OUT" gki_defconfig
-        ./scripts/config --file "$OUT/.config" --set-str LOCALVERSION "-${ANDROID_VER}-${{ inputs.kernel_uname }}"
-        make O="$OUT" olddefconfig
-        make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
+	  run: |
+	    export LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
+		export CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
+		export PATH="/usr/lib/ccache:${CLANG_BIN_PATH}:$PATH"
+		export CC="ccache clang" HOSTCC="ccache clang" HOSTCXX="ccache clang++"
+		cd "$COMMON_KERNEL_FOLDER"
+		: > .scmversion
+		OUT=out
+		mkdir -p "$OUT"
+		make O="$OUT" gki_defconfig
+		./scripts/config --file "$OUT/.config" --set-str LOCALVERSION "-${ANDROID_VER}-${{ inputs.kernel_uname }}"
+		make O="$OUT" olddefconfig
+		make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
 		
     - name: Build Backports v6.19 (Full Wi-Fi driver set)
 	  shell: bash
