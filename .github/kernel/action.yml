@@ -531,8 +531,7 @@ runs:
     
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
     
-              make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
-
+              
         # Write CPTCFG config using TAB-indented heredoc (<<-)
         cat >> .config <<-'EOF'
         CPTCFG_CFG80211=m
