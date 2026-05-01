@@ -447,7 +447,7 @@ runs:
         make O="$OUT" olddefconfig
         make -j$(nproc --all) O="$OUT" modules_prepare
         make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
-
+    
     - name: Build Linux Headers .deb Package
       if: success()
       shell: bash
@@ -456,20 +456,23 @@ runs:
         cd "$COMMON_KERNEL_FOLDER"
         OUT=out
         KERNELRELEASE=$(make O="$OUT" -s kernelrelease)
-        ARCH=arm64
         HEADERS_DIR="$GITHUB_WORKSPACE/linux-headers-$KERNELRELEASE"
         rm -rf "$HEADERS_DIR"
         mkdir -p "$HEADERS_DIR/DEBIAN"
         mkdir -p "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE"
     
-        # Տեղադրել headers-ը
-        make O="$OUT" ARCH=$ARCH headers_install INSTALL_HDR_PATH="$HEADERS_DIR/usr"
+        # Install headers
+        make O="$OUT" ARCH=arm64 headers_install INSTALL_HDR_PATH="$HEADERS_DIR/usr"
     
-        # Պատճենել կոնֆիգուրացիան և Module.symvers-ը
+        # Copy .config and Module.symvers (if exists)
         cp "$OUT/.config" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/.config"
-        cp "$OUT/Module.symvers" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/Module.symvers"
+        if [ -f "$OUT/Module.symvers" ]; then
+          cp "$OUT/Module.symvers" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/Module.symvers"
+        else
+          echo "::warning::Module.symvers not found; headers package will lack symbol version info"
+        fi
     
-        # Ստեղծել control ֆայլ
+        # Create control file
         cat > "$HEADERS_DIR/DEBIAN/control" <<-EOF
         Package: linux-headers-$KERNELRELEASE
         Version: $KERNELRELEASE
@@ -480,12 +483,11 @@ runs:
          useful for building external kernel modules like DKMS or manual compilations.
         EOF
     
-        # Հավաքել .deb-ը
+        # Build .deb
         cd "$GITHUB_WORKSPACE"
         dpkg-deb --build "linux-headers-$KERNELRELEASE"
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
-
 
     - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
       shell: bash
