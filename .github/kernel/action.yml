@@ -33,7 +33,7 @@ inputs:
     description: 'Custom kernel localversion string'
     required: false
     type: string
-    default: "EmberHeart"
+    default: "docEmberHeartdry"
   backports_release:
     description: 'Backports release version (git branch)'
     required: false
@@ -722,10 +722,11 @@ runs:
         echo "warnings_count=$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
 
     - name: Upload Artifacts
+      if: always()
       uses: actions/upload-artifact@v4
       with:
        name: kernel-${{ env.CONFIG }}
        path: |
-            ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-            ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
-            ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
+        ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
+        ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
+        ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
