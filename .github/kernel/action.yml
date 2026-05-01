@@ -724,8 +724,8 @@ runs:
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: kernel-${{ env.CONFIG }}
-        path: |
-          ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-          ${{ env.ARTIFACTS_FOLDER }}/backports-magisk.zip
-          ${{ github.workspace }}/backports-artifacts/
+       name: kernel-${{ env.CONFIG }}
+       path: |
+            ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
+            ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
+            ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
