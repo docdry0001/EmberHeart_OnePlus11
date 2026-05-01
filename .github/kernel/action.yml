@@ -721,12 +721,19 @@ runs:
         echo "image_sha256=$IMG_SHA256" >> "$GITHUB_OUTPUT"
         echo "warnings_count=$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
 
+    - name: List artifacts folder
+      if: always()
+      shell: bash
+      run: |
+        echo "Contents of $ARTIFACTS_FOLDER:"
+        ls -la "$ARTIFACTS_FOLDER"
+
     - name: Upload Artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
-       name: kernel-${{ env.CONFIG }}
-       path: |
-        ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
-        ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
-        ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
+        name: kernel-${{ env.CONFIG }}
+        path: |
+          ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
+          ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
+          ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
