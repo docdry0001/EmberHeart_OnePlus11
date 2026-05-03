@@ -1,4 +1,4 @@
-#name: Build OnePlus kernel modules
+name: Build OnePlus kernel modules
 
 permissions:
   contents: write
@@ -424,21 +424,17 @@ runs:
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
-    - name: Add rtl88xxau modules
+    - name: Add rtl8812au module
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        git clone -b v5.6.4.2 https://github.com/aircrack-ng/rtl8812au.git
-        export ARCH=arm64
-        sed -i 's/^MAKE="/MAKE="ARCH=arm64\ /' dkms.conf
-
-
-
-
-        
+        VENDOR_DIR="$GITHUB_WORKSPACE/$CONFIG/vendor/aircrack-ng"
+        mkdir -p "$VENDOR_DIR"
+        cd "$VENDOR_DIR"
+        if [ -d "rtl8812au" ]; then
+          rm -rf rtl8812au
+        fi
+        git clone https://github.com/aircrack-ng/rtl8812au.git rtl8812au
 
     - name: Detect Clang (toolchain for build)
       shell: bash
@@ -557,6 +553,9 @@ runs:
           ../vendor/st/opensource/eSE-driver
           ../vendor/qcom/opensource/wlan/qcacld-3.0
         )
+
+        # Ավելացնել aircrack-ng/rtl8812au արտաքին մոդուլը
+        EXT_QCOM+=("../vendor/aircrack-ng/rtl8812au")
 
         MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
 
