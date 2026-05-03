@@ -297,9 +297,6 @@ runs:
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
-
-          
-
     - name: Add memkernel module
       shell: bash
       run: |
@@ -412,29 +409,18 @@ runs:
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20   
         
-    - name: Add rtw88 modules
+    # ══════════════════════════════════════════════════
+    # rtl8812AU – կլոնավորում (aircrack-ng/rtl8812AU)
+    # ══════════════════════════════════════════════════
+    - name: Clone rtl8812AU (aircrack-ng)
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
-
-    - name: Add rtl8812au module
-      shell: bash
-      run: |
-        set -euo pipefail
-        VENDOR_DIR="$GITHUB_WORKSPACE/$CONFIG/vendor/aircrack-ng"
-        mkdir -p "$VENDOR_DIR"
-        cd "$VENDOR_DIR"
-        if [ -d "rtl8812au" ]; then
-          rm -rf rtl8812au
-        fi
-        git clone https://github.com/aircrack-ng/rtl8812au.git rtl8812au
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        DEST="$KERNEL_PLATFORM/../vendor/extra/rtl8812au"
+        mkdir -p "$(dirname "$DEST")"
+        git clone --depth=1 https://github.com/aircrack-ng/rtl8812AU.git "$DEST"
+        rm -rf "$DEST/.git"
 
     - name: Detect Clang (toolchain for build)
       shell: bash
@@ -552,10 +538,8 @@ runs:
           ../vendor/st/opensource/driver
           ../vendor/st/opensource/eSE-driver
           ../vendor/qcom/opensource/wlan/qcacld-3.0
+          ../vendor/extra/rtl8812au   # ← ավելացված
         )
-
-        # Ավելացնել aircrack-ng/rtl8812au արտաքին մոդուլը
-        EXT_QCOM+=("../vendor/aircrack-ng/rtl8812au")
 
         MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
 
@@ -573,6 +557,12 @@ runs:
           if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
             echo "Skipping module without Makefile/Kbuild: $module"
             return 0
+          fi
+
+          # Հատուկ rtl8812au-ի համար
+          if [[ "$module" == *rtl8812au ]]; then
+            export CONFIG_RTL8812AU=m
+            extra_syms+=(KSRC="$MSM" CONFIG_RTL8812AU=m)
           fi
 
           if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
@@ -620,7 +610,6 @@ runs:
         # Download default module list
         curl -L -o default_modules.txt https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/default_modules.txt
         # Remove modules in the default list
-
         while IFS= read -r module; do
           if [ -e "$module" ]; then
             rm -f "$module"
