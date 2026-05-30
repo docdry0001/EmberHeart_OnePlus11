@@ -201,8 +201,7 @@ runs:
       shell: bash
       run: |
         git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.0
-        git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
-        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
+        git clone  https://github.com/TheWildJames/kernel_patches.git
         git clone https://gitlab.com/simonpunk/susfs4ksu.git
         cd susfs4ksu
         SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
@@ -324,13 +323,6 @@ runs:
           patch -p1 --forward < "$patch" || true
         done
         
-    - name: Add mt76 modules
-      shell: bash
-      run: |
-        cd "$COMMON_KERNEL_FOLDER/drivers/net/wireless"
-        rm -rf mediatek
-        git clone -b mediatek https://github.com/docdry0001/mt7921.git
-        mv mt7921 mediatek
         
     - name: Add Nethunter Inline Configs
       shell: bash
