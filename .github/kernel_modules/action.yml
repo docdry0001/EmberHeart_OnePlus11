@@ -300,7 +300,7 @@ runs:
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
+          --enable CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
 
@@ -588,7 +588,6 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/realtek/"
         git clone https://github.com/docdry0001/rtl8812au.git
-        cd rtlwifi
         sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
         sed -i 's/CONFIG_PLATFORM_ANDROID_ARM64 = n/CONFIG_PLATFORM_ANDROID_ARM64 = y/g' Makefile
         
