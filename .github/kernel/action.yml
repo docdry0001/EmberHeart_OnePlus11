@@ -201,8 +201,8 @@ runs:
       shell: bash
       run: |
         git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.0
-        git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
-        # git clone --depth=1 https://github.com/docdry0001/kernel_patches.git my_patches
+        #git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
+        git clone --depth=1 https://github.com/docdry0001/kernel_patches.git my_patches
         git clone -b gki-android12-5.10 https://gitlab.com/simonpunk/susfs4ksu.git
         cd susfs4ksu
         SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
