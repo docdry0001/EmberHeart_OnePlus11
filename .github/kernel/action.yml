@@ -267,8 +267,8 @@ runs:
         for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
           patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
         done
-        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
-        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
+        # patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
+        # patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
         if [ "$KSUVER" -le 33095 ]; then
           patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
         fi
@@ -569,6 +569,39 @@ runs:
         dpkg-deb --build "linux-headers-$KERNELRELEASE"
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
+
+    - name: Build rtl88xxau (Full Wi-Fi driver set)
+      shell: bash
+      run: |
+        set -euo pipefail
+        RELEASE="${{ inputs.backports_release }}"
+        URL="h"
+        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
+    
+        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
+          export PATH="${CLANG_BIN_PATH}:$PATH"
+        fi
+        export PATH="/usr/lib/ccache:$PATH"
+    
+        MAKE_FLAGS=(
+          LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
+          CLANG_TRIPLE=aarch64-linux-gnu-
+          CROSS_COMPILE=aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
+          LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm
+          OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump
+          DEPMOD=depmod DTC=dtc STRIP=llvm-strip
+          HOSTCC=clang HOSTCXX=clang++ CC=clang
+        )
+    
+        cd "$GITHUB_WORKSPACE"
+        wget -q -O rtl8812au-5.2.20.zip "$URL"
+        unzip rtl8812au-5.2.20.zip
+        cd rtl8812au-5.2.20
+    
+        # Patch CFI macro
+        export ARCH=arm64
+        sed -i 's/^MAKE="/MAKE="ARCH=arm64\ /' dkms.conf
 
     - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
       shell: bash
