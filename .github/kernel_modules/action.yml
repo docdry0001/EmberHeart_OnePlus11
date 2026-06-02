@@ -258,7 +258,7 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
-        
+        git clone https://github.com/docdry0001/rtl8812au.git
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module PRISM2_USB \
@@ -574,7 +574,6 @@ runs:
             -j"$(nproc --all)" \
             "${MAKE_FLAGS[@]}" \
             O="$OUT" \
-            modules
     
         # Մոդուլները տեղադրիր նույն INSTALL_MOD_PATH-ում, եթե ցանկանում ես
         make -C "$MSM" M="$RTL88" \
