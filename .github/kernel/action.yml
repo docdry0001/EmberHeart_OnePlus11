@@ -601,7 +601,7 @@ runs:
     
         # Patch CFI macro
         export ARCH=arm64
-        sed -i 's/^MAKE="/MAKE="ARCH=arm64\ /' dkms.conf
+        sed -i 's/^MAKE="/MAKE="ARCH=arm64\ /' allnoconfig
 
     - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
       shell: bash
