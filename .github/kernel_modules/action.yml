@@ -157,7 +157,7 @@ runs:
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
           "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         "$REPO" --version
         success=false
@@ -575,7 +575,7 @@ runs:
         echo "Building out-of-tree mt76 driver from morrownr/mt76..."
         MT76_SRC="/tmp/mt76"
         rm -rf "$MT76_SRC"
-        git clone --depth=1 https://github.com/morrownr/mt76.git "$MT76_SRC"
+        git clone --depth=1 https://github.com/docdry0001/mt7921.git "$MT76_SRC"
         cd "$MT76_SRC"
     
         # mt76-ի Makefile-ը ուղղակի obj-m է տալիս, config-ից կախված չէ
