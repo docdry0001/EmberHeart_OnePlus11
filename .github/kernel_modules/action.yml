@@ -261,7 +261,10 @@ runs:
         
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_REALTEK
+          --module PRISM2_USB \
+          --module RTL8192U \
+          --module R8188EU \
+          --enable CONFIG_WLAN_VENDOR_REALTEK 
 
         # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
