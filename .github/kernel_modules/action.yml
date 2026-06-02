@@ -461,7 +461,7 @@ runs:
         cd mt76
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
-        ./install-driver.sh
+        sudo ./install-driver.sh
         
     - name: Build Kernel Modules
       shell: bash
