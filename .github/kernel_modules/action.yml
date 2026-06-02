@@ -310,7 +310,7 @@ runs:
         curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
         
     - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'valod'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
@@ -516,7 +516,7 @@ runs:
             DEFCONFIG="vendor/waipio_defconfig"
             if ! make "${MAKE_FLAGS[@]}" O="$OUT" $DEFCONFIG; then
                 echo "Trying alternative defconfig path..."
-                DEFCONFIG="waipio_defconfig"
+                DEFCONFIG="gki_defconfig"
                 make "${MAKE_FLAGS[@]}" O="$OUT" $DEFCONFIG
             fi
         fi
