@@ -458,7 +458,7 @@ runs:
         MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
         git clone https://github.com/morrownr/mt76.git
-        cd mt 
+        cd mt76
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
         ./install-driver.sh
