@@ -124,7 +124,7 @@ runs:
         sudo apt-get -o Acquire::Retries=3 update -qq
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           git curl ca-certificates build-essential clang lld flex bison \
-          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+          libelf-dev libssl-dev iw libncurses-dev zlib1g-dev liblz4-tool \
           libxml2-utils rsync unzip dwarves file python3 ccache
         sudo apt-get clean
         echo "::endgroup::"
@@ -450,30 +450,36 @@ runs:
         echo "Detected Clang: $CLANG_VERSION"
 
 
-    - name: Build mt76 Modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        cd "$MSM"
-        git clone https://github.com/morrownr/mt76.git
-        cd mt76
-        export PATH="${CLANG_BIN_PATH}:$PATH"
-        export PATH="/usr/lib/ccache:$PATH"
-        sudo ./install-driver.sh
+    # - name: Build mt76 Modules
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+    #     MSM="$KERNEL_PLATFORM/msm-kernel"
+    #     cd "$MSM"
+    #     git clone https://github.com/morrownr/mt76.git
+    #     cd mt76
+    #     export PATH="${CLANG_BIN_PATH}:$PATH"
+    #     export PATH="/usr/lib/ccache:$PATH"
+    #     sudo ./install-driver.sh
         
-    - name: Build Kernel Modules
+    
+
+    - name: Build Kernel Modules (including mt76 out-of-tree)
       shell: bash
       run: |
         set -euo pipefail
+    
+        # ==============================
+        # 1. Նախապատրաստում
+        # ==============================
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
-
+    
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
-
+    
         MAKE_FLAGS=(
           LLVM=1
           LLVM_IAS=1
@@ -495,37 +501,83 @@ runs:
           HOSTCXX=clang++
           CC=ccache\ clang
         )
-
+    
         OUT=out
         INSTALL_MOD_PATH="$MSM/out"
         mkdir -p "$OUT"
-
-        make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
-
-        ./scripts/config --file "$OUT/.config"           --enable CONFIG_LTO_CLANG_THIN           --enable CONFIG_LTO_CLANG           --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE           --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
-
-        echo "Building in-tree kernel modules..."
+    
+        # ------------------------------
+        # 2. .config-ի ստեղծում / ակտիվացում
+        # ------------------------------
+        # Ստուգի՛ր, որ defconfig-ից արդեն .config-ը տեղում է
+        if [ ! -f "$OUT/.config" ]; then
+            echo "ERROR: Kernel .config not found. Run defconfig first!"
+            exit 1
+        fi
+    
+        # Միացրու LTO-ն, optimization-ը և ցանկացած անհրաժեշտ config
+        ./scripts/config --file "$OUT/.config" \
+            --enable CONFIG_LTO_CLANG_THIN \
+            --enable CONFIG_LTO_CLANG \
+            --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
+            --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
+    
+        # Վերջնական .config-ը (olddefconfig-ը ավտոմատ կպատասխանի նոր select-ներին)
         make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
+    
+        # ------------------------------
+        # 3. In‑tree kernel-ի մոդուլների կառուցում
+        # ------------------------------
+        echo "Building in-tree kernel modules..."
         make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-
+        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" \
+            INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+    
+        # ==============================
+        # 4. Out‑of‑tree mt76 (morrownr)
+        #    ԱՌԱՆՑ Kconfig-ի, ԱՌԱՆՑ .config-ում CONFIG_MT76_* ավելացնելու
+        # ==============================
+        echo "Building out-of-tree mt76 driver from morrownr/mt76..."
+        MT76_SRC="/tmp/mt76"
+        rm -rf "$MT76_SRC"
+        git clone --depth=1 https://github.com/morrownr/mt76.git "$MT76_SRC"
+        cd "$MT76_SRC"
+    
+        # mt76-ի Makefile-ը ուղղակի obj-m է տալիս, config-ից կախված չէ
+        make -C "$MSM" M="$MT76_SRC" \
+            -j"$(nproc --all)" \
+            "${MAKE_FLAGS[@]}" \
+            O="$OUT" \
+            modules
+    
+        # Մոդուլները տեղադրիր նույն INSTALL_MOD_PATH-ում, եթե ցանկանում ես
+        make -C "$MSM" M="$MT76_SRC" \
+            "${MAKE_FLAGS[@]}" \
+            O="$OUT" \
+            INSTALL_MOD_PATH="$INSTALL_MOD_PATH" \
+            modules_install
+    
+        # ==============================
+        # 5. Արտաքին (vendor) մոդուլներ
+        #    (Նույնը, ինչ քո օրիգինալ script-ում)
+        # ==============================
         cd "$KERNEL_PLATFORM"
-
+    
         mkdir -p "$KERNEL_PLATFORM/oplus/config"
         touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
-
+    
         mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
         printf 'obj-m :=\n' > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile"
-
+    
         MAKE_FLAGS+=(KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel")
-
+    
         mapfile -t EXT_OPLUS < "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" || true
-
+    
         OPLUS_FLAGS=(
           CHIPSET_COMPANY=QCOM
           OPLUS_VND_BUILD_PLATFORM="$SOC"
         )
-
+    
         EXT_QCOM=(
           ../vendor/qcom/opensource/mmrm-driver
           ../vendor/qcom/opensource/mm-drivers/hw_fence
@@ -555,50 +607,55 @@ runs:
           ../vendor/st/opensource/eSE-driver
           ../vendor/qcom/opensource/wlan/qcacld-3.0
         )
-
+    
         MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
-
+    
         build_external_module() {
           local module="$1"
           local extra_syms=()
-
+    
           echo "==== Processing module: $module ===="
-
+    
           if [ ! -d "$module" ]; then
             echo "Skipping missing module dir: $module"
             return 0
           fi
-
+    
           if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
             echo "Skipping module without Makefile/Kbuild: $module"
             return 0
           fi
-
+    
           if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
             extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
             echo "Using mmrm Module.symvers for $module"
           fi
-
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" modules; then
+    
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
+              "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
+              "${extra_syms[@]}" modules; then
             echo "Build failed, skipping module: $module"
             return 0
           fi
-
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)"             "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}"             "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
+    
+          if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
+              "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
+              "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
             echo "Install failed, skipping module: $module"
             return 0
           fi
         }
-
+    
         for MODULE in "${EXT_OPLUS[@]}"; do
           [ -n "$MODULE" ] || continue
           build_external_module "$MODULE"
         done
-
+    
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
-
+    
+        echo "All modules (in-tree, mt76, vendor) have been built successfully."
     - name: Filter modules
       shell: bash
       run: |
