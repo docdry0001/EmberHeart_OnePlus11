@@ -434,9 +434,6 @@ runs:
         cd "$MSM/drivers/net/wireless/realtek/"
         rm -rf rtlwifi
         git clone  https://github.com/akabul0us/rtl88x2bu.git
-        cd rtl88xxau 
-        git checkout 79e9fe5
-        cd ../
         mv rtl88x2bu rtlwifi
         
         sed -i 's/$(CONFIG_RTLWIFI)/m/g' Makefile
@@ -452,10 +449,7 @@ runs:
         cd "$MSM/drivers/net/wireless/realtek/"
         rm -rf rtl8xxxu
         git clone https://github.com/akabul0us/rtl8812au.git
-        cd rtl88xxau 
-        git checkout 5311b57
-        cd ../
-        mv rtl8812au rtl88xxau 
+        mv rtl8812au rtl88xxxu 
         sed -i 's/$(CONFIG_RTL8XXXU)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtl8xxxu\/Kconfig"$/s/.*/ /' Kconfig
 
