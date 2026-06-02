@@ -264,6 +264,8 @@ runs:
           --module PRISM2_USB \
           --module RTL8192U \
           --module R8188EU \
+          --module RTL88XXAU \
+          --module RTL88XXXU \
           --enable CONFIG_WLAN_VENDOR_REALTEK 
 
         # ATH drivers
