@@ -450,18 +450,18 @@ runs:
         echo "Detected Clang: $CLANG_VERSION"
 
 
-    # - name: Build mt76 Modules
-    #   shell: bash
-    #   run: |
-    #     set -euo pipefail
-    #     KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-    #     MSM="$KERNEL_PLATFORM/msm-kernel"
-    #     cd "$MSM"
-    #     git clone https://github.com/morrownr/mt76.git
-    #     cd mt76
-    #     export PATH="${CLANG_BIN_PATH}:$PATH"
-    #     export PATH="/usr/lib/ccache:$PATH"
-    #     sudo ./install-driver.sh
+    - name: Build mt76 Modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PLATFORM/msm-kernel"
+        cd "$MSM"
+        git clone https://github.com/morrownr/mt76.git
+        cd mt76
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export PATH="/usr/lib/ccache:$PATH"
+        sudo ./check-driver.sh
         
     
 
