@@ -399,17 +399,17 @@ runs:
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20   
         
-    - name: Add rtw88 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
+    # - name: Add rtw88 modules
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+    #     MSM="$KERNEL_PATH/msm-kernel"
+    #     cd "$MSM/drivers/net/wireless/realtek/"
+    #     rm -rf rtw88
+    #     git clone https://github.com/lwfinger/rtw88.git
+    #     sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
+    #     sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
     - name: Add rtl88xnu modules
       shell: bash
@@ -426,18 +426,18 @@ runs:
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtlwifi\/Kconfig"$/s/.*/ /' Kconfig
 
 
-    - name: Add rtl88xxau modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtl8xxxu
-        git clone https://github.com/akabul0us/rtl8812au.git
-        mv rtl8812au rtl88xxxu 
-        sed -i 's/$(CONFIG_RTL8XXXU)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtl8xxxu\/Kconfig"$/s/.*/ /' Kconfig
+    # - name: Add rtl88xxau modules
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+    #     MSM="$KERNEL_PATH/msm-kernel"
+    #     cd "$MSM/drivers/net/wireless/realtek/"
+    #     rm -rf rtl8xxxu
+    #     git clone https://github.com/akabul0us/rtl8812au.git
+    #     mv rtl8812au rtl88xxxu 
+    #     sed -i 's/$(CONFIG_RTL8XXXU)/m/g' Makefile
+    #     sed -i '/^source "drivers\/net\/wireless\/realtek\/rtl8xxxu\/Kconfig"$/s/.*/ /' Kconfig
 
     - name: Detect Clang (toolchain for build)
       shell: bash
