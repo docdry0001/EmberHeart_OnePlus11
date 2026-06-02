@@ -251,7 +251,7 @@ runs:
         echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
         cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
         	CONFIG_KSU=y
-        	CONFIG_KSU_KPROBES_HOOK=y
+        	CONFIG_KSU_KPROBES_HOOK=n
         EOF
 
     - name: Apply SUSFS Patches (v2.1.0)
@@ -263,15 +263,15 @@ runs:
         susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
         echo "SUSVER=$susfs_version" >> $GITHUB_ENV
         cd "$KSUN_FOLDER"
-        patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+        #patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
         for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
           patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
         done
-        # patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
-        # patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
-        if [ "$KSUVER" -le 33095 ]; then
-          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
-        fi
+        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
+        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
+        #if [ "$KSUVER" -le 33095 ]; then
+          #patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
+        #fi
         # Fix implicit declarations
         cd kernel
         sed -i 's/ksu_sucompat_init();/\/\* SUSFS fix \*\/ \/\/ ksu_sucompat_init();/' core/init.c
