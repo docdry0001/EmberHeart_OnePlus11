@@ -465,6 +465,7 @@ runs:
         
     
 
+  
     - name: Build Kernel Modules (including mt76 out-of-tree)
       shell: bash
       run: |
@@ -507,12 +508,17 @@ runs:
         mkdir -p "$OUT"
     
         # ------------------------------
-        # 2. .config-ի ստեղծում / ակտիվացում
+        # 2. .config-ի ստեղծում (եթե բացակայում է)
         # ------------------------------
-        # Ստուգի՛ր, որ defconfig-ից արդեն .config-ը տեղում է
         if [ ! -f "$OUT/.config" ]; then
-            echo "ERROR: Kernel .config not found. Run defconfig first!"
-            exit 1
+            echo "Kernel .config not found, generating defconfig..."
+            # Փորձում ենք waipio-ի defconfig-ը (կարող ես փոխել, եթե այլ է)
+            DEFCONFIG="vendor/waipio_defconfig"
+            if ! make "${MAKE_FLAGS[@]}" O="$OUT" $DEFCONFIG; then
+                echo "Trying alternative defconfig path..."
+                DEFCONFIG="waipio_defconfig"
+                make "${MAKE_FLAGS[@]}" O="$OUT" $DEFCONFIG
+            fi
         fi
     
         # Միացրու LTO-ն, optimization-ը և ցանկացած անհրաժեշտ config
@@ -656,6 +662,7 @@ runs:
         done
     
         echo "All modules (in-tree, mt76, vendor) have been built successfully."
+        
     - name: Filter modules
       shell: bash
       run: |
