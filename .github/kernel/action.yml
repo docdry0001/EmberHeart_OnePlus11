@@ -601,7 +601,8 @@ runs:
     
         # Patch CFI macro
         export ARCH=arm64
-        sed -i 's/^MAKE="/MAKE="ARCH=arm64\ /' allnoconfig
+        make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
+    
 
     - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
       shell: bash
