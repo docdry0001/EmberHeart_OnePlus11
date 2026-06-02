@@ -466,7 +466,7 @@ runs:
         INSTALL_MOD_PATH="$MSM/out"
         mkdir -p "$OUT"
 
-        make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
+        make "${MAKE_FLAGS[@]}" O="$OUT" makefile
 
         ./scripts/config --file "$OUT/.config"           --enable CONFIG_LTO_CLANG_THIN           --enable CONFIG_LTO_CLANG           --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE           --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
 
