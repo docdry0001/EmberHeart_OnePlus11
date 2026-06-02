@@ -278,24 +278,10 @@ runs:
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --module CONFIG_MT7601U \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
-          --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E \
-          --module CONFIG_MT7921U
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
+          --enable CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
 
 
@@ -573,20 +559,20 @@ runs:
         #    ԱՌԱՆՑ Kconfig-ի, ԱՌԱՆՑ .config-ում CONFIG_MT76_* ավելացնելու
         # ==============================
         echo "Building out-of-tree mt76 driver from morrownr/mt76..."
-        MT76_SRC="/tmp/mt76"
-        rm -rf "$MT76_SRC"
-        git clone --depth=1 https://github.com/docdry0001/mt7921.git "$MT76_SRC"
-        cd "$MT76_SRC"
+        RTL88="/tmp/rtl8812au"
+        rm -rf "$RTL88"
+        git clone --depth=1 https://github.com/docdry0001/rtl8812au.git "$RTL88"
+        cd "$RTL88"
     
         # mt76-ի Makefile-ը ուղղակի obj-m է տալիս, config-ից կախված չէ
-        make -C "$MSM" M="$MT76_SRC" \
+        make -C "$MSM" M="$RTL88" \
             -j"$(nproc --all)" \
             "${MAKE_FLAGS[@]}" \
             O="$OUT" \
             modules
     
         # Մոդուլները տեղադրիր նույն INSTALL_MOD_PATH-ում, եթե ցանկանում ես
-        make -C "$MSM" M="$MT76_SRC" \
+        make -C "$MSM" M="$RTL88" \
             "${MAKE_FLAGS[@]}" \
             O="$OUT" \
             INSTALL_MOD_PATH="$INSTALL_MOD_PATH" \
