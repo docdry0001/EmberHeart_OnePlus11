@@ -542,7 +542,7 @@ runs:
         if [ ! -f "$OUT/.config" ]; then
             echo "Kernel .config not found, generating defconfig..."
             # Փորձում ենք waipio-ի defconfig-ը (կարող ես փոխել, եթե այլ է)
-            DEFCONFIG="vendor/waipio_defconfig"
+            DEFCONFIG="gki_defconfig"
             if ! make "${MAKE_FLAGS[@]}" O="$OUT" $DEFCONFIG; then
                 echo "Trying alternative defconfig path..."
                 DEFCONFIG="gki_defconfig"
