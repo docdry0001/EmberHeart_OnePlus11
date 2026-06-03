@@ -522,7 +522,7 @@ runs:
         fi
     
     
-     - name: Build rtl88x2bu (8822bu/8812bu) external module
+    - name: Build rtl88x2bu (8822bu/8812bu) external module
       shell: bash
       run: |
         set -euo pipefail
