@@ -482,10 +482,83 @@ runs:
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
         sudo ./check-driver.sh
-        
-    
 
-  
+    - name: Build rtl88xxau (8812au) external module
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_SRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        KERNEL_OUT="$KERNEL_SRC/out"
+        DRIVER_DIR="$KERNEL_SRC/drivers/net/wireless/realtek/rtl8812au_build"
+    
+        # Կլոնավորում ենք 8812au repo-ն (aircrack-ng-ը ամենահուսալին է)
+        git clone https://github.com/aircrack-ng/rtl8812au.git "$DRIVER_DIR"
+        cd "$DRIVER_DIR"
+    
+        # Անջատում ենք ավելորդ platform-ներ, կոնկրետացնում Android / ARM64
+        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/' Makefile
+        sed -i 's/CONFIG_PLATFORM_ARM64_RPI = n/CONFIG_PLATFORM_ARM64_RPI = y/' Makefile
+        # Սահմանում ենք kernel source-ի ուղին Makefile-ում
+        sed -i "s|^KSRC := .*|KSRC := $KERNEL_SRC|" Makefile
+        sed -i "s|^KERNEL_SRC := .*|KERNEL_SRC := $KERNEL_SRC|" Makefile
+    
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export PATH="/usr/lib/ccache:$PATH"
+    
+        # Build-ի հրաման (O=out-ով, քանի որ kernel-ն out-of-tree build է արված)
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+             CC="ccache clang" \
+             KSRC="$KERNEL_SRC" \
+             O="$KERNEL_OUT" \
+             -j$(nproc) modules
+    
+        # Ստուգում, որ .ko ստեղծվել է
+        if [ -f 8812au.ko ] || [ -f rtl8812au.ko ]; then
+            echo "rtl88xxau module built successfully"
+            mkdir -p "$GITHUB_WORKSPACE/$CONFIG/artifacts"
+            cp *.ko "$GITHUB_WORKSPACE/$CONFIG/artifacts/"
+        else
+            echo "rtl88xxau build failed" && exit 1
+        fi
+    
+    
+     - name: Build rtl88x2bu (8822bu/8812bu) external module
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_SRC="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
+        KERNEL_OUT="$KERNEL_SRC/out"
+        DRIVER_DIR="$KERNEL_SRC/drivers/net/wireless/realtek/rtl88x2bu_build"
+    
+        # Կլոնավորում ենք 88x2bu-ի repo-ն (morrownr-ը ամենաակտուալն է)
+        git clone https://github.com/morrownr/88x2bu.git "$DRIVER_DIR"
+        cd "$DRIVER_DIR"
+    
+        # Android-ի համար Makefile-ի ուղղում
+        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/' Makefile
+        sed -i 's/CONFIG_PLATFORM_ARM64_RPI = n/CONFIG_PLATFORM_ARM64_RPI = y/' Makefile
+        sed -i "s|^KSRC := .*|KSRC := $KERNEL_SRC|" Makefile
+        # Անհրաժեշտության դեպքում ավելացնել նաև KERNEL_SRC-ն (եթե Makefile-ը KSRC-ի փոխարեն օգտագործում է)
+        grep -q KERNEL_SRC Makefile || echo "KERNEL_SRC = $KERNEL_SRC" >> Makefile
+    
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export PATH="/usr/lib/ccache:$PATH"
+    
+        # Build-ի հրաման (O=out-ով)
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+             CC="ccache clang" \
+             KSRC="$KERNEL_SRC" \
+             O="$KERNEL_OUT" \
+             -j$(nproc) modules
+    
+        # Ստուգում
+        if [ -f 88x2bu.ko ] || [ -f rtl88x2bu.ko ]; then
+            echo "rtl88x2bu module built successfully"
+            mkdir -p "$GITHUB_WORKSPACE/$CONFIG/artifacts"
+            cp *.ko "$GITHUB_WORKSPACE/$CONFIG/artifacts/"
+        else
+            echo "rtl88x2bu build failed" && exit 1
+        fi 
     - name: Build Kernel Modules (including mt76 out-of-tree)
       shell: bash
       run: |
