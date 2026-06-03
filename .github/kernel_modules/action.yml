@@ -266,6 +266,7 @@ runs:
           --module R8188EU \
           --module RTL88XXAU \
           --module RTL88XXXU \
+          --module RTL88X2BU
           --enable CONFIG_WLAN_VENDOR_REALTEK 
 
         # ATH drivers
@@ -340,7 +341,7 @@ runs:
         grep -n "scan_adjusted" vmscan.c | head -20
 
     - name: FIX thermal kvzalloc kvfree (waipio)
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'waipioOOO'
       shell: bash
       run: |
         set -euo pipefail
@@ -381,7 +382,7 @@ runs:
 
     
     - name: FIX binder mmget_still_valid compat (waipio)
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'waipioOO'
       shell: bash
       run: |
         set -euo pipefail
@@ -484,7 +485,7 @@ runs:
     
         # Adapt Makefile for Android/ARM64
         sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/' Makefile
-        sed -i 's/CONFIG_PLATFORM_ARM64_RPI = n/CONFIG_PLATFORM_ARM64_RPI = y/' Makefile
+        sed -i 's/CONFIG_PLATFORM_ARM64_ANDROID = n/CONFIG_PLATFORM_ARM64_ANDROID = y/' Makefile
         sed -i "s|^KSRC := .*|KSRC := $KERNEL_SRC|" Makefile
         sed -i "s|^KERNEL_SRC := .*|KERNEL_SRC := $KERNEL_SRC|" Makefile
     
@@ -530,7 +531,7 @@ runs:
     
         # Makefile tweaks for Android/ARM64
         sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/' Makefile
-        sed -i 's/CONFIG_PLATFORM_ARM64_RPI = n/CONFIG_PLATFORM_ARM64_RPI = y/' Makefile
+        sed -i 's/CONFIG_PLATFORM_ARM64_ANDROID = n/CONFIG_PLATFORM_ARM64_ANDROID = y/' Makefile
         sed -i "s|^KSRC := .*|KSRC := $KERNEL_SRC|" Makefile
         grep -q "^KERNEL_SRC" Makefile || echo "KERNEL_SRC = $KERNEL_SRC" >> Makefile
     
@@ -548,201 +549,6 @@ runs:
           echo "rtl88x2bu build failed – no .ko file found" && exit 1
         fi
         
-    - name: Build Kernel Modules (including mt76 out-of-tree)
-      shell: bash
-      run: |
-        set -euo pipefail
-    
-        # ==============================
-        # 1. Նախապատրաստում
-        # ==============================
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        cd "$MSM"
-    
-        export PATH="${CLANG_BIN_PATH}:$PATH"
-        export PATH="/usr/lib/ccache:$PATH"
-    
-        MAKE_FLAGS=(
-          LLVM=1
-          LLVM_IAS=1
-          ARCH=arm64
-          SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld
-          HOSTLD=ld.lld
-          AR=llvm-ar
-          NM=llvm-nm
-          OBJCOPY=llvm-objcopy
-          OBJDUMP=llvm-objdump
-          DEPMOD=depmod
-          DTC=dtc
-          STRIP=llvm-strip
-          HOSTCC=clang
-          HOSTCXX=clang++
-          CC=ccache\ clang
-        )
-    
-        OUT=out
-        INSTALL_MOD_PATH="$MSM/out"
-        mkdir -p "$OUT"
-    
-        # ------------------------------
-        # 2. .config-ի ստեղծում (եթե բացակայում է)
-        # ------------------------------
-        if [ ! -f "$OUT/.config" ]; then
-            echo "Kernel .config not found, generating defconfig..."
-            # Փորձում ենք waipio-ի defconfig-ը (կարող ես փոխել, եթե այլ է)
-            DEFCONFIG="gki_defconfig"
-            if ! make "${MAKE_FLAGS[@]}" O="$OUT" $DEFCONFIG; then
-                echo "Trying alternative defconfig path..."
-                DEFCONFIG="gki_defconfig"
-                make "${MAKE_FLAGS[@]}" O="$OUT" $DEFCONFIG
-            fi
-        fi
-    
-        # Միացրու LTO-ն, optimization-ը և ցանկացած անհրաժեշտ config
-        ./scripts/config --file "$OUT/.config" \
-            --enable CONFIG_LTO_CLANG_THIN \
-            --enable CONFIG_LTO_CLANG \
-            --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE \
-            --disable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
-    
-        # Վերջնական .config-ը (olddefconfig-ը ավտոմատ կպատասխանի նոր select-ներին)
-        make "${MAKE_FLAGS[@]}" O="$OUT" olddefconfig
-    
-        # ------------------------------
-        # 3. In‑tree kernel-ի մոդուլների կառուցում
-        # ------------------------------
-        echo "Building in-tree kernel modules..."
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" modules
-        make -j"$(nproc --all)" "${MAKE_FLAGS[@]}" O="$OUT" \
-            INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-    
-        # ==============================
-        # 4. Out‑of‑tree mt76 (morrownr)
-        #    ԱՌԱՆՑ Kconfig-ի, ԱՌԱՆՑ .config-ում CONFIG_MT76_* ավելացնելու
-        # ==============================
-        echo "Building out-of-tree mt76 driver from morrownr/mt76..."
-        RTL88="/tmp/rtl8812au"
-        rm -rf "$RTL88"
-        git clone --depth=1 https://github.com/docdry0001/rtl8812au.git "$RTL88"
-        cd "$RTL88"
-    
-        # mt76-ի Makefile-ը ուղղակի obj-m է տալիս, config-ից կախված չէ
-        make -C "$MSM" M="$RTL88" \
-            -j"$(nproc --all)" \
-            "${MAKE_FLAGS[@]}" \
-            O="$OUT" \
-    
-        # Մոդուլները տեղադրիր նույն INSTALL_MOD_PATH-ում, եթե ցանկանում ես
-        make -C "$MSM" M="$RTL88" \
-            "${MAKE_FLAGS[@]}" \
-            O="$OUT" \
-            INSTALL_MOD_PATH="$INSTALL_MOD_PATH" \
-            modules_install
-    
-        # ==============================
-        # 5. Արտաքին (vendor) մոդուլներ
-        #    (Նույնը, ինչ քո օրիգինալ script-ում)
-        # ==============================
-        cd "$KERNEL_PLATFORM"
-    
-        mkdir -p "$KERNEL_PLATFORM/oplus/config"
-        touch "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus"
-    
-        mkdir -p "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test"
-        printf 'obj-m :=\n' > "$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/test/Makefile"
-    
-        MAKE_FLAGS+=(KERNEL_SRC="$KERNEL_PLATFORM/./msm-kernel")
-    
-        mapfile -t EXT_OPLUS < "$KERNEL_PLATFORM/oplus/config/modules.ext.$KERNEL_VER.oplus" || true
-    
-        OPLUS_FLAGS=(
-          CHIPSET_COMPANY=QCOM
-          OPLUS_VND_BUILD_PLATFORM="$SOC"
-        )
-    
-        EXT_QCOM=(
-          ../vendor/qcom/opensource/mmrm-driver
-          ../vendor/qcom/opensource/mm-drivers/hw_fence
-          ../vendor/qcom/opensource/mm-drivers/sync_fence
-          ../vendor/qcom/opensource/mm-drivers/msm_ext_display
-          ../vendor/qcom/opensource/securemsm-kernel
-          ../vendor/qcom/opensource/display-drivers/msm
-          ../vendor/qcom/opensource/audio-kernel
-          ../vendor/qcom/opensource/camera-kernel
-          ../vendor/oplus/kernel/explorer
-          ../vendor/qcom/opensource/video-driver
-          ../vendor/qcom/opensource/graphics-kernel
-          ../vendor/qcom/opensource/dataipa/drivers/platform/msm
-          ../vendor/qcom/opensource/datarmnet/core
-          ../vendor/qcom/opensource/datarmnet-ext/aps
-          ../vendor/qcom/opensource/datarmnet-ext/offload
-          ../vendor/qcom/opensource/datarmnet-ext/shs
-          ../vendor/qcom/opensource/datarmnet-ext/sch
-          ../vendor/qcom/opensource/datarmnet-ext/perf
-          ../vendor/qcom/opensource/datarmnet-ext/perf_tether
-          ../vendor/qcom/opensource/datarmnet-ext/wlan
-          ../vendor/qcom/opensource/eva-kernel
-          ../vendor/qcom/opensource/wlan/platform
-          ../vendor/qcom/opensource/bt-kernel
-          ../vendor/nxp/opensource/driver
-          ../vendor/st/opensource/driver
-          ../vendor/st/opensource/eSE-driver
-          ../vendor/qcom/opensource/wlan/qcacld-3.0
-        )
-    
-        MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
-    
-        build_external_module() {
-          local module="$1"
-          local extra_syms=()
-    
-          echo "==== Processing module: $module ===="
-    
-          if [ ! -d "$module" ]; then
-            echo "Skipping missing module dir: $module"
-            return 0
-          fi
-    
-          if [ ! -f "$module/Makefile" ] && [ ! -f "$module/Kbuild" ]; then
-            echo "Skipping module without Makefile/Kbuild: $module"
-            return 0
-          fi
-    
-          if [[ "$module" == "../vendor/qcom/opensource/display-drivers/msm" ]] && [ -f "$MMRM_SYMVERS" ]; then
-            extra_syms+=(KBUILD_EXTRA_SYMBOLS="$MMRM_SYMVERS")
-            echo "Using mmrm Module.symvers for $module"
-          fi
-    
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
-              "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
-              "${extra_syms[@]}" modules; then
-            echo "Build failed, skipping module: $module"
-            return 0
-          fi
-    
-          if ! make -C "$module" M="../$module" -j"$(nproc --all)" \
-              "${MAKE_FLAGS[@]}" O="$MSM/out" "${OPLUS_FLAGS[@]}" \
-              "${extra_syms[@]}" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install; then
-            echo "Install failed, skipping module: $module"
-            return 0
-          fi
-        }
-    
-        for MODULE in "${EXT_OPLUS[@]}"; do
-          [ -n "$MODULE" ] || continue
-          build_external_module "$MODULE"
-        done
-    
-        for MODULE in "${EXT_QCOM[@]}"; do
-          build_external_module "$MODULE"
-        done
-    
-        echo "All modules (in-tree, mt76, vendor) have been built successfully."
         
     - name: Filter modules
       shell: bash
