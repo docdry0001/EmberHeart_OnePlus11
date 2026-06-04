@@ -201,8 +201,7 @@ runs:
       shell: bash
       run: |
         git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.0
-        git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
-        git clone --depth=1 https://github.com/docdry0001/kernel_patches.git my_patches
+        git clone --depth=1 https://github.com/docdry0001/my_patches.git my_patches
         git clone https://gitlab.com/simonpunk/susfs4ksu.git
         cd susfs4ksu
         SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
@@ -254,51 +253,51 @@ runs:
         	CONFIG_KSU_KPROBES_HOOK=n
         EOF
 
-    # - name: Apply SUSFS Patches (v2.1.0)
-    #   shell: bash
-    #   run: |
-    #     cd "$KERNEL_PLATFORM_FOLDER"
-    #     cp "$SUSFS_FOLDER/kernel_patches/fs/"* "$COMMON_KERNEL_FOLDER/fs/"
-    #     cp "$SUSFS_FOLDER/kernel_patches/include/linux/"* "$COMMON_KERNEL_FOLDER/include/linux/"
-    #     susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
-    #     echo "SUSVER=$susfs_version" >> $GITHUB_ENV
-    #     cd "$KSUN_FOLDER"
-    #     #patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
-    #     for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
-    #       patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
-    #     done
-    #     patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
-    #     patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
-    #     #if [ "$KSUVER" -le 33095 ]; then
-    #       #patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
-    #     #fi
-    #     # Fix implicit declarations
-    #     cd kernel
-    #     sed -i 's/ksu_sucompat_init();/\/\* SUSFS fix \*\/ \/\/ ksu_sucompat_init();/' core/init.c
-    #     sed -i 's/ksu_setuid_hook_init();/\/\* SUSFS fix \*\/ \/\/ ksu_setuid_hook_init();/' core/init.c
-    #     cd "$COMMON_KERNEL_FOLDER"
-    #     patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_$SUSFS_KERNEL_BRANCH.patch"
-    #     cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
-    #     	CONFIG_KSU_SUSFS=y
-    #     	CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_SUS_PATH=y
-    #     	CONFIG_KSU_SUSFS_SUS_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_SUS_KSTAT=y
-    #     	CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
-    #     	CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-    #     	CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-    #     	CONFIG_KSU_SUSFS_ENABLE_LOG=y
-    #     	CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-    #     	CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-    #     	CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-    #     	CONFIG_KSU_SUSFS_SUS_MAP=y
-    #     	CONFIG_KSU_SUSFS_SUS_SU=n
-    #     	CONFIG_TMPFS_XATTR=y
-    #     	CONFIG_TMPFS_POSIX_ACL=y
-    #     EOF
+    - name: Apply SUSFS Patches (v2.1.0)
+      shell: bash
+      run: |
+        cd "$KERNEL_PLATFORM_FOLDER"
+        cp "$SUSFS_FOLDER/kernel_patches/fs/"* "$COMMON_KERNEL_FOLDER/fs/"
+        cp "$SUSFS_FOLDER/kernel_patches/include/linux/"* "$COMMON_KERNEL_FOLDER/include/linux/"
+        susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
+        echo "SUSVER=$susfs_version" >> $GITHUB_ENV
+        cd "$KSUN_FOLDER"
+        patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+        for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/common/ntsync/ntsync_compat_android12-5.10.patch"
+        done
+        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/stable/v2.1.0/overwrite_hook_mode.patch"
+        patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/stable/v2.1.0/ksu_toolkit.patch"
+        if [ "$KSUVER" -le 33068 ]; then
+          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/stable/v2.1.0/*.patch"
+        fi
+        # Fix implicit declarations
+        cd kernel
+        sed -i 's/ksu_sucompat_init();/\/\* SUSFS fix \*\/ \/\/ ksu_sucompat_init();/' core/init.c
+        sed -i 's/ksu_setuid_hook_init();/\/\* SUSFS fix \*\/ \/\/ ksu_setuid_hook_init();/' core/init.c
+        cd "$COMMON_KERNEL_FOLDER"
+        patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_$SUSFS_KERNEL_BRANCH.patch"
+        cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
+        	CONFIG_KSU_SUSFS=y
+        	CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+        	CONFIG_KSU_SUSFS_SUS_PATH=y
+        	CONFIG_KSU_SUSFS_SUS_MOUNT=y
+        	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+        	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+        	CONFIG_KSU_SUSFS_SUS_KSTAT=y
+        	CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
+        	CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+        	CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+        	CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+        	CONFIG_KSU_SUSFS_ENABLE_LOG=y
+        	CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+        	CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+        	CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+        	CONFIG_KSU_SUSFS_SUS_MAP=y
+        	CONFIG_KSU_SUSFS_SUS_SU=n
+        	CONFIG_TMPFS_XATTR=y
+        	CONFIG_TMPFS_POSIX_ACL=y
+        EOF
 
     - name: Add BBG
       shell: bash
@@ -323,7 +322,20 @@ runs:
           "$KERNEL_PATCHES_FOLDER/common/reduce_freeze_timeout.patch"; do
           patch -p1 --forward < "$patch" || true
         done
-
+        
+    - name: Apply Common Optimizations
+      shell: bash
+      run: |
+        cd "$COMMON_KERNEL_FOLDER"
+        for patch in \
+          "$KERNEL_PATCHES_FOLDER/nh_patches/add-rtl88xxau-5.6.4.2-drivers.patch" \
+          "$KERNEL_PATCHES_FOLDER/nh_patches/fix-conflicts-with-rndis-configs.patch" \
+          "$KERNEL_PATCHES_FOLDER/nh_patches/fix-hci-uart.patch" \
+          "$KERNEL_PATCHES_FOLDER/nh_patches/fix-mac80211-compilation-error.patch" \
+          "$KERNEL_PATCHES_FOLDER/nh_patches/v2-2-6-mac80211-refactor-monitor-representation-in-sdata.patch"; do
+          patch -p1 --forward < "$patch" || true
+        done
+        
     - name: Add Nethunter Inline Configs
       shell: bash
       run: |
@@ -569,40 +581,6 @@ runs:
         dpkg-deb --build "linux-headers-$KERNELRELEASE"
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
-
-    - name: Build rtl88xxau (Full Wi-Fi driver set)
-      shell: bash
-      run: |
-        set -euo pipefail
-        RELEASE="${{ inputs.backports_release }}"
-        URL="h"
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-    
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
-        fi
-        export PATH="/usr/lib/ccache:$PATH"
-    
-        MAKE_FLAGS=(
-          LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm
-          OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump
-          DEPMOD=depmod DTC=dtc STRIP=llvm-strip
-          HOSTCC=clang HOSTCXX=clang++ CC=clang
-        )
-    
-        cd "$GITHUB_WORKSPACE"
-        wget -q -O rtl8812au-5.2.20.zip "$URL"
-        unzip rtl8812au-5.2.20.zip
-        cd rtl8812au-5.2.20
-    
-        # Patch CFI macro
-        export ARCH=arm64
-        make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
-    
 
     - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
       shell: bash
