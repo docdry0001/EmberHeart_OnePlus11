@@ -710,6 +710,7 @@ runs:
           ../vendor/st/opensource/driver
           ../vendor/st/opensource/eSE-driver
           ../vendor/qcom/opensource/wlan/qcacld-3.0
+          ../mt76
         )
 
         MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
