@@ -519,7 +519,6 @@ runs:
           ../vendor/st/opensource/driver
           ../vendor/st/opensource/eSE-driver
           ../vendor/qcom/opensource/wlan/qcacld-3.0
-          ../mt76
         )
 
         MMRM_SYMVERS="$KERNEL_PLATFORM/../vendor/qcom/opensource/mmrm-driver/Module.symvers"
@@ -571,27 +570,25 @@ runs:
         echo "==== Building mt76 (morrownr) for kernel 5.10 ===="
         MT76_SRC="$KERNEL_PLATFORM/../mt76"
         
-        # Clone if not already present
         if [ ! -d "$MT76_SRC" ]; then
             cd "$KERNEL_PLATFORM/.."
             git clone --depth=1 https://github.com/morrownr/mt76.git
         fi
         
-        # Prepare kernel out/ tree for external modules
+        cd "$MT76_SRC"
+        
+        # Ամբողջովին մաքրել obj- տողերը և ավելացնել ՄԻԱՅՆ անհրաժեշտ մոդուլների ուղիները
+        sed -i '/^obj-.*:=/d' Makefile
+        echo 'obj-y := mt76.o mt76-usb.o mt76-connac-lib.o mt7921/' >> Makefile
+        
+        # Ապահովել, որ out/ ծառը պատրաստ է արտաքին մոդուլների համար
         make -C "$MSM" O="$OUT" "${MAKE_FLAGS[@]}" modules_prepare
         
-        # Build only the needed modules by passing config symbols directly
-        make -C "$MSM" O="$OUT" M="$MT76_SRC" \
-            CONFIG_MT76_CORE=m \
-            CONFIG_MT76_USB=m \
-            CONFIG_MT76_CONNAC_LIB=m \
-            CONFIG_MT7921_COMMON=m \
-            CONFIG_MT7921U=m \
-            "${MAKE_FLAGS[@]}" modules
+        # Կառուցել
+        make -C "$MSM" O="$OUT" M="$PWD" "${MAKE_FLAGS[@]}" modules
         
-        # Install the .ko files
-        make -C "$MSM" O="$OUT" M="$MT76_SRC" \
-            INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        # Տեղադրել .ko-ները մյուս մոդուլների կողքին
+        make -C "$MSM" O="$OUT" M="$PWD" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
         
         cd "$MSM"
         echo "==== mt76 modules built successfully ===="
