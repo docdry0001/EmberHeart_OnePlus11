@@ -492,23 +492,6 @@ runs:
         )
 
         EXT_QCOM=(
-          ../vendor/qcom/opensource/mmrm-driver
-          ../vendor/qcom/opensource/mm-drivers/hw_fence
-          ../vendor/qcom/opensource/mm-drivers/sync_fence
-          ../vendor/qcom/opensource/mm-drivers/msm_ext_display
-          ../vendor/qcom/opensource/securemsm-kernel
-          ../vendor/qcom/opensource/display-drivers/msm
-          ../vendor/qcom/opensource/audio-kernel
-          ../vendor/qcom/opensource/camera-kernel
-          ../vendor/oplus/kernel/explorer
-          ../vendor/qcom/opensource/video-driver
-          ../vendor/qcom/opensource/graphics-kernel
-          ../vendor/qcom/opensource/dataipa/drivers/platform/msm
-          ../vendor/qcom/opensource/datarmnet/core
-          ../vendor/qcom/opensource/datarmnet-ext/aps
-          ../vendor/qcom/opensource/datarmnet-ext/offload
-          ../vendor/qcom/opensource/datarmnet-ext/shs
-          ../vendor/qcom/opensource/datarmnet-ext/sch
           ../vendor/qcom/opensource/datarmnet-ext/perf
           ../vendor/qcom/opensource/datarmnet-ext/perf_tether
           ../vendor/qcom/opensource/datarmnet-ext/wlan
@@ -565,6 +548,7 @@ runs:
         done
         # =======================================================
         # =======================================================
+        # =======================================================
         # Build morrownr/mt76 out-of-tree (mt7921u + deps)
         # =======================================================
         echo "==== Building mt76 (morrownr) for kernel 5.10 ===="
@@ -577,18 +561,23 @@ runs:
         
         cd "$MT76_SRC"
         
-        # Ամբողջովին մաքրել obj- տողերը և ավելացնել ՄԻԱՅՆ անհրաժեշտ մոդուլների ուղիները
+        make -C "$MSM" O="$OUT" "${MAKE_FLAGS[@]}" modules_prepare
+        
         sed -i '/^obj-.*:=/d' Makefile
         echo 'obj-y := mt76.o mt76-usb.o mt76-connac-lib.o mt7921/' >> Makefile
         
-        # Ապահովել, որ out/ ծառը պատրաստ է արտաքին մոդուլների համար
-        make -C "$MSM" O="$OUT" "${MAKE_FLAGS[@]}" modules_prepare
+        # 200IQ-ի "ստերիլիզացիա". WED-ն ու PCIe-ն ամբողջովին անջատում ենք,
+        # USB-ը ստիպողաբար միացնում
+        make -C "$MSM" O="$OUT" M="$PWD" \
+            CONFIG_NET_MEDIATEK_SOC_WED=n \
+            CONFIG_MT76_CONNAC_LIB=y \
+            CONFIG_MT76_USB=y \
+            CONFIG_MT7921_COMMON=y \
+            CONFIG_MT7921U=y \
+            "${MAKE_FLAGS[@]}" modules
         
-        # Կառուցել
-        make -C "$MSM" O="$OUT" M="$PWD" "${MAKE_FLAGS[@]}" modules
-        
-        # Տեղադրել .ko-ները մյուս մոդուլների կողքին
-        make -C "$MSM" O="$OUT" M="$PWD" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        make -C "$MSM" O="$OUT" M="$PWD" \
+            INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
         
         cd "$MSM"
         echo "==== mt76 modules built successfully ===="
