@@ -277,7 +277,7 @@ runs:
 
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --disable CONFIG_WLAN_VENDOR_MEDIATEK \
           
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
@@ -546,7 +546,7 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
-        # =======================================================
+        
         # =======================================================
         # Build morrownr/mt76 out-of-tree (mt7921u + deps)
         # =======================================================
@@ -560,25 +560,22 @@ runs:
         
         cd "$MT76_SRC"
         
-        # 1) Ավելացնում ենք <linux/version.h> mt76.h-ի սկզբում (patch-ի մաս)
+        # 200IQ – ամբողջովին ապաակտիվացնում ենք MediaTek WED-ը
+        # 1) Ավելացնում ենք <linux/version.h> (5.10-ի հետ համատեղելիության համար)
         sed -i '/#include <linux\/kernel.h>/a #include <linux/version.h>' mt76.h
         
-        # 2) Անջատում ենք WED-ը. mt76.h-ում կա՛մ include-ը, կա՛մ ամբողջ WED կոդը
-        #    Փաթաթում ենք #include <linux/soc/mediatek/mtk_wed.h> #ifdef-ով
+        # 2) mt76.h-ի ամենասկզբում ավելացնում ենք #undef CONFIG_NET_MEDIATEK_SOC_WED
+        sed -i '1s/^/#undef CONFIG_NET_MEDIATEK_SOC_WED\n/' mt76.h
+        
+        # 3) WED-ի include-ը դարձնում ենք պայմանական (կրկնակի ապահովություն)
         sed -i 's|^#include <linux/soc/mediatek/mtk_wed.h>|#ifdef CONFIG_NET_MEDIATEK_SOC_WED\n#include <linux/soc/mediatek/mtk_wed.h>\n#endif|' mt76.h
         
-        # 3) Ամբողջ WED-ով կոդը (struct mtk_wed_device և mmio.wed) արդեն
-        #    պաշտպանված է #ifdef CONFIG_NET_MEDIATEK_SOC_WED-ով, բայց
-        #    մենք նաև կսահմանենք, որ config-ը չկա՝ ապահովության համար
         make -C "$MSM" O="$OUT" "${MAKE_FLAGS[@]}" modules_prepare
         
         sed -i '/^obj-.*:=/d' Makefile
         echo 'obj-y := mt76.o mt76-usb.o mt76-connac-lib.o mt7921/' >> Makefile
         
-        # 4) Կառուցում ենք, ԱՌԱՆՑ WED-ի (command-line-ով էլ կրկնում ենք)
-        make -C "$MSM" O="$OUT" M="$PWD" \
-            CONFIG_NET_MEDIATEK_SOC_WED=n \
-            "${MAKE_FLAGS[@]}" modules
+        make -C "$MSM" O="$OUT" M="$PWD" "${MAKE_FLAGS[@]}" modules
         
         make -C "$MSM" O="$OUT" M="$PWD" \
             INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
