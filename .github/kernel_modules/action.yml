@@ -566,7 +566,7 @@ runs:
         done
         # =======================================================
         # =======================================================
-        # Build morrownr/mt76 out-of-tree (MediaTek MT7921U + deps)
+        # Build morrownr/mt76 out-of-tree (mt7921u + deps)
         # =======================================================
         echo "==== Building mt76 (morrownr) for kernel 5.10 ===="
         MT76_SRC="$KERNEL_PLATFORM/../mt76"
@@ -577,20 +577,21 @@ runs:
             git clone --depth=1 https://github.com/morrownr/mt76.git
         fi
         
-        cd "$MT76_SRC"
-        
-        # Keep only the modules we need
-        sed -i '/^obj-.*:=/d' Makefile
-        echo 'obj-y := mt76.o mt76-usb.o mt76-connac-lib.o mt792x/ mt7921/' >> Makefile
-        
-        # Prepare the kernel out/ tree for external modules (idempotent)
+        # Prepare kernel out/ tree for external modules
         make -C "$MSM" O="$OUT" "${MAKE_FLAGS[@]}" modules_prepare
         
-        # Build the mt76 modules using the exact same out/ configuration
-        make -C "$MSM" O="$OUT" M="$PWD" "${MAKE_FLAGS[@]}" modules
+        # Build only the needed modules by passing config symbols directly
+        make -C "$MSM" O="$OUT" M="$MT76_SRC" \
+            CONFIG_MT76_CORE=m \
+            CONFIG_MT76_USB=m \
+            CONFIG_MT76_CONNAC_LIB=m \
+            CONFIG_MT7921_COMMON=m \
+            CONFIG_MT7921U=m \
+            "${MAKE_FLAGS[@]}" modules
         
-        # Install them alongside other modules
-        make -C "$MSM" O="$OUT" M="$PWD" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        # Install the .ko files
+        make -C "$MSM" O="$OUT" M="$MT76_SRC" \
+            INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
         
         cd "$MSM"
         echo "==== mt76 modules built successfully ===="
