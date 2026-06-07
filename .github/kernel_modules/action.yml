@@ -278,30 +278,11 @@ runs:
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --module CONFIG_MT7601U \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_SDIO \
-          --module CONFIG_MT76_LEDS \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
-          --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
-          --module CONFIG_MT76x2_COMMON \
-          --module CONFIG_MT76x0_COMMON \
-          --module CONFIG_MT76x2U \
-          --module CONFIG_MT76x0U \
-          --module CONFIG_MT7615_COMMON \
-          --module CONFIG_MT7663_USB_SDIO_COMMON \
-          --module CONFIG_MT7663U \
-          --module CONFIG_MT7915E \
-          --module CONFIG_MT7921E \
-          --module CONFIG_MT7921U
-
+          
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
-          --module CONFIG_CAN_SLCAN
+          --enable CONFIG_MAC80211_LEDS \
+          --enable CONFIG_CAN_SLCAN
 
 
           
@@ -316,7 +297,7 @@ runs:
         curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
         
     - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'valod'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
