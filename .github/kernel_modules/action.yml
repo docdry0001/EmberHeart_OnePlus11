@@ -157,7 +157,7 @@ runs:
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
           "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OneplusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         "$REPO" --version
         success=false
@@ -222,7 +222,7 @@ runs:
       run: |
         set -euo pipefail
         echo "Cloning kernel patches for msm kernel..."
-        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
+        git clone --depth=1 https://github.com/docdry0001/my_patches.git my_patches
 
     - name: Clean Up ABI Protected Exports
       shell: bash
@@ -305,7 +305,7 @@ runs:
         cd "$CONFIG/kernel_platform/msm-kernel"
     
         shopt -s nullglob
-        PATCHES=(../../../my_patches/kernel_patches/op11/msm/*.patch)
+        PATCHES=(../../../my_patches/nh_patches/*.patch)
     
         if [ ${#PATCHES[@]} -eq 0 ]; then
           echo "[!] No OP11 msm patches found, skipping."
