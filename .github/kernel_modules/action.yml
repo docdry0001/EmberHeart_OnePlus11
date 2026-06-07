@@ -466,11 +466,7 @@ runs:
         cd "$KERNEL_PLATFORM/.."
         git clone --depth=1 https://github.com/morrownr/mt76.git
         cd mt76
-    
-        # Կիրառել patch-ը, որն արդեն clone-վել է
-        git apply --verbose compat-patches/0001-compat-mainline-kernel-6.6-plus.patch
-    
-        # Մաքրել Makefile-ի obj- տողերը, ապա ավելացնել մեր մոդուլները (mt792x/-ը ևս)
+        # Patch-ը ՊԵՏՔ ՉԷ. morrownr-ի main-ն արդեն 5.10-compatible է
         sed -i '/^obj-.*:=/d' Makefile
         echo 'obj-y := mt76.o mt76-usb.o mt76-connac-lib.o mt792x/ mt7921/' >> Makefile
         
