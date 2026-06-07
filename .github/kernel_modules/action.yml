@@ -553,32 +553,40 @@ runs:
         # =======================================================
         echo "==== Building mt76 (morrownr) for kernel 5.10 ===="
         MT76_SRC="$KERNEL_PLATFORM/../mt76"
-        
+
         if [ ! -d "$MT76_SRC" ]; then
             cd "$KERNEL_PLATFORM/.."
             git clone --depth=1 https://github.com/morrownr/mt76.git
         fi
-        
+
         cd "$MT76_SRC"
-        
+
+        # 200IQ քայլ. ստեղծել dummy mtk_wed.h, որը թույլ կտա կոմպիլյացնել,
+        # բայց WED-ն արդեն անջատված է config-ով ու չի օգտագործվի:
+        mkdir -p include/linux/soc/mediatek
+        cat > include/linux/soc/mediatek/mtk_wed.h << 'EOF'
+        /* Dummy header – WED is disabled, MT7921U (USB) does not need it */
+        #ifndef _DUMMY_MTK_WED_H
+        #define _DUMMY_MTK_WED_H
+        struct mtk_wed_device;
+        static inline void mtk_wed_fe_reset(void) {}
+        static inline void mtk_wed_fe_reset_complete(void) {}
+        #endif
+        EOF
+
         make -C "$MSM" O="$OUT" "${MAKE_FLAGS[@]}" modules_prepare
-        
+
         sed -i '/^obj-.*:=/d' Makefile
         echo 'obj-y := mt76.o mt76-usb.o mt76-connac-lib.o mt7921/' >> Makefile
-        
-        # 200IQ-ի "ստերիլիզացիա". WED-ն ու PCIe-ն ամբողջովին անջատում ենք,
-        # USB-ը ստիպողաբար միացնում
+
+        # WED-ը command-line-ով անջատում ենք (կրկնակի ապահովություն)
         make -C "$MSM" O="$OUT" M="$PWD" \
             CONFIG_NET_MEDIATEK_SOC_WED=n \
-            CONFIG_MT76_CONNAC_LIB=y \
-            CONFIG_MT76_USB=y \
-            CONFIG_MT7921_COMMON=y \
-            CONFIG_MT7921U=y \
             "${MAKE_FLAGS[@]}" modules
-        
+
         make -C "$MSM" O="$OUT" M="$PWD" \
             INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
-        
+
         cd "$MSM"
         echo "==== mt76 modules built successfully ===="
 
