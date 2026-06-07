@@ -427,17 +427,6 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
 
-    - name: Add mt7921u (morrownr) external module
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        cd "$KERNEL_PLATFORM/.."
-        git clone --depth=1 https://github.com/morrownr/mt76.git
-        cd mt76
-        # Patch-ը ՊԵՏՔ ՉԷ. morrownr-ի main-ն արդեն 5.10-compatible է
-        sed -i '/^obj-.*:=/d' Makefile
-        echo 'obj-y := mt76.o mt76-usb.o mt76-connac-lib.o mt792x/ mt7921/' >> Makefile
         
     - name: Build Kernel Modules
       shell: bash
@@ -575,7 +564,37 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
-    
+        # =======================================================
+        # Build morrownr/mt76 out‑of‑tree (MediaTek MT7921U + deps)
+        # =======================================================
+        echo "==== Building mt76 (morrownr) for kernel 5.10 ===="
+        MT76_SRC="$KERNEL_PLATFORM/../mt76"
+        
+        # Clone if not already present (если был отдельный шаг клонирования, можно пропустить)
+        if [ ! -d "$MT76_SRC" ]; then
+            cd "$KERNEL_PLATFORM/.."
+            git clone --depth=1 https://github.com/morrownr/mt76.git
+        fi
+        
+        cd "$MT76_SRC"
+        
+        # Настраиваем Makefile: оставляем только нужные модули
+        sed -i '/^obj-.*:=/d' Makefile
+        echo 'obj-y := mt76.o mt76-usb.o mt76-connac-lib.o mt792x/ mt7921/' >> Makefile
+        
+        # Подготавливаем ядро для сборки внешних модулей
+        # Это гарантирует наличие сгенерированных файлов (Module.symvers, autoconf.h и т.д.)
+        make -C "$MSM" O="$OUT" "${MAKE_FLAGS[@]}" modules_prepare
+        
+        # Собираем модули mt76, используя конфигурацию и toolchain ядра
+        make -C "$MSM" M="$PWD" "${MAKE_FLAGS[@]}" modules
+        
+        # Устанавливаем .ko в out/lib/modules/... (как и in‑tree модули)
+        make -C "$MSM" M="$PWD" INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
+        
+        # Возвращаемся в msm-kernel, чтобы не ломать дальнейшие шаги
+        cd "$MSM"
+        echo "==== mt76 modules built successfully ===="
 
     - name: Filter modules
       shell: bash
