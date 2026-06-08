@@ -547,74 +547,78 @@ runs:
           build_external_module "$MODULE"
         done
         
-    - name: Extract kernel headers for on-device compilation
-      if: success()  # միայն եթե build-ը հաջող է
+    - name: Build Linux Headers .deb Package
+      if: success()
       shell: bash
       run: |
         set -euo pipefail
-        # Ճշգրիտ ճանապարհներ (հիմնվելով քո env-ի վրա)
         WORKSPACE="$GITHUB_WORKSPACE"
-        CONFIG="$CONFIG"                 # OP11R
-        KERNEL_PLATFORM="$WORKSPACE/$CONFIG/kernel_platform"
-        KERNEL_SRC="$KERNEL_PLATFORM/msm-kernel"
+        CONFIG="$CONFIG"
+        KERNEL_SRC="$WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
         KERNEL_OUT="$KERNEL_SRC/out"
-        HEADERS_DIR="$WORKSPACE/kernel-headers"
-        MODULES_DIR="lib/modules/$KERNEL_FULL_VER/build"   # android12-5.10.236
+        ARTIFACTS_FOLDER="$WORKSPACE/$CONFIG/artifacts"
     
-        echo "Kernel source: $KERNEL_SRC"
-        echo "Kernel output: $KERNEL_OUT"
-        echo "Headers destination: $HEADERS_DIR/$MODULES_DIR"
+        # dpkg-deb-ի առկայության ստուգում
+        if ! command -v dpkg-deb >/dev/null 2>&1; then
+          echo "Installing dpkg-dev..."
+          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends dpkg-dev
+        fi
     
-        # Ստուգում ենք, որ kernel source-ը և out-ը գոյություն ունեն
-        [ -d "$KERNEL_SRC" ] || { echo "ERROR: $KERNEL_SRC missing"; exit 1; }
-        [ -d "$KERNEL_OUT" ] || { echo "ERROR: $KERNEL_OUT missing"; exit 1; }
-        [ -f "$KERNEL_OUT/.config" ] || { echo "ERROR: .config missing in out"; exit 1; }
-        [ -f "$KERNEL_OUT/Module.symvers" ] || echo "WARNING: Module.symvers missing, modules built without MODVERSIONS"
+        cd "$KERNEL_SRC"
+        export PATH="${CLANG_BIN_PATH}:$PATH"
+        export PATH="/usr/lib/ccache:$PATH"
     
-        mkdir -p "$HEADERS_DIR/$MODULES_DIR"
+        # Ստանում ենք kernel release-ը (օր. 5.10.236-android12)
+        KERNELRELEASE=$(make O="$KERNEL_OUT" \
+          ARCH=arm64 \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          CC="ccache clang" \
+          LD=ld.lld \
+          LLVM=1 \
+          LLVM_IAS=1 \
+          -s kernelrelease)
+        echo "KERNELRELEASE=$KERNELRELEASE"
     
-        # 1. Copy kernel source files needed for external modules (include, arch, scripts, Makefile, etc.)
-        #    Արհամարհում ենք ավելորդ մեծ ֆայլերը (objects, .git)
-        rsync -a --copy-links \
-          --include='include/' --include='include/**' \
-          --include='arch/arm64/' --include='arch/arm64/**' \
-          --include='scripts/' --include='scripts/**' \
-          --include='Makefile' \
-          --include='Kbuild' \
-          --include='Kconfig' \
-          --exclude='*' \
-          "$KERNEL_SRC/" "$HEADERS_DIR/$MODULES_DIR/"
+        HEADERS_DIR="$WORKSPACE/linux-headers-$KERNELRELEASE"
+        rm -rf "$HEADERS_DIR"
+        mkdir -p "$HEADERS_DIR/DEBIAN"
+        mkdir -p "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE"
     
-        # 2. Copy out/ files: .config, Module.symvers, include/generated/autoconf.h etc.
-        cp "$KERNEL_OUT/.config" "$HEADERS_DIR/$MODULES_DIR/"
+        # Տեղադրում ենք headers-ը make headers_install-ի միջոցով
+        make O="$KERNEL_OUT" \
+          ARCH=arm64 \
+          CROSS_COMPILE=aarch64-linux-gnu- \
+          CC="ccache clang" \
+          LD=ld.lld \
+          LLVM=1 \
+          LLVM_IAS=1 \
+          headers_install \
+          INSTALL_HDR_PATH="$HEADERS_DIR/usr"
+    
+        # Պատճենում ենք .config-ը և Module.symvers-ը
+        cp "$KERNEL_OUT/.config" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/.config"
         if [ -f "$KERNEL_OUT/Module.symvers" ]; then
-          cp "$KERNEL_OUT/Module.symvers" "$HEADERS_DIR/$MODULES_DIR/"
-        fi
-        # generated headers (like autoconf.h)
-        if [ -d "$KERNEL_OUT/include/generated" ]; then
-          mkdir -p "$HEADERS_DIR/$MODULES_DIR/include/generated"
-          cp -r "$KERNEL_OUT/include/generated" "$HEADERS_DIR/$MODULES_DIR/include/"
-        fi
-        # arch/arm64/include/generated (if any)
-        if [ -d "$KERNEL_OUT/arch/arm64/include/generated" ]; then
-          mkdir -p "$HEADERS_DIR/$MODULES_DIR/arch/arm64/include/generated"
-          cp -r "$KERNEL_OUT/arch/arm64/include/generated" "$HEADERS_DIR/$MODULES_DIR/arch/arm64/include/"
+          cp "$KERNEL_OUT/Module.symvers" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/Module.symvers"
+        else
+          echo "::warning::Module.symvers not found; headers package will lack symbol version info"
         fi
     
-        # 3. Ստեղծում ենք symlink-ը (source -> build)
-        #    Որպեսզի make-ը գտնի, կարող ենք ավելացնել
-        #    Իրականում build-ը արդեն մեր target-ն է, ոչինչ ավելորդ:
+        # DEBIAN/control
+        cat > "$HEADERS_DIR/DEBIAN/control" <<-EOF
+        Package: linux-headers-$KERNELRELEASE
+        Version: $KERNELRELEASE
+        Architecture: arm64
+        Maintainer: ${{ github.actor }} <${{ github.actor }}@github>
+        Description: Linux kernel headers for $KERNELRELEASE (OnePlus 11R, waipio)
+         This package provides kernel header files for version $KERNELRELEASE,
+         required to build external kernel modules (DKMS style) directly on device.
+        EOF
     
-        # 4. Արխիվացնում ենք
-        cd "$HEADERS_DIR"
-        tar -cJf kernel-headers-$KERNEL_FULL_VER.tar.xz lib/
-        echo "Headers archive created: kernel-headers-$KERNEL_FULL_VER.tar.xz"
-    
-        # 5. Տեղափոխում ենք artifacts, եթե ցանկանում ես download-ել
-        ARTIFACTS="$WORKSPACE/$CONFIG/artifacts"
-        mkdir -p "$ARTIFACTS"
-        cp kernel-headers-*.tar.xz "$ARTIFACTS/"
-        echo "Headers saved to artifacts"        
+        # Կառուցում ենք .deb-ը
+        dpkg-deb --build "$HEADERS_DIR" "$WORKSPACE/linux-headers-${KERNELRELEASE}.deb"
+        mkdir -p "$ARTIFACTS_FOLDER"
+        mv "$WORKSPACE/linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
+        echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
     - name: Filter modules
       shell: bash
       run: |
