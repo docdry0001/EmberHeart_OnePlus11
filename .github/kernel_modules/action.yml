@@ -551,7 +551,8 @@ runs:
         # Build morrownr/mt76 out-of-tree (mt7921u + deps)
         # =======================================================
         # =======================================================
-        # Build morrownr/mt76 out-of-tree (mt7921u + deps)
+        # =======================================================
+        # Build morrownr/mt76 out‑of‑tree (mt7921u + deps)
         # =======================================================
         echo "==== Building mt76 (morrownr) for kernel 5.10 ===="
         MT76_SRC="$KERNEL_PLATFORM/../mt76"
@@ -563,23 +564,26 @@ runs:
         
         cd "$MT76_SRC"
         
-        # 1) Ավելացնել <linux/version.h> mt76.h-ում (5.10-ի հետ համատեղելիություն)
+        # 1) Ավելացնել <linux/version.h> (5.10-ի հետ համատեղելիություն)
         sed -i '/#include <linux\/kernel.h>/a #include <linux/version.h>' mt76.h
         
-        # 2) WED-ի include-ը դարձնել պայմանական (ապահովության համար)
+        # 2) WED-ի include-ը դարձնել պայմանական
         sed -i 's|^#include <linux/soc/mediatek/mtk_wed.h>|#ifdef CONFIG_NET_MEDIATEK_SOC_WED\n#include <linux/soc/mediatek/mtk_wed.h>\n#endif|' mt76.h
         
         # 3) Պատրաստել միջուկի out/ ծառը
         make -C "$MSM" O="$OUT" "${MAKE_FLAGS[@]}" modules_prepare
         
-        # 4) 200IQ – ջնջել WED-ի config-ը auto.conf-ից, որպեսզի out-of-tree build-ը
-        #    այլևս չտեսնի CONFIG_NET_MEDIATEK_SOC_WED-ը
+        # 4) 200IQ – ջնջել WED-ի config-ը auto.conf-ից
         AUTO_CONF="$MSM/$OUT/include/config/auto.conf"
         if [ -f "$AUTO_CONF" ]; then
             sed -i '/^CONFIG_NET_MEDIATEK_SOC_WED/d' "$AUTO_CONF"
-            echo "Removed CONFIG_NET_MEDIATEK_SOC_WED from auto.conf"
+            if grep -q '^CONFIG_NET_MEDIATEK_SOC_WED' "$AUTO_CONF"; then
+                echo "ERROR: Failed to remove CONFIG_NET_MEDIATEK_SOC_WED from auto.conf"
+                exit 1
+            fi
+            echo "Successfully removed WED config from auto.conf"
         else
-            echo "Warning: auto.conf not found at $AUTO_CONF"
+            echo "Warning: auto.conf not found, assuming WED is not set"
         fi
         
         # 5) Մաքրել Makefile-ը և թողնել միայն մեր մոդուլները
