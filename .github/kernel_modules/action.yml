@@ -546,7 +546,19 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
+
+        ##
+        git clone https://github.com/Spunky84/mt76-rt-backport.git
+        cd mt76-rt-backport
         
+        # Build (requires Docker, ~20 min)
+        docker build -t mt76-build .
+        
+        # Extract modules
+        mkdir -p output
+        docker run --rm mt76-build tar cf - -C /output . | tar xf - -C ./output/
+        ls -la output/*.ko
+
     - name: Build Linux Headers .deb Package
       if: success()
       shell: bash
