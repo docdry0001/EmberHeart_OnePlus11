@@ -125,7 +125,7 @@ runs:
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           git curl ca-certificates build-essential clang lld flex bison \
           libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache
+          libxml2-utils rsync unzip dwճarves file python3 ccache
         sudo apt-get clean
         echo "::endgroup::"
 
@@ -155,9 +155,9 @@ runs:
         if [[ "$MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/OneplusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         "$REPO" --version
         success=false
@@ -222,7 +222,7 @@ runs:
       run: |
         set -euo pipefail
         echo "Cloning kernel patches for msm kernel..."
-        git clone --depth=1 https://github.com/docdry0001/my_patches.git my_patches
+        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
 
     - name: Clean Up ABI Protected Exports
       shell: bash
@@ -277,12 +277,25 @@ runs:
 
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --disable CONFIG_WLAN_VENDOR_MEDIATEK \
-          
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_USB \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT76x02_USB \
+          --module CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT7603E \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x0_COMMON \
+          --module CONFIG_MT7615_COMMON \
+          --module CONFIG_MT7915E \
+          --module CONFIG_MT7921E
+
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_MAC80211_LEDS \
-          --enable CONFIG_CAN_SLCAN
+          --module CONFIG_MAC80211_LEDS \
+          --module CONFIG_CAN_SLCAN
 
 
           
@@ -297,7 +310,7 @@ runs:
         curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
         
     - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'valod'
       shell: bash
       run: |
         set -euo pipefail
@@ -305,7 +318,7 @@ runs:
         cd "$CONFIG/kernel_platform/msm-kernel"
     
         shopt -s nullglob
-        PATCHES=(../../../my_patches/nh_patches/*.patch)
+        PATCHES=(../../../my_patches/kernel_patches/op11/msm/*.patch)
     
         if [ ${#PATCHES[@]} -eq 0 ]; then
           echo "[!] No OP11 msm patches found, skipping."
@@ -374,6 +387,7 @@ runs:
         echo "[+] Verifying thermal fix..."
         grep -n -E 'linux/mm.h|kvzalloc|kvfree' "$FILE" | head -20      
 
+    
     - name: FIX binder mmget_still_valid compat (waipio)
       if: env.SOC == 'waipio'
       shell: bash
@@ -398,9 +412,77 @@ runs:
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20   
         
+    - name: Add rtw88 modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        rm -rf rtw88
+        git clone https://github.com/lwfinger/rtw88.git
+        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
+        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
 
-        
-        
+    - name: Replace in-tree mt76 with OpenWrt version
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/mediatek/"
+    
+        # 1. Ջնջել kernel-ի սեփական mt76-ը
+        rm -rf mt76
+    
+        # 2. Clone OpenWrt mt76 (կոնկրետ commit)
+        git clone --depth 1 -b master https://github.com/openwrt/mt76.git mt76
+        cd mt76
+        git fetch --depth 1 origin bdf8ea71700746c634c064d6477aa143f821d6f6
+        git checkout bdf8ea71700746c634c064d6477aa143f821d6f6
+    
+        # 3. Կիրառել բոլոր 11 patch-երը (ինչպես Dockerfile-ում)
+        # Patch 1: netif_napi_add_tx -> netif_tx_napi_add
+        sed -i 's/netif_napi_add_tx(/netif_tx_napi_add(/g' $(grep -rl 'netif_napi_add_tx' . 2>/dev/null) 2>/dev/null || true
+    
+        # Patch 2: mtk_wed.h include location
+        sed -i 's/#include <linux\/soc\/mediatek\/mtk_wed.h>//' mt76.h 2>/dev/null || true
+        sed -i '/#ifndef __MT76_H/a #include <linux/soc/mediatek/mtk_wed.h>' mt76.h 2>/dev/null || true
+    
+        # Patch 3: remove .set_sar_specs
+        sed -i '/\.set_sar_specs/d' mt7921/main.c 2>/dev/null || true
+    
+        # Patch 4: remove .sta_set_decap_offload
+        sed -i '/\.sta_set_decap_offload/d' mt7921/main.c 2>/dev/null || true
+    
+        # Patch 5: remove .net_fill_forward_path
+        sed -i '/\.net_fill_forward_path/d' mt7921/main.c 2>/dev/null || true
+    
+        # Patch 6: ieee80211_is_bufferable_mmpdu signature
+        sed -i 's/ieee80211_is_bufferable_mmpdu(skb)/mt76_compat_is_bufferable_mmpdu(skb)/g' tx.c 2>/dev/null || true
+    
+        # Patch 7: comment out of_get_mac_address
+        sed -i '/of_get_mac_address/s/^/\/\//' eeprom.c 2>/dev/null || true
+    
+        # Patch 8: remove .threaded
+        sed -i '/\.threaded\s*=/d' dma.c 2>/dev/null || true
+    
+        # Patch 9: mbssid_max_interfaces
+        sed -i 's/wiphy->mbssid_max_interfaces/1/g' mt76_connac_mcu.c 2>/dev/null || true
+        sed -i 's/wiphy->mbssid_max_ema_profile_periodicity/1/g' mt76_connac_mcu.c 2>/dev/null || true
+    
+        # Patch 10: sar_capa
+        sed -i '/wiphy->sar_capa\s*=/d' mac80211.c mt7921/init.c 2>/dev/null || true
+        sed -i 's/wiphy->sar_capa->num_freq_ranges/mt76_sar_capa.num_freq_ranges/g' mac80211.c 2>/dev/null || true
+        sed -i 's/phy->hw->wiphy->sar_capa/\&mt76_sar_capa/g' mac80211.c 2>/dev/null || true
+        sed -i 's/hw->wiphy->sar_capa/\&mt76_sar_capa/g' mac80211.c 2>/dev/null || true
+    
+        # Patch 11: RT-preempt worker fix
+        sed -i '/set_current_state(TASK_INTERRUPTIBLE)/d' util.c
+        sed -i 's/set_current_state(TASK_RUNNING)/__set_current_state(TASK_RUNNING)/' util.c
+        sed -i '/test_and_clear_bit(MT76_WORKER_SCHEDULED/{n;s/schedule();/usleep_range(50, 500);/}' util.c
+    
+        echo "OpenWrt mt76 (commit bdf8ea71) successfully patched and placed in drivers/net/wireless/mediatek/mt76"
 
     - name: Detect Clang (toolchain for build)
       shell: bash
@@ -427,7 +509,6 @@ runs:
         echo "CLANG_VERSION=$CLANG_VERSION" >> "$GITHUB_ENV"
         echo "Detected Clang: $CLANG_VERSION"
 
-        
     - name: Build Kernel Modules
       shell: bash
       run: |
@@ -492,6 +573,23 @@ runs:
         )
 
         EXT_QCOM=(
+          ../vendor/qcom/opensource/mmrm-driver
+          ../vendor/qcom/opensource/mm-drivers/hw_fence
+          ../vendor/qcom/opensource/mm-drivers/sync_fence
+          ../vendor/qcom/opensource/mm-drivers/msm_ext_display
+          ../vendor/qcom/opensource/securemsm-kernel
+          ../vendor/qcom/opensource/display-drivers/msm
+          ../vendor/qcom/opensource/audio-kernel
+          ../vendor/qcom/opensource/camera-kernel
+          ../vendor/oplus/kernel/explorer
+          ../vendor/qcom/opensource/video-driver
+          ../vendor/qcom/opensource/graphics-kernel
+          ../vendor/qcom/opensource/dataipa/drivers/platform/msm
+          ../vendor/qcom/opensource/datarmnet/core
+          ../vendor/qcom/opensource/datarmnet-ext/aps
+          ../vendor/qcom/opensource/datarmnet-ext/offload
+          ../vendor/qcom/opensource/datarmnet-ext/shs
+          ../vendor/qcom/opensource/datarmnet-ext/sch
           ../vendor/qcom/opensource/datarmnet-ext/perf
           ../vendor/qcom/opensource/datarmnet-ext/perf_tether
           ../vendor/qcom/opensource/datarmnet-ext/wlan
@@ -547,90 +645,6 @@ runs:
           build_external_module "$MODULE"
         done
 
-        ##
-        git clone https://github.com/Spunky84/mt76-rt-backport.git
-        cd mt76-rt-backport
-        
-        # Build (requires Docker, ~20 min)
-        docker build -t mt76-build .
-        
-        # Extract modules
-        mkdir -p output
-        docker run --rm mt76-build tar cf - -C /output . | tar xf - -C ./output/
-        ls -la output/*.ko
-
-    - name: Build Linux Headers .deb Package
-      if: success()
-      shell: bash
-      run: |
-        set -euo pipefail
-        WORKSPACE="$GITHUB_WORKSPACE"
-        CONFIG="$CONFIG"
-        KERNEL_SRC="$WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
-        KERNEL_OUT="$KERNEL_SRC/out"
-        ARTIFACTS_FOLDER="$WORKSPACE/$CONFIG/artifacts"
-    
-        # dpkg-deb-ի առկայության ստուգում
-        if ! command -v dpkg-deb >/dev/null 2>&1; then
-          echo "Installing dpkg-dev..."
-          sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends dpkg-dev
-        fi
-    
-        cd "$KERNEL_SRC"
-        export PATH="${CLANG_BIN_PATH}:$PATH"
-        export PATH="/usr/lib/ccache:$PATH"
-    
-        # Ստանում ենք kernel release-ը (օր. 5.10.236-android12)
-        KERNELRELEASE=$(make O="$KERNEL_OUT" \
-          ARCH=arm64 \
-          CROSS_COMPILE=aarch64-linux-gnu- \
-          CC="ccache clang" \
-          LD=ld.lld \
-          LLVM=1 \
-          LLVM_IAS=1 \
-          -s kernelrelease)
-        echo "KERNELRELEASE=$KERNELRELEASE"
-    
-        HEADERS_DIR="$WORKSPACE/linux-headers-$KERNELRELEASE"
-        rm -rf "$HEADERS_DIR"
-        mkdir -p "$HEADERS_DIR/DEBIAN"
-        mkdir -p "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE"
-    
-        # Տեղադրում ենք headers-ը make headers_install-ի միջոցով
-        make O="$KERNEL_OUT" \
-          ARCH=arm64 \
-          CROSS_COMPILE=aarch64-linux-gnu- \
-          CC="ccache clang" \
-          LD=ld.lld \
-          LLVM=1 \
-          LLVM_IAS=1 \
-          headers_install \
-          INSTALL_HDR_PATH="$HEADERS_DIR/usr"
-    
-        # Պատճենում ենք .config-ը և Module.symvers-ը
-        cp "$KERNEL_OUT/.config" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/.config"
-        if [ -f "$KERNEL_OUT/Module.symvers" ]; then
-          cp "$KERNEL_OUT/Module.symvers" "$HEADERS_DIR/usr/src/linux-headers-$KERNELRELEASE/Module.symvers"
-        else
-          echo "::warning::Module.symvers not found; headers package will lack symbol version info"
-        fi
-    
-        # DEBIAN/control
-        cat > "$HEADERS_DIR/DEBIAN/control" <<-EOF
-        Package: linux-headers-$KERNELRELEASE
-        Version: $KERNELRELEASE
-        Architecture: arm64
-        Maintainer: ${{ github.actor }} <${{ github.actor }}@github>
-        Description: Linux kernel headers for $KERNELRELEASE (OnePlus 11R, waipio)
-         This package provides kernel header files for version $KERNELRELEASE,
-         required to build external kernel modules (DKMS style) directly on device.
-        EOF
-    
-        # Կառուցում ենք .deb-ը
-        dpkg-deb --build "$HEADERS_DIR" "$WORKSPACE/linux-headers-${KERNELRELEASE}.deb"
-        mkdir -p "$ARTIFACTS_FOLDER"
-        mv "$WORKSPACE/linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
-        echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
     - name: Filter modules
       shell: bash
       run: |
@@ -649,7 +663,7 @@ runs:
         echo "Removing unnecessary modules..."
         cd modules
         # Download default module list
-        curl -L -o default_modules.txt https://raw.githubusercontent.com/docdry0001/kernel_patches/refs/heads/main/default_modules.txt
+        curl -L -o default_modules.txt https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/default_modules.txt
         # Remove modules in the default list
 
         while IFS= read -r module; do
