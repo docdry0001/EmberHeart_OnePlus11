@@ -550,6 +550,7 @@ runs:
         # =======================================================
         # Build morrownr/mt76 out-of-tree (mt7921u + deps)
         # =======================================================
+        # =======================================================
         # Build morrownr/mt76 out-of-tree (mt7921u + deps)
         # =======================================================
         echo "==== Building mt76 (morrownr) for kernel 5.10 ===="
@@ -562,21 +563,21 @@ runs:
         
         cd "$MT76_SRC"
         
-        # 1) Ավելացնել <linux/version.h> (5.10-ի հետ համատեղելիության համար)
+        # 1) Ավելացնել <linux/version.h> mt76.h-ում (5.10-ի հետ համատեղելիություն)
         sed -i '/#include <linux\/kernel.h>/a #include <linux/version.h>' mt76.h
         
-        # 2) Անջատել WED-ի include-ը (ապահովության համար)
+        # 2) WED-ի include-ը դարձնել պայմանական
         sed -i 's|^#include <linux/soc/mediatek/mtk_wed.h>|#ifdef CONFIG_NET_MEDIATEK_SOC_WED\n#include <linux/soc/mediatek/mtk_wed.h>\n#endif|' mt76.h
         
         make -C "$MSM" O="$OUT" "${MAKE_FLAGS[@]}" modules_prepare
         
-        # 200IQ – ջնջում ենք CONFIG_NET_MEDIATEK_SOC_WED-ը auto.conf-ից
-        sed -i '/^CONFIG_NET_MEDIATEK_SOC_WED/d' "$OUT/include/config/auto.conf"
-        
         sed -i '/^obj-.*:=/d' Makefile
         echo 'obj-y := mt76.o mt76-usb.o mt76-connac-lib.o mt7921/' >> Makefile
         
-        make -C "$MSM" O="$OUT" M="$PWD" "${MAKE_FLAGS[@]}" modules
+        # 3) 200IQ – command-line-ով ամբողջովին անջատում ենք WED-ը
+        make -C "$MSM" O="$OUT" M="$PWD" \
+            CONFIG_NET_MEDIATEK_SOC_WED=n \
+            "${MAKE_FLAGS[@]}" modules
         
         make -C "$MSM" O="$OUT" M="$PWD" \
             INSTALL_MOD_PATH="$INSTALL_MOD_PATH" modules_install
