@@ -547,29 +547,74 @@ runs:
           build_external_module "$MODULE"
         done
         
-    - name: Prepare kernel-headers package
+    - name: Extract kernel headers for on-device compilation
+      if: success()  # միայն եթե build-ը հաջող է
       shell: bash
       run: |
-        KERNEL_SRC=".../msm-kernel"
+        set -euo pipefail
+        # Ճշգրիտ ճանապարհներ (հիմնվելով քո env-ի վրա)
+        WORKSPACE="$GITHUB_WORKSPACE"
+        CONFIG="$CONFIG"                 # OP11R
+        KERNEL_PLATFORM="$WORKSPACE/$CONFIG/kernel_platform"
+        KERNEL_SRC="$KERNEL_PLATFORM/msm-kernel"
         KERNEL_OUT="$KERNEL_SRC/out"
-        HEADERS_DIR="$GITHUB_WORKSPACE/headers_package"
-        mkdir -p "$HEADERS_DIR/lib/modules/$KERNEL_FULL_VER/build"
-        # Քաղում ենք headers-ը (include/, arch/arm64/include, scripts/, Module.symvers, .config)
-        rsync -a --include '*/' \
-          --include 'include/' --include 'include/**' \
-          --include 'arch/arm64/include/' --include 'arch/arm64/include/**' \
-          --include 'scripts/' --include 'scripts/**' \
-          --include 'Makefile' \
-          --include '.config' \
-          --include 'Module.symvers' \
-          --exclude '*' \
-          "$KERNEL_SRC/" "$HEADERS_DIR/lib/modules/$KERNEL_FULL_VER/build/"
-        cp "$KERNEL_OUT/.config" "$HEADERS_DIR/lib/modules/$KERNEL_FULL_VER/build/.config"
-        cp "$KERNEL_OUT/Module.symvers" "$HEADERS_DIR/lib/modules/$KERNEL_FULL_VER/build/"
+        HEADERS_DIR="$WORKSPACE/kernel-headers"
+        MODULES_DIR="lib/modules/$KERNEL_FULL_VER/build"   # android12-5.10.236
+    
+        echo "Kernel source: $KERNEL_SRC"
+        echo "Kernel output: $KERNEL_OUT"
+        echo "Headers destination: $HEADERS_DIR/$MODULES_DIR"
+    
+        # Ստուգում ենք, որ kernel source-ը և out-ը գոյություն ունեն
+        [ -d "$KERNEL_SRC" ] || { echo "ERROR: $KERNEL_SRC missing"; exit 1; }
+        [ -d "$KERNEL_OUT" ] || { echo "ERROR: $KERNEL_OUT missing"; exit 1; }
+        [ -f "$KERNEL_OUT/.config" ] || { echo "ERROR: .config missing in out"; exit 1; }
+        [ -f "$KERNEL_OUT/Module.symvers" ] || echo "WARNING: Module.symvers missing, modules built without MODVERSIONS"
+    
+        mkdir -p "$HEADERS_DIR/$MODULES_DIR"
+    
+        # 1. Copy kernel source files needed for external modules (include, arch, scripts, Makefile, etc.)
+        #    Արհամարհում ենք ավելորդ մեծ ֆայլերը (objects, .git)
+        rsync -a --copy-links \
+          --include='include/' --include='include/**' \
+          --include='arch/arm64/' --include='arch/arm64/**' \
+          --include='scripts/' --include='scripts/**' \
+          --include='Makefile' \
+          --include='Kbuild' \
+          --include='Kconfig' \
+          --exclude='*' \
+          "$KERNEL_SRC/" "$HEADERS_DIR/$MODULES_DIR/"
+    
+        # 2. Copy out/ files: .config, Module.symvers, include/generated/autoconf.h etc.
+        cp "$KERNEL_OUT/.config" "$HEADERS_DIR/$MODULES_DIR/"
+        if [ -f "$KERNEL_OUT/Module.symvers" ]; then
+          cp "$KERNEL_OUT/Module.symvers" "$HEADERS_DIR/$MODULES_DIR/"
+        fi
+        # generated headers (like autoconf.h)
+        if [ -d "$KERNEL_OUT/include/generated" ]; then
+          mkdir -p "$HEADERS_DIR/$MODULES_DIR/include/generated"
+          cp -r "$KERNEL_OUT/include/generated" "$HEADERS_DIR/$MODULES_DIR/include/"
+        fi
+        # arch/arm64/include/generated (if any)
+        if [ -d "$KERNEL_OUT/arch/arm64/include/generated" ]; then
+          mkdir -p "$HEADERS_DIR/$MODULES_DIR/arch/arm64/include/generated"
+          cp -r "$KERNEL_OUT/arch/arm64/include/generated" "$HEADERS_DIR/$MODULES_DIR/arch/arm64/include/"
+        fi
+    
+        # 3. Ստեղծում ենք symlink-ը (source -> build)
+        #    Որպեսզի make-ը գտնի, կարող ենք ավելացնել
+        #    Իրականում build-ը արդեն մեր target-ն է, ոչինչ ավելորդ:
+    
+        # 4. Արխիվացնում ենք
         cd "$HEADERS_DIR"
-        tar -cJf kernel-headers.tar.xz lib/
-        # upload as artifact
-        
+        tar -cJf kernel-headers-$KERNEL_FULL_VER.tar.xz lib/
+        echo "Headers archive created: kernel-headers-$KERNEL_FULL_VER.tar.xz"
+    
+        # 5. Տեղափոխում ենք artifacts, եթե ցանկանում ես download-ել
+        ARTIFACTS="$WORKSPACE/$CONFIG/artifacts"
+        mkdir -p "$ARTIFACTS"
+        cp kernel-headers-*.tar.xz "$ARTIFACTS/"
+        echo "Headers saved to artifacts"        
     - name: Filter modules
       shell: bash
       run: |
