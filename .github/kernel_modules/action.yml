@@ -548,6 +548,7 @@ runs:
         done
         
     - name: Prepare kernel-headers package
+      shell: bash
       run: |
         KERNEL_SRC=".../msm-kernel"
         KERNEL_OUT="$KERNEL_SRC/out"
