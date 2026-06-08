@@ -125,7 +125,7 @@ runs:
           curl --fail --location --proto '=https' "$OP_MANIFEST" -o .repo/manifests/temp_manifest.xml
           "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b "$OP_BRANCH" -m "$OP_MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         success=false
         for i in 1 2 3; do
@@ -264,7 +264,7 @@ runs:
         cd "$KSUN_FOLDER"
         patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
         for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
-          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/common/ntsync/ntsync_compat_android12-5.10.patch"
+          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/ntsync/ntsync_compat_android12-5.10.patch"
         done
         #patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/stable/v2.1.0/overwrite_hook_mode.patch"
         #patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/stable/v2.1.0/ksu_toolkit.patch"
