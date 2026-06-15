@@ -608,20 +608,32 @@ runs:
         cd ..
         echo "Modules remaining after filtering: $(find modules -type f -name '*.ko' | wc -l)"
 
-    - name: Create Kernel Modules zip
-      id: create_zip
-      shell: bash
-      run: |
-        set -euo pipefail
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        KERNEL_PLATFORM="$CONFIG_DIR/kernel_platform"
-        MSM="$KERNEL_PLATFORM/msm-kernel"
-        OUT="$MSM/out"
-        MODULES_SRC="$OUT/modules"
-        MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
-        mkdir -p "$CONFIG_DIR/artifacts"
-        find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
-        echo "Packaged kernel modules to $MODULES_ZIP"
+     - name: Create Kernel Modules zip
+       id: create_zip
+       shell: bash
+       run: |
+          set -euo pipefail
+          CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
+          KERNEL_PLATFORM="$CONFIG_DIR/kernel_platform"
+          MSM="$KERNEL_PLATFORM/msm-kernel"
+          OUT="$MSM/out"
+          MODULES_SRC="$OUT/modules"
+          MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
+          mkdir -p "$CONFIG_DIR/artifacts"
+          
+          # 1. Pack .ko files
+          find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
+          
+          # 2. Add Module.symvers if it exists
+          MODULE_SYMVERS="$OUT/Module.symvers"
+          if [ -f "$MODULE_SYMVERS" ]; then
+              zip -j "$MODULES_ZIP" "$MODULE_SYMVERS"
+              echo "Added Module.symvers to the zip"
+          else
+              echo "Warning: Module.symvers not found at $MODULE_SYMVERS"
+          fi
+          
+          echo "Packaged kernel modules and Module.symvers to $MODULES_ZIP"
 
     - name: Final Build Summary
       shell: bash
