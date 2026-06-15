@@ -608,10 +608,9 @@ runs:
         cd ..
         echo "Modules remaining after filtering: $(find modules -type f -name '*.ko' | wc -l)"
 
-     - name: Create Kernel Modules zip
-       id: create_zip
-       shell: bash
-       run: |
+    - name: Create Kernel Modules zip
+      shell: bash
+      run: |
           set -euo pipefail
           CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
           KERNEL_PLATFORM="$CONFIG_DIR/kernel_platform"
