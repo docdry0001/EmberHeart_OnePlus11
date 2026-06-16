@@ -609,30 +609,34 @@ runs:
         echo "Modules remaining after filtering: $(find modules -type f -name '*.ko' | wc -l)"
 
     - name: Create Kernel Modules zip
+      id: create_zip                    # ← ՊԱՐՏԱԴԻՐ
       shell: bash
       run: |
-          set -euo pipefail
-          CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-          KERNEL_PLATFORM="$CONFIG_DIR/kernel_platform"
-          MSM="$KERNEL_PLATFORM/msm-kernel"
-          OUT="$MSM/out"
-          MODULES_SRC="$OUT/modules"
-          MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
-          mkdir -p "$CONFIG_DIR/artifacts"
-          
-          # 1. Pack .ko files
-          find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
-          
-          # 2. Add Module.symvers if it exists
-          MODULE_SYMVERS="$OUT/Module.symvers"
-          if [ -f "$MODULE_SYMVERS" ]; then
-              zip -j "$MODULES_ZIP" "$MODULE_SYMVERS"
-              echo "Added Module.symvers to the zip"
-          else
-              echo "Warning: Module.symvers not found at $MODULE_SYMVERS"
-          fi
-          
-          echo "Packaged kernel modules and Module.symvers to $MODULES_ZIP"
+        set -euo pipefail
+        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
+        KERNEL_PLATFORM="$CONFIG_DIR/kernel_platform"
+        MSM="$KERNEL_PLATFORM/msm-kernel"
+        OUT="$MSM/out"
+        MODULES_SRC="$OUT/modules"
+        MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
+        mkdir -p "$CONFIG_DIR/artifacts"
+        
+        # Ստեղծել դատարկ zip (ապահովում է, որ ֆայլը գոյություն ունենա)
+        zip -j "$MODULES_ZIP" || true
+        
+        # Ավելացնել .ko ֆայլերը (եթե կան)
+        find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP" || true
+        
+        # Ավելացնել Module.symvers
+        MODULE_SYMVERS="$OUT/Module.symvers"
+        if [ -f "$MODULE_SYMVERS" ]; then
+            zip -j "$MODULES_ZIP" "$MODULE_SYMVERS"
+            echo "Added Module.symvers to the zip"
+        else
+            echo "Warning: Module.symvers not found at $MODULE_SYMVERS"
+        fi
+        
+        echo "Packaged kernel modules and Module.symvers to $MODULES_ZIP"
 
     - name: Final Build Summary
       shell: bash
@@ -657,7 +661,7 @@ runs:
         gh cache delete ccache-${{ env.CONFIG }}-modules-${{ env.KERNEL_FULL_VER }}- || true
 
     - name: Upload Kernel Modules zip
-      if: success() && steps.create_zip.conclusion == 'success'
+      if: always() && steps.create_zip.outcome == 'success'   # ← Նոր պայման
       uses: actions/upload-artifact@v4
       with:
         name: kernel-modules-${{ env.CONFIG }}
