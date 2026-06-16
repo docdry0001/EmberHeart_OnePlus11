@@ -269,7 +269,7 @@ runs:
         #patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/stable/v2.1.0/overwrite_hook_mode.patch"
         #patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/stable/v2.1.0/ksu_toolkit.patch"
         if [ "$KSUVER" -le 33068 ]; then
-          patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/common/susfs_fix_patches/*.patch"
+          patch -p1 --forward < "$COMMON_KERNEL_FOLDER/common/susfs_fix_patches/*.patch"
         fi
         # Fix implicit declarations
         cd kernel
