@@ -302,7 +302,7 @@ runs:
         curl -LSs "https://raw.githubusercontent.com/Poko-Apps/MemKernel/main/kernel/setup.sh" | bash -s M br0k3n
         
     - name: Add my kernel patches to msm kernel
-      if: env.SOC == 'valod'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
