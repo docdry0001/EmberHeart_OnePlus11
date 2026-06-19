@@ -580,11 +580,13 @@ runs:
         set -euo pipefail
         echo "::group::Applying my patches from my repo..."
         cd "$CONFIG/kernel_platform/common"
-
-        for patch_file in ../../../my_patches/kernel_patches/op11/msm/*.patch; do
-            echo "Applying patch: $patch_file"
-            patch -p1 < "$patch_file"
-        done
+        git clone https://github.com/johanlike/DJY_88XXAU_For_4.4__4.9_4.14_4.19_Android_Kernel_Patch.git papka
+        patch -p1 < papka/DJY-Add-aircrack-ng-rtl88XXAU-5.6.4.5.patch
+        
+        #for patch_file in ../../../my_patches/kernel_patches/op11/msm/*.patch; do
+         #   echo "Applying patch: $patch_file"
+        #    patch -p1 < "$patch_file"
+        $ done
 
         echo "My kernel patches applied ❤️‍🔥"
         echo "::endgroup::"
