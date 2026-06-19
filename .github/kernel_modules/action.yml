@@ -283,10 +283,13 @@ runs:
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK
           #MEDIATEK
+          
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK
+          
+          #ralink
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_RALINK \
+          --enable CONFIG_WLAN_VENDOR_RALINK
           
         # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
