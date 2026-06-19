@@ -123,7 +123,7 @@ runs:
         echo "::group::Install deps"
         sudo apt-get -o Acquire::Retries=3 update -qq
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-          git curl ca-certificates build-essential clang lld flex bison \
+          git curl ca-certificates build-essential clang lld flex bison gcc \
           libelf-dev libssl-dev  libncurses-dev zlib1g-dev liblz4-tool bc mokutil \
           libxml2-utils rsync unzip dwarves file python3 ccache
         sudo apt-get clean
@@ -328,9 +328,10 @@ runs:
         set -euo pipefail
         echo "Applying kernel patches to msm kernel from my repo..."
         cd "$CONFIG/kernel_platform/msm-kernel"
-    
-        shopt -s nullglob
-        PATCHES=(../../../my_patches/kernel_patches/op11/msm/add-rtl88xxau-5.6.4.2-drivers.patch)
+        git clone https://github.com/johanlike/DJY_88XXAU_For_4.4__4.9_4.14_4.19_Android_Kernel_Patch.git papka
+        patch -p1 < papka/DJY-Add-aircrack-ng-rtl88XXAU-5.6.4.5.patch
+        #shopt -s nullglob
+        #PATCHES=(../../../my_patches/kernel_patches/op11/msm/add-rtl88xxau-5.6.4.2-drivers.patch)
     
         if [ ${#PATCHES[@]} -eq 0 ]; then
           echo "[!] No OP11 msm patches found, skipping."
