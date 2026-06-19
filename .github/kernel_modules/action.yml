@@ -250,7 +250,25 @@ runs:
 
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
-
+        
+    - name: Add rtl88xbu modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        git clone https://github.com/akabul0us/rtl88x2bu.git
+        
+     - name: Add rtl88xxau modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        git clone https://github.com/akabul0us/rtl8812au/.git
+        
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
