@@ -252,7 +252,6 @@ runs:
         echo "KBUILD_BUILD_USER=$BUILD_USER" >> "$GITHUB_ENV"
         echo "KBUILD_BUILD_HOST=$BUILD_HOST" >> "$GITHUB_ENV"
 
-        echo ""
         echo "✅ Build identity configured:"
         echo "   User: $BUILD_USER"
         echo "   Host: $BUILD_HOST"
@@ -283,7 +282,7 @@ runs:
         echo "Using SUSFS branch: $SUSFS_BRANCH"
         git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b "$ANYKERNEL_BRANCH"
         git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
-        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
+        git clone --depth=1 https://github.com/docdry0001/kernel_patches.git my_patches
         git clone https://gitlab.com/simonpunk/susfs4ksu.git
         cd susfs4ksu
         if git rev-parse --verify "origin/$SUSFS_BRANCH" >/dev/null 2>&1 || git rev-parse --verify "$SUSFS_BRANCH" >/dev/null 2>&1; then
@@ -575,14 +574,14 @@ runs:
         echo "::endgroup::"
 
     - name: Add my kernel patches to common kernel
-      if: env.SOC == 'kalama'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
         echo "::group::Applying my patches from my repo..."
         cd "$CONFIG/kernel_platform/common"
 
-        for patch_file in ../../../my_patches/kernel_patches/op11/common/*.patch; do
+        for patch_file in ../../../my_patches/kernel_patches/op11/msm/*.patch; do
             echo "Applying patch: $patch_file"
             patch -p1 < "$patch_file"
         done
