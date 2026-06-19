@@ -260,7 +260,7 @@ runs:
         cd "$MSM/drivers/net/wireless/realtek/"
         git clone https://github.com/akabul0us/rtl88x2bu.git
         
-     - name: Add rtl88xxau modules
+    - name: Add rtl88xxau modules
       shell: bash
       run: |
         set -euo pipefail
