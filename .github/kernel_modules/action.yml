@@ -237,15 +237,6 @@ runs:
         git clone https://github.com/docdry0001/rtl8812au.git
         sed -i 's/$(CONFIG_RTL8812AU)/m/g' Makefile
         
-    - name: Add rtw88 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
 
         
     - name: Clone kernel patches for msm kernel
@@ -346,7 +337,7 @@ runs:
         cd "$CONFIG/kernel_platform/msm-kernel"
         git clone https://github.com/johanlike/DJY_88XXAU_For_4.4__4.9_4.14_4.19_Android_Kernel_Patch.git papka
         shopt -s nullglob
-        patch -p1 < papka/DJY-88XXAU-5.3.4.patch
+        #patch -p1 < papka/DJY-88XXAU-5.3.4.patch
         patch -p1 < ../../../my_patches/kernel_patches/op11/msm/add-wifi-injection-4.14.patch
         patch -p1 < ../../../my_patches/kernel_patches/op11/msm/fix-hci-uart.patch
     
