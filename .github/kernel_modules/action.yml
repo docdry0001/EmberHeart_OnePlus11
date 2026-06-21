@@ -224,7 +224,7 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/realtek/"
-        git clone https://github.com/akabul0us/rtl88x2bu.git
+        git clone https://github.com/docdry0001/rtl88x2bu.git
         # sed -i 's/$(CONFIG_RTL88X2BU)/m/g' Makefile
         
     - name: Add rtl88xxau modules
