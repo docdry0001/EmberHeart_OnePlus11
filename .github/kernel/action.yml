@@ -376,7 +376,6 @@ runs:
 
     - name: Apply SUSFS Patches
       shell: bash
-      if: ${{ env.OP_SUSFS == 'true' }}
       run: |
         set -euo pipefail
         echo "::group::Apply SUSFS patches"
@@ -649,7 +648,7 @@ runs:
         echo "::endgroup::"
 
     - name: Add my kernel patches to common kernel
-      if: env.SOC == 'wai'
+      if: env.SOC == 'waipio'
       shell: bash
       run: |
         set -euo pipefail
