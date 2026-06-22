@@ -432,7 +432,7 @@ runs:
         fi
         echo "::endgroup::"
 
-    - name: Fetch SusFS and Other Dependencies
+
     - name: Clone AnyKernel3 and Other Dependencies
       shell: bash
       run: |
