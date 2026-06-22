@@ -177,58 +177,233 @@ runs:
         echo "BUILD_USER=OnePlus" >> "$GITHUB_ENV"
         echo "BUILD_HOST=ubuntu-build" >> "$GITHUB_ENV"
 
-    - name: Install Dependencies & ccache
-      shell: bash
-      run: |
-        sudo apt-get update -qq
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-          git curl ca-certificates build-essential clang lld flex bison \
-          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache zstd
-        sudo apt-get clean
-        export CCACHE_DIR="$HOME/.ccache"
-        echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
-        mkdir -p "$CCACHE_DIR"
-        ccache -M 5G
-        ccache -o compression=true
+    # - name: Install Dependencies & ccache
+    #   shell: bash
+    #   run: |
+    #     sudo apt-get update -qq
+    #     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    #       git curl ca-certificates build-essential clang lld flex bison \
+    #       libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+    #       libxml2-utils rsync unzip dwarves file python3 ccache zstd
+    #     sudo apt-get clean
+    #     export CCACHE_DIR="$HOME/.ccache"
+    #     echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+    #     mkdir -p "$CCACHE_DIR"
+    #     ccache -M 5G
+    #     ccache -o compression=true
 
-    - name: Clone Dependencies
+    # - name: Clone Dependencies
+    #   shell: bash
+    #   run: |
+    #     git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.0
+    #     git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
+    #     git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
+    #     git clone https://gitlab.com/simonpunk/susfs4ksu.git
+    #     cd susfs4ksu
+    #     SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
+    #     if [ -z "$SUSFS_INPUT" ]; then
+    #       SUSFS_BRANCH="$SUSFS_KERNEL_BRANCH"
+    #     else
+    #       SUSFS_BRANCH="$SUSFS_INPUT"
+    #     fi
+    #     if git rev-parse --verify "origin/$SUSFS_BRANCH" >/dev/null 2>&1; then
+    #       git checkout "$SUSFS_BRANCH"
+    #     elif git rev-parse --verify "$SUSFS_BRANCH" >/dev/null 2>&1; then
+    #       git checkout "$SUSFS_BRANCH"
+    #     else
+    #       echo "SUSFS ref not found: $SUSFS_BRANCH"; exit 1
+    #     fi
+    #     SUSFS_COMMIT_SHA=$(git rev-parse HEAD)
+    #     echo "SUSFS_COMMIT_SHA=$SUSFS_COMMIT_SHA" >> $GITHUB_ENV
+    #     echo "SUSFS_BRANCH_NAME=$SUSFS_BRANCH" >> $GITHUB_ENV
+
+    # - name: Clean Up ABI Protected Exports
+    #   shell: bash
+    #   run: |
+    #     cd "$KERNEL_PLATFORM_FOLDER"
+    #     rm -f common/android/abi_gki_protected_exports_* || true
+    #     rm -f msm-kernel/android/abi_gki_protected_exports_* || true
+
+    # - name: Add KernelSU Next
+    #   shell: bash
+    #   run: |
+    #     cd "$KERNEL_PLATFORM_FOLDER"
+    #     KSU_INPUT="${{ inputs.ksun_branch_or_hash }}"
+    #     if [ -z "$KSU_INPUT" ]; then
+    #       curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+    #     else
+    #       curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s "$KSU_INPUT"
+    #     fi
+    #     git submodule update --init --recursive
+    #     cd KernelSU-Next/kernel
+    #     COMMITS_COUNT=$(git rev-list --count HEAD)
+    #     BASE_VERSION=$(( COMMITS_COUNT < 2684 ? 10200 : 30000 ))
+    #     KSU_VERSION=$(( COMMITS_COUNT + BASE_VERSION ))
+    #     sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
+    #     cd ..
+    #     KSU_COMMIT_SHA=$(git rev-parse HEAD)
+    #     echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> $GITHUB_ENV
+    #     echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+    #     cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
+    #     	CONFIG_KSU=y
+    #     	CONFIG_KSU_KPROBES_HOOK=n
+    #     EOF
+
+    # - name: Apply SUSFS Patches (v2.1.0)
+
+    - name: Fetch SusFS and Other Dependencies
       shell: bash
       run: |
-        git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.0
-        git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
-        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
-        git clone https://gitlab.com/simonpunk/susfs4ksu.git
-        cd susfs4ksu
-        SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
-        if [ -z "$SUSFS_INPUT" ]; then
-          SUSFS_BRANCH="$SUSFS_KERNEL_BRANCH"
-        else
-          SUSFS_BRANCH="$SUSFS_INPUT"
+        echo "::group::Fetch dependencies"
+        set -euo pipefail
+        echo "Fetching SusFS and other dependencies..."
+        
+        
+        if [ "${{ env.OP_SUSFS }}" = true ]; then
+          # Determine SUSFS branch/commit to use
+          SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
+          
+          # Default SUSFS branches for each kernel version
+          declare -A DEFAULT_SUSFS=(
+            ["android12-5.10"]="gki-android12-5.10"
+            ["android13-5.15"]="gki-android13-5.15"
+            ["android14-6.1"]="gki-android14-6.1"
+            ["android15-6.6"]="gki-android15-6.6"
+            ["android16-6.12"]="gki-android16-6.12"
+          )
+          
+          # Determine which SUSFS ref to use
+          KERNEL_KEY="${{ env.ANDROID_VER }}-${{ env.KERNEL_VER }}"
+          if [ -z "$SUSFS_INPUT" ]; then
+            # use kernel-specific default
+            SUSFS_BRANCH="${DEFAULT_SUSFS[$KERNEL_KEY]:-gki-android15-6.6}"
+            echo "ℹ️  Using default SUSFS branch for $KERNEL_KEY: $SUSFS_BRANCH"
+          else
+            # 40-char hash or branch/commit passed directly
+            SUSFS_BRANCH="$SUSFS_INPUT"
+            echo "🔧 Using resolved SUSFS ref: $SUSFS_BRANCH"
+          fi
         fi
-        if git rev-parse --verify "origin/$SUSFS_BRANCH" >/dev/null 2>&1; then
-          git checkout "$SUSFS_BRANCH"
-        elif git rev-parse --verify "$SUSFS_BRANCH" >/dev/null 2>&1; then
-          git checkout "$SUSFS_BRANCH"
-        else
-          echo "SUSFS ref not found: $SUSFS_BRANCH"; exit 1
+        
+        retry_fetch_archive() {
+          local url="$1"
+          local branch="${2:-main}"
+          local max_attempts=3
+          local attempt=1
+          
+          local repo_name=$(basename "$url" .git)
+          local safe_branch=$(echo "$branch" | tr '/' '_')
+          local archive_name="${repo_name}_${safe_branch}.tar.gz"
+          local shm_path="/dev/shm/$archive_name"
+          
+          local nproc=$(nproc 2>/dev/null || echo 4)
+          
+          local aria_log_flags="--quiet --summary-interval=0"
+          if [ "${{ inputs.debug }}" = "true" ]; then
+              aria_log_flags="--summary-interval=5" # Show progress every 5s in debug
+          fi
+          
+          local aria2_headers=(
+            "--header=User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "--header=Accept: */*"
+            "--header=Connection: keep-alive"
+          )
+          
+          local download_url=""
+          if [[ "$url" == *"github.com"* ]]; then
+              download_url="${url%.git}/archive/refs/heads/${branch}.tar.gz"
+          elif [[ "$url" == *"gitlab.com"* ]]; then
+              download_url="${url%.git}/-/archive/${branch}/${repo_name}-${branch}.tar.gz"
+          else
+              echo "::error::Unsupported host: $url"
+              return 1
+          fi
+          
+          while [ $attempt -le $max_attempts ]; do
+              echo " Attempt $attempt/$max_attempts: High-speed fetch for $repo_name ($branch)"
+              
+              if aria2c -x16 -s16 -j16 -k1M --retry-wait=2 --max-tries=5 -d "/dev/shm" -o "$archive_name" --allow-overwrite=true "${aria2_headers[@]}" $aria_log_flags "$download_url"; then
+                  mkdir -p "$repo_name"
+                  if tar -I "pigz -p $nproc -b 256" -x --record-size=1M -f "$shm_path" -C "$repo_name" --strip-components=1 --no-same-owner; then
+                      echo "✅ Success: $repo_name synced"
+                      rm -f "$shm_path"
+                      return 0
+                  fi
+              fi
+              
+              echo "⚠️ Attempt $attempt failed, clearing RAM and retrying..."
+              rm -rf "$repo_name" "$shm_path" 2>/dev/null
+              sleep 5
+              attempt=$((attempt + 1))
+          done
+          
+          echo "::error::All attempts failed for $url"
+          return 1
+        }
+        
+        retry_clone() {
+          local url="$1"
+          local branch="${2:-main}"
+          local depth="${3:-1}"
+          local dir="$(basename "$url" .git)"
+          local max_attempts=3
+          local attempt=1
+          
+          # Build git clone args
+          local clone_args=(--branch "$branch")
+          if [ "$depth" != "0" ] && [ -n "$depth" ]; then
+            clone_args+=(--depth "$depth")
+          fi
+          
+          while [ $attempt -le $max_attempts ]; do
+            echo "🔄 Attempt $attempt/$max_attempts: cloning $url ($branch)${depth:+ [depth=$depth]}"
+            
+            # Clone with dynamic args
+            git clone "${clone_args[@]}" "$url" "$dir" && {
+              echo "✅ Success"
+              return 0
+            }
+            
+            echo "❌ Failed, cleaning up..."
+            rm -rf "$dir" 2>/dev/null
+            sleep $((attempt++ * 5))
+          done
+          
+          echo "💥 All attempts failed"
+          return 1
+        }
+        
+        retry_clone "https://github.com/WildKernels/kernel_patches.git" "main" "1"
+        
+        if [ "${{ env.OP_SUSFS }}" = true ]; then
+          echo "Using SUSFS branch/commit: $SUSFS_BRANCH"
+          if ! retry_fetch_archive "https://gitlab.com/simonpunk/susfs4ksu.git" "$SUSFS_BRANCH"; then
+            echo "::error::Failed to fetch SUSFS archive after multiple attempts"
+            exit 1
+          fi
+          echo "SUSFS_COMMIT_SHA=$SUSFS_BRANCH" >> $GITHUB_ENV
         fi
-        SUSFS_COMMIT_SHA=$(git rev-parse HEAD)
-        echo "SUSFS_COMMIT_SHA=$SUSFS_COMMIT_SHA" >> $GITHUB_ENV
-        echo "SUSFS_BRANCH_NAME=$SUSFS_BRANCH" >> $GITHUB_ENV
+        echo "✅ Dependencies cloned"
+        echo "::endgroup::"
 
     - name: Clean Up ABI Protected Exports
       shell: bash
       run: |
+        echo "::group::Clean Up ABI Protected Exports"
+        set -euo pipefail
         cd "$KERNEL_PLATFORM_FOLDER"
         rm -f common/android/abi_gki_protected_exports_* || true
-        rm -f msm-kernel/android/abi_gki_protected_exports_* || true
+        sed -i 's/protected_modules = \[.*\]/protected_modules = []/' common/modules.bzl || true
+        echo "::endgroup::"
 
     - name: Add KernelSU Next
       shell: bash
       run: |
+        set -euo pipefail
+        echo "::group::Add KernelSU Next"
         cd "$KERNEL_PLATFORM_FOLDER"
-        KSU_INPUT="${{ inputs.ksun_branch_or_hash }}"
+        echo "Adding KernelSU Next..."
+        KSU_INPUT="${{ inputs.ksu_branch_or_hash }}"
         if [ -z "$KSU_INPUT" ]; then
           curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
         else
@@ -236,87 +411,212 @@ runs:
         fi
         git submodule update --init --recursive
         cd KernelSU-Next/kernel
-        COMMITS_COUNT=$(git rev-list --count HEAD)
-        BASE_VERSION=$(( COMMITS_COUNT < 2684 ? 10200 : 30000 ))
-        KSU_VERSION=$(( COMMITS_COUNT + BASE_VERSION ))
+        
+        COMMITS_COUNT=$(/usr/bin/git rev-list --count HEAD)
+        
+        if [ $COMMITS_COUNT -lt 2684 ]; then
+          BASE_VERSION=10200
+        else
+          BASE_VERSION=30000
+        fi
+        
+        KSU_VERSION=$(expr $COMMITS_COUNT "+" $BASE_VERSION)
         sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
+        
+        if [ -f ksu.c ]; then
+          sed -i 's/#if defined(CONFIG_STACKPROTECTOR) && (defined(CONFIG_ARM64) && !defined(CONFIG_STACKPROTECTOR_PER_TASK))/#if 0/' ksu.c
+        fi
+        
+        if [[ "$KSU_VERSION" -gt 33095 ]] && [[ "${{ env.KERNEL_VER }}" == "6.12" ]]; then
+          sed -i 's|ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include|ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include -I$(KSU_KERNEL_DIR)/include/uapi|' Kbuild
+          sed -i 's|$(src)|$(abspath $(src))|' Kbuild
+          sed -i 's|$(srctree)/$(src)|$(abspath $(srctree)/$(src))|' Kbuild
+        fi
+        
+        if [ "$KSU_VERSION" -lt 12884 ]; then
+          echo "NEED_HOOKS=true" >> $GITHUB_ENV
+        else
+          echo "NEED_HOOKS=false" >> $GITHUB_ENV
+        fi
+        
         cd ..
         KSU_COMMIT_SHA=$(git rev-parse HEAD)
         echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> $GITHUB_ENV
-        echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-        cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
-        	CONFIG_KSU=y
-        	CONFIG_KSU_KPROBES_HOOK=n
+        
+        
+        echo "Add KSUN Configuration Settings"
+        cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<EOF
+        CONFIG_KSU=y
+        CONFIG_KSU_KPROBES_HOOK=n
         EOF
+        
+        echo "KSUN" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
+        echo "$KSU_VERSION" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
+        echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+        echo "KernelSU Next Version: $KSU_VERSION"
+        echo "✅ KernelSU Next added (commit: ${KSU_COMMIT_SHA:0:8})"
+        echo "::endgroup::"
 
-    # - name: Apply SUSFS Patches (v2.1.0)
-    #   shell: bash
-    #   run: |
-    #     cd "$KERNEL_PLATFORM_FOLDER"
-    #     cp "$SUSFS_FOLDER/kernel_patches/fs/"* "$COMMON_KERNEL_FOLDER/fs/"
-    #     cp "$SUSFS_FOLDER/kernel_patches/include/linux/"* "$COMMON_KERNEL_FOLDER/include/linux/"
-    #     susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
-    #     echo "SUSVER=$susfs_version" >> $GITHUB_ENV
-    #     cd "$KSUN_FOLDER"
-    #     patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
-    #     for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
-    #       patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch" || true
-    #     done
-    #     patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch" || true
-    #     patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch" || true
-    #     if [ "$KSUVER" -le 33095 ]; then
-    #       patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch" || true
-    #     fi
-    #     cd kernel
-    #     sed -i 's/ksu_sucompat_init();/\/\* SUSFS fix \*\/ \/\/ ksu_sucompat_init();/' core/init.c
-    #     sed -i 's/ksu_setuid_hook_init();/\/\* SUSFS fix \*\/ \/\/ ksu_setuid_hook_init();/' core/init.c
-    #     cd "$COMMON_KERNEL_FOLDER"
-    #     patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/50_add_susfs_in_$SUSFS_KERNEL_BRANCH.patch" || true
-    #     cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
-    #     	CONFIG_KSU_SUSFS=y
-    #     	CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_SUS_PATH=y
-    #     	CONFIG_KSU_SUSFS_SUS_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_SUS_KSTAT=y
-    #     	CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
-    #     	CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-    #     	CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-    #     	CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-    #     	CONFIG_KSU_SUSFS_ENABLE_LOG=y
-    #     	CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-    #     	CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-    #     	CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-    #     	CONFIG_KSU_SUSFS_SUS_MAP=y
-    #     	CONFIG_KSU_SUSFS_SUS_SU=n
-    #     	CONFIG_TMPFS_XATTR=y
-    #     	CONFIG_TMPFS_POSIX_ACL=y
-    #     EOF
 
-    - name: Add BBG
+    - name: Apply SUSFS Patches
       shell: bash
       run: |
+        set -euo pipefail
+        echo "::group::Apply SUSFS patches"
         cd "$KERNEL_PLATFORM_FOLDER"
-        wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash -s main || echo "BBG setup failed, continuing..."
-        echo "CONFIG_BBG=y" >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig"
-        sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' "$COMMON_KERNEL_FOLDER/security/Kconfig"
-
-    # - name: Apply Common Optimizations
-    #   shell: bash
-    #   run: |
-    #     cd "$COMMON_KERNEL_FOLDER"
-    #     for patch in \
-    #       "$KERNEL_PATCHES_FOLDER/common/mem_opt_prefetch.patch" \
-    #       "$KERNEL_PATCHES_FOLDER/common/minimise_wakeup_time.patch" \
-    #       "$KERNEL_PATCHES_FOLDER/common/int_sqrt.patch" \
-    #       "$KERNEL_PATCHES_FOLDER/common/force_tcp_nodelay.patch" \
-    #       "$KERNEL_PATCHES_FOLDER/common/reduce_gc_thread_sleep_time.patch" \
-    #       "$KERNEL_PATCHES_FOLDER/common/add_timeout_wakelocks_globally.patch" \
-    #       "$KERNEL_PATCHES_FOLDER/common/f2fs_reduce_congestion.patch" \
-    #       "$KERNEL_PATCHES_FOLDER/common/reduce_freeze_timeout.patch"; do
-    #       patch -p1 --forward < "$patch" || true
-    #     done
+        echo "Applying SUSFS patches..."
+        cp "$SUSFS_FOLDER/kernel_patches/fs/"* "$COMMON_KERNEL_FOLDER/fs/"
+        cp "$SUSFS_FOLDER/kernel_patches/include/linux/"* "$COMMON_KERNEL_FOLDER/include/linux/"
+        
+        susfs_version=$(grep '#define SUSFS_VERSION' "$COMMON_KERNEL_FOLDER/include/linux/susfs.h" | awk -F'"' '{print $2}')
+        echo "SUSVER=$susfs_version" >> $GITHUB_ENV
+        echo "$susfs_version" >> "${ARTIFACTS_FOLDER}/${OP_MODEL}_${OP_OS_VERSION}.txt"
+        echo "SusFS Version: $susfs_version"
+        
+        # Function to compare semantic versions
+        version_lte() {
+          [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$1" ]
+        }
+        
+        if version_lte "${susfs_version:1}" "1.5.12"; then
+          echo "NEED_HOOKS=true" >> $GITHUB_ENV
+        else
+          echo "NEED_HOOKS=false" >> $GITHUB_ENV
+        fi
+        
+        case "$susfs_version" in
+          "v1.5.8")
+            if [ "${{ inputs.ksu_type }}" = "KSUN" ]; then
+              patch -p1 --forward --fuzz=3 < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+              patch -p1 --forward --fuzz=3 < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_apk_sign.c.patch"
+              patch -p1 --forward --fuzz=3 < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_core_hook.c.patch"
+              patch -p1 --forward --fuzz=3 < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_selinux.c.patch"
+              patch -p1 --forward --fuzz=3 < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_ksud.c.patch"
+            else
+              cd "$KSU_FOLDER"
+              patch -p1 --forward --fuzz=3 < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+            fi
+            ;;
+          "v1.5.9"|"v1.5.10"|"v1.5.11"|"v1.5.12")
+            if [ "${{ inputs.ksu_type }}" = "KSUN" ]; then
+              cd "$KSUN_FOLDER"
+              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+              for file in $(find ./kernel -maxdepth 2 -name "*.rej" -printf "%f\n" | cut -d'.' -f1); do
+                echo "Patching file: $file.c with fix_$file.c.patch"
+                patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch"
+              done
+              patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_kernel_compat.c.patch"
+            else
+              cd "$KSU_FOLDER"
+              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+            fi
+            ;;
+          "v2.0.0")
+            if [ "${{ inputs.ksu_type }}" = "KSUN" ]; then
+              cd "$KSUN_FOLDER"
+              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+              for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+                echo "Patching file: $file with fix_$file.patch"
+                patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
+              done
+              echo "Patching Hook Mode!"
+              patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
+              echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
+              patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
+              if [ "$KSUVER" -le 33095 ]; then
+                echo "Patching Multi-manager Support for SusFS kernel!"
+                patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
+              fi
+              if [ "$KSUVER" -ge 33068 ] && [ "$KSUVER" -lt 33070 ]; then
+                echo "Patching Multi-manager sepolicy Support for SusFS kernel!"
+                patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_sepolicy_fix.patch"
+              fi
+            else
+              cd "$KSU_FOLDER"
+              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+            fi
+            ;;
+          "v2.1.0")
+            if [ "${{ inputs.ksu_type }}" = "KSUN" ]; then
+              cd "$KSUN_FOLDER"
+              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+              for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+                echo "Patching file: $file with fix_$file.patch"
+                patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
+              done
+              echo "Patching Hook Mode!"
+              patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
+              echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
+              patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
+              if [ "$KSUVER" -le 33095 ]; then
+                echo "Patching Multi-manager Support for SusFS kernel!"
+                patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
+              fi
+              if [ "$KSUVER" -ge 33068 ] && [ "$KSUVER" -lt 33070 ]; then
+                echo "Patching Multi-manager sepolicy Support for SusFS kernel!"
+                patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/multi_sepolicy_fix.patch"
+              fi
+            else
+              cd "$KSU_FOLDER"
+              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+            fi
+            ;;
+          "v2.2.0")
+            if [ "${{ inputs.ksu_type }}" = "KSUN" ]; then
+              cd "$KSUN_FOLDER"
+              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+              for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+                echo "Patching file: $file with fix_$file.patch"
+                patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
+              done
+              echo "Patching Hook Mode!"
+              patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
+              echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
+              patch -p1 --forward < "$KERNEL_PATCHES_FOLDER/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
+            else
+              cd "$KSU_FOLDER"
+              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+            fi
+            ;;
+          *)
+            echo "::error::Unsupported SUSFS version: $susfs_version"
+            exit 1
+            ;;
+        esac
+        
+        cd "$COMMON_KERNEL_FOLDER"
+        if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
+          if ! grep -qxF '#include <trace/hooks/fs.h>' ./fs/namespace.c; then
+            sed -i '/#include <trace\/hooks\/blk.h>/a #include <trace\/hooks\/fs.h>' ./fs/namespace.c
+          fi
+        fi
+        
+        # Fake kernel patch to fix failures
+        fake_patched=0
+        fake_patched_expand=0
+        if [ "${{ env.ANDROID_VER }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
+          if ! grep -qxF $'\tunsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;' ./fs/proc/task_mmu.c; then
+            echo "nr_subpages Line not found. Fake Patching!"
+            sed -i -e '/int ret = 0, copied = 0;/a \\tunsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;' -e '/int ret = 0, copied = 0;/a \\tpagemap_entry_t \*res = NULL;' ./fs/proc/task_mmu.c
+            fake_patched=1
+          fi
+          
+          if ! grep -qxF '#include <linux/dma-buf.h>' ./fs/proc/base.c; then
+            echo "#include <linux/dma-buf.h> Line not found. Adding missing header"
+            sed -i '/#include <linux\/cpufreq_times.h>/a #include <linux\/dma-buf.h>' ./fs/proc/base.c
+          fi
+          
+          if ! grep -qxF '#include <linux/zswap.h>' ./mm/memory.c; then
+            echo "#include <linux/zswap.h> Line not found. Adding missing header"
+            sed -i '/#include <linux\/sched\/sysctl.h>/a #include <linux\/zswap.h>' ./mm/memory.c
+          fi
+          
+          if grep -qF 'if (vma->vm_end > last_vma_end)' ./fs/proc/task_mmu.c && ! grep -qxF 'SUSFS_IS_INODE_SUS_MAP' ./fs/proc/task_mmu.c; then
+            echo "Temporarily expand the `last_vma_end` `if` block to fix a matching issue."
+            perl -i -0pe 's/\t\t\tif \(vma->vm_end > last_vma_end\)\n\t\t\t\tsmap_gather_stats\(vma, &mss, last_vma_end\);/\t\t\tif (vma->vm_end > last_vma_end) {\n\t\t\t\tsmap_gather_stats(vma, \&mss, last_vma_end);\n\t\t\t\tlast_vma_end = vma->vm_end;\n\t\t\t}/' ./fs/proc/task_mmu.c
+            fake_patched_expand=1
+          fi
+        
 
     - name: Add Nethunter Inline Configs
       shell: bash
@@ -481,7 +781,7 @@ runs:
         	CONFIG_FRAME_WARN=0
         	CONFIG_TRACEPOINTS=y
         EOF
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_MAC80211
+        ./scripts/config --file arch/arm64/configs/gki_defconfig --module CONFIG_MAC80211
 
     - name: Save Build Metadata
       id: save_metadata
@@ -600,6 +900,7 @@ runs:
           STRIP=llvm-strip HOSTCC=clang HOSTCXX=clang++
           CC="ccache clang"
         )
+        
         make "${MAKE_FLAGS[@]}" KLIB="$KERNEL_BUILD" KLIB_BUILD="$KERNEL_BUILD" allnoconfig
         printf '%s\n' \
           'CPTCFG_WLAN=y' \
