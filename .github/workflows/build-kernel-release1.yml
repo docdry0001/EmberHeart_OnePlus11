@@ -1,4 +1,4 @@
-name: Build and Release OnePlus EmberHeart Kernel and Kernel Modules
+name: Build and Release OnePlus Kernels
 
 permissions:
   contents: write
@@ -7,37 +7,49 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      release_type:
-        description: 'Select type of Github release?'
+      make_release:
+        description: 'Do you want to create a release?'
+        required: true
+        type: boolean
+        default: false
+      op_model:
+        description: 'Select the OnePlus kernels to build'
         required: true
         type: choice
         options:
-          - none
-          - Pre-release
-          - Release
-        default: none
-      manifest:
-        description: 'Select manifest'
-        required: true
-        type: choice
-        options:
-          - OOS14
           - OOS15
-          - FAST_BUILD_OOS15
-          - OOS16
-          - OOS16_CUSTOM
+          - OSS16
+          - android12-5.10
         default: OOS16
-      ksun_branch:
-        description: 'Enter KernelSU Next Branch or commit hash (blank for stable tag)'
+      ksu_options:
+        description: 'Enter KernelSU build json'
         required: true
         type: string
-        default: dev
+        default: '[{"type":"ksun","hash":"dev"}]'
       optimize_level:
         description: "Compiler optimization level"
         required: true
         type: choice
         options: [O2, O3]
         default: O2
+      clean_build:
+        description: 'Clean build (no ccache)'
+        type: boolean
+        default: false
+      debug:
+        description: 'Enable debug mode: dumping debug related artifacts and show some debug logs'
+        required: false
+        type: boolean
+        default: false
+      mirror_toolchains:
+        description: 'Do you want to sync toolchains before build? [99% runs not required]'
+        required: false
+        type: boolean
+        default: false
+      build_timestamp:
+        description: 'Custom kernel build timestamp for uname -a (e.g. "Tue Feb 10 10:01:02 UTC 2026"). Leave empty for current time.'
+        type: string
+        default: ''
       kernel_uname:
         description: 'Kernel uname'
         type: string
