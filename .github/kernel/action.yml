@@ -376,7 +376,8 @@ runs:
 
     - name: Apply SUSFS Patches
       shell: bash
-      if: ${{ env.OP_SUSFS == 'true' }}
+      if: ${{ 'true' == 'true' }}
+      #if: ${{ env.OP_SUSFS == 'true' }}
       run: |
         set -euo pipefail
         echo "::group::Apply SUSFS patches"
