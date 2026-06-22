@@ -183,77 +183,53 @@ runs:
         echo "BUILD_USER=OnePlus" >> "$GITHUB_ENV"
         echo "BUILD_HOST=ubuntu-build" >> "$GITHUB_ENV"
 
-    # - name: Install Dependencies & ccache
-    #   shell: bash
-    #   run: |
-    #     sudo apt-get update -qq
-    #     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    #       git curl ca-certificates build-essential clang lld flex bison \
-    #       libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-    #       libxml2-utils rsync unzip dwarves file python3 ccache zstd
-    #     sudo apt-get clean
-    #     export CCACHE_DIR="$HOME/.ccache"
-    #     echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
-    #     mkdir -p "$CCACHE_DIR"
-    #     ccache -M 5G
-    #     ccache -o compression=true
+    - name: Install Dependencies & ccache
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          git curl ca-certificates build-essential clang lld flex bison \
+          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
+          libxml2-utils rsync unzip dwarves file python3 ccache zstd
+        sudo apt-get clean
+        export CCACHE_DIR="$HOME/.ccache"
+        echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+        mkdir -p "$CCACHE_DIR"
+        ccache -M 5G
+        ccache -o compression=true
 
-    # - name: Clone Dependencies
-    #   shell: bash
-    #   run: |
-    #     git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.0
-    #     git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
-    #     git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
-    #     git clone https://gitlab.com/simonpunk/susfs4ksu.git
-    #     cd susfs4ksu
-    #     SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
-    #     if [ -z "$SUSFS_INPUT" ]; then
-    #       SUSFS_BRANCH="$SUSFS_KERNEL_BRANCH"
-    #     else
-    #       SUSFS_BRANCH="$SUSFS_INPUT"
-    #     fi
-    #     if git rev-parse --verify "origin/$SUSFS_BRANCH" >/dev/null 2>&1; then
-    #       git checkout "$SUSFS_BRANCH"
-    #     elif git rev-parse --verify "$SUSFS_BRANCH" >/dev/null 2>&1; then
-    #       git checkout "$SUSFS_BRANCH"
-    #     else
-    #       echo "SUSFS ref not found: $SUSFS_BRANCH"; exit 1
-    #     fi
-    #     SUSFS_COMMIT_SHA=$(git rev-parse HEAD)
-    #     echo "SUSFS_COMMIT_SHA=$SUSFS_COMMIT_SHA" >> $GITHUB_ENV
-    #     echo "SUSFS_BRANCH_NAME=$SUSFS_BRANCH" >> $GITHUB_ENV
+    - name: Clone Dependencies
+      shell: bash
+      run: |
+        git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.0
+        git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
+        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
+        git clone https://gitlab.com/simonpunk/susfs4ksu.git
+        cd susfs4ksu
+        SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
+        if [ -z "$SUSFS_INPUT" ]; then
+          SUSFS_BRANCH="$SUSFS_KERNEL_BRANCH"
+        else
+          SUSFS_BRANCH="$SUSFS_INPUT"
+        fi
+        if git rev-parse --verify "origin/$SUSFS_BRANCH" >/dev/null 2>&1; then
+          git checkout "$SUSFS_BRANCH"
+        elif git rev-parse --verify "$SUSFS_BRANCH" >/dev/null 2>&1; then
+          git checkout "$SUSFS_BRANCH"
+        else
+          echo "SUSFS ref not found: $SUSFS_BRANCH"; exit 1
+        fi
+        SUSFS_COMMIT_SHA=$(git rev-parse HEAD)
+        echo "SUSFS_COMMIT_SHA=$SUSFS_COMMIT_SHA" >> $GITHUB_ENV
+        echo "SUSFS_BRANCH_NAME=$SUSFS_BRANCH" >> $GITHUB_ENV
 
-    # - name: Clean Up ABI Protected Exports
-    #   shell: bash
-    #   run: |
-    #     cd "$KERNEL_PLATFORM_FOLDER"
-    #     rm -f common/android/abi_gki_protected_exports_* || true
-    #     rm -f msm-kernel/android/abi_gki_protected_exports_* || true
+    - name: Clean Up ABI Protected Exports
+      shell: bash
+      run: |
+        cd "$KERNEL_PLATFORM_FOLDER"
+        rm -f common/android/abi_gki_protected_exports_* || true
+        rm -f msm-kernel/android/abi_gki_protected_exports_* || true
 
-    # - name: Add KernelSU Next
-    #   shell: bash
-    #   run: |
-    #     cd "$KERNEL_PLATFORM_FOLDER"
-    #     KSU_INPUT="${{ inputs.ksun_branch_or_hash }}"
-    #     if [ -z "$KSU_INPUT" ]; then
-    #       curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
-    #     else
-    #       curl --fail --location --proto '=https' -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s "$KSU_INPUT"
-    #     fi
-    #     git submodule update --init --recursive
-    #     cd KernelSU-Next/kernel
-    #     COMMITS_COUNT=$(git rev-list --count HEAD)
-    #     BASE_VERSION=$(( COMMITS_COUNT < 2684 ? 10200 : 30000 ))
-    #     KSU_VERSION=$(( COMMITS_COUNT + BASE_VERSION ))
-    #     sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" Makefile
-    #     cd ..
-    #     KSU_COMMIT_SHA=$(git rev-parse HEAD)
-    #     echo "KSU_COMMIT_SHA=$KSU_COMMIT_SHA" >> $GITHUB_ENV
-    #     echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-    #     cat >> "$COMMON_KERNEL_FOLDER/arch/arm64/configs/gki_defconfig" <<-EOF
-    #     	CONFIG_KSU=y
-    #     	CONFIG_KSU_KPROBES_HOOK=n
-    #     EOF
 
     # - name: Apply SUSFS Patches (v2.1.0)
 
