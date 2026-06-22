@@ -9,6 +9,13 @@ inputs:
     description: 'JSON string containing full device config'
     required: true
     type: string
+  ksu_type:
+    description: 'Select KSU Type'
+    required: true
+    type: choice
+    options:
+      - KSUN
+      - KSU
   ksun_branch_or_hash:
     description: 'KernelSU Next branch or commit hash (empty = auto)'
     required: false
