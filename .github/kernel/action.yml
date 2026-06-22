@@ -9,6 +9,12 @@ inputs:
     description: 'JSON string containing full device config'
     required: true
     type: string
+  ksu_type:
+    description: 'Select KSU Type'
+    required: true
+    type: choice
+    options:
+      - KSUN
   ksun_branch_or_hash:
     required: true
     type: string
