@@ -555,6 +555,8 @@ runs:
         set -euo pipefail
         cd "$CONFIG/kernel_platform/common"
         patch -p1 < ../../../kernel_patches/next/scope_min_manual_hooks_v1.4.patch
+        patch -p1 < ../../../kernel_patches/next/scope_min_manual_hooks_v1.5.patch
+        
 
     - name: Apply SUSFS Patches
       shell: bash
