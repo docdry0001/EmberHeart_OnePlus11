@@ -311,7 +311,6 @@ runs:
           --module CONFIG_MT76x02_LIB \
           --module CONFIG_MT76x02_USB \
           --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
           --module CONFIG_MT76x2_COMMON \
           --module CONFIG_MT76x0_COMMON \
           --module CONFIG_MT7615_COMMON \
