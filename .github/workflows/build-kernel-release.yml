@@ -12,8 +12,8 @@ on:
         required: true
         type: boolean
         default: false
-      op_model:
-        description: 'Select the OnePlus kernels to build'
+      manifest:
+        description: 'Select the manofest'
         required: true
         type: choice
         options:
