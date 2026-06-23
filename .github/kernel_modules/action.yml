@@ -123,8 +123,8 @@ runs:
         echo "::group::Install deps"
         sudo apt-get -o Acquire::Retries=3 update -qq
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-          git curl ca-certificates build-essential clang lld flex bison gcc \
-          libelf-dev libssl-dev  libncurses-dev zlib1g-dev liblz4-tool bc mokutil \
+          git curl ca-certificates build-essential clang lld flex bison \
+          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
           libxml2-utils rsync unzip dwarves file python3 ccache
         sudo apt-get clean
         echo "::endgroup::"
@@ -155,7 +155,7 @@ runs:
         if [[ "$MANIFEST" == https://* ]]; then
           mkdir -p .repo/manifests
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
-          "$REPO" init -u https://github.com/OnePlusOSS/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
           "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
@@ -216,35 +216,13 @@ runs:
         create-symlink: true
         job-summary: 'CCache stats'
         evict-old-files: 'job'
-        
-    - name: Add rtl88x2bu modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        git clone https://github.com/docdry0001/rtl88x2bu.git
-        sed -i 's/$(CONFIG_RTL88X2BU)/m/g' Makefile
-        
-    - name: Add rtl88xxau modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        git clone https://github.com/docdry0001/rtl8812au.git
-        sed -i 's/$(CONFIG_RTL8812AU)/m/g' Makefile
-        
 
-        
     - name: Clone kernel patches for msm kernel
       shell: bash
       run: |
         set -euo pipefail
         echo "Cloning kernel patches for msm kernel..."
-        git clone --depth=1 https://github.com/docdry0001/kernel_patches.git my_patches
+        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
 
     - name: Clean Up ABI Protected Exports
       shell: bash
@@ -272,8 +250,18 @@ runs:
 
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
-        
 
+
+    # - name: Add mt76 modules
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+    #     MSM="$KERNEL_PATH/msm-kernel"
+    #     cd "$MSM/drivers/net/wireless"
+    #     rm -rf mediatek 
+    #     git clone -b mediatek https://github.com/docdry0001/mt7921.git
+    #     mv mt7921 mediatek 
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
@@ -282,22 +270,17 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
-        
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK
-          
-          #MEDIATEK
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK
-          
-          #ralink
+        # Ralink drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_RALINK \
-          --enable CONFIG_RT2X00 \
+          --module CONFIG_RT2X00 \
           --module CONFIG_RT2X00_LIB \
           --enable CONFIG_RT2X00_LIB_FIRMWARE \
           --module CONFIG_RT2X00_USB \
+          --module CONFIG_RT2X00_PCI \
           --module CONFIG_RT2800LIB \
           --module CONFIG_RT2800USB \
           --enable CONFIG_RT2800USB_RT33XX \
@@ -306,7 +289,7 @@ runs:
           --enable CONFIG_RT2800USB_RT53XX \
           --enable CONFIG_RT2800USB_RT55XX \
           --enable CONFIG_RT2800USB_UNKNOWN
-          
+
         # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_ATH \
@@ -317,18 +300,30 @@ runs:
           --module CONFIG_ATH9K_COMMON \
           --module CONFIG_ATH10K \
           --module CONFIG_ATH10K_USB \
-          --module CONFIG_ATH11
+          --module CONFIG_ATH11K
 
+        # Mediatek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_USB \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT76x02_USB \
+          --module CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT7603E \
+          --module CONFIG_MT76x2_COMMON \
+          --module CONFIG_MT76x0_COMMON \
+          --module CONFIG_MT7615_COMMON \
+          --module CONFIG_MT7915E \
+          --module CONFIG_MT7921E \
+          --module CONFIG_MT7921E
+        
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --module CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
-
-
-    - name: Force mt7921u as module, disable others
-      shell: bash
-      run: |
-        cd "$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel"
 
 
     - name: Add memkernel module
@@ -347,11 +342,18 @@ runs:
         set -euo pipefail
         echo "Applying kernel patches to msm kernel from my repo..."
         cd "$CONFIG/kernel_platform/msm-kernel"
-        git clone https://github.com/johanlike/DJY_88XXAU_For_4.4__4.9_4.14_4.19_Android_Kernel_Patch.git papka
+    
         shopt -s nullglob
-        #patch -p1 < papka/DJY-88XXAU-5.3.4.patch
-        patch -p1 < ../../../my_patches/kernel_patches/op11/msm/add-wifi-injection-4.14.patch
-        patch -p1 < ../../../my_patches/kernel_patches/op11/msm/fix-hci-uart.patch
+        PATCHES=(../../../my_patches/kernel_patches/op11/msm/*.patch)
+    
+        if [ ${#PATCHES[@]} -eq 0 ]; then
+          echo "[!] No OP11 msm patches found, skipping."
+        else
+          for patch_file in "${PATCHES[@]}"; do
+            echo "Applying patch: $patch_file"
+            patch -p1 < "$patch_file"
+          done
+        fi
     
     - name: FIX vmscan scan_adjusted (waipio)
       if: env.SOC == 'waipio'
@@ -436,19 +438,7 @@ runs:
         grep -n '^#include <linux/sched/mm.h>$' "$FILE" | head -5
         grep -n 'mmget_still_valid' "$FILE" | head -20   
         
-    - name: Add rtw88 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
-        sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
-        sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
-
-
+        
     - name: Detect Clang (toolchain for build)
       shell: bash
       run: |
@@ -481,7 +471,7 @@ runs:
         KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PLATFORM/msm-kernel"
         cd "$MSM"
-
+        
         export PATH="${CLANG_BIN_PATH}:$PATH"
         export PATH="/usr/lib/ccache:$PATH"
 
@@ -609,7 +599,7 @@ runs:
         for MODULE in "${EXT_QCOM[@]}"; do
           build_external_module "$MODULE"
         done
-
+        
     - name: Filter modules
       shell: bash
       run: |
@@ -641,7 +631,7 @@ runs:
         echo "Modules remaining after filtering: $(find modules -type f -name '*.ko' | wc -l)"
 
     - name: Create Kernel Modules zip
-      id: create_zip                    # ← ՊԱՐՏԱԴԻՐ
+      id: create_zip
       shell: bash
       run: |
         set -euo pipefail
@@ -652,23 +642,8 @@ runs:
         MODULES_SRC="$OUT/modules"
         MODULES_ZIP="$CONFIG_DIR/artifacts/kernel_modules_${{ env.MODEL }}.zip"
         mkdir -p "$CONFIG_DIR/artifacts"
-        
-        # Ստեղծել դատարկ zip (ապահովում է, որ ֆայլը գոյություն ունենա)
-        zip -j "$MODULES_ZIP" || true
-        
-        # Ավելացնել .ko ֆայլերը (եթե կան)
-        find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP" || true
-        
-        # Ավելացնել Module.symvers
-        MODULE_SYMVERS="$OUT/Module.symvers"
-        if [ -f "$MODULE_SYMVERS" ]; then
-            zip -j "$MODULES_ZIP" "$MODULE_SYMVERS"
-            echo "Added Module.symvers to the zip"
-        else
-            echo "Warning: Module.symvers not found at $MODULE_SYMVERS"
-        fi
-        
-        echo "Packaged kernel modules and Module.symvers to $MODULES_ZIP"
+        find "$MODULES_SRC" -type f -name '*.ko' -print0 | xargs -0 zip -j "$MODULES_ZIP"
+        echo "Packaged kernel modules to $MODULES_ZIP"
 
     - name: Final Build Summary
       shell: bash
@@ -693,7 +668,7 @@ runs:
         gh cache delete ccache-${{ env.CONFIG }}-modules-${{ env.KERNEL_FULL_VER }}- || true
 
     - name: Upload Kernel Modules zip
-      if: always() && steps.create_zip.outcome == 'success'   # ← Նոր պայման
+      if: success() && steps.create_zip.conclusion == 'success'
       uses: actions/upload-artifact@v4
       with:
         name: kernel-modules-${{ env.CONFIG }}
