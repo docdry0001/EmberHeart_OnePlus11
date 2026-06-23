@@ -258,9 +258,9 @@ runs:
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless"
-        rm -rf mediatek 
-        git clone -b 5.10-compat https://github.com/docdry0001/mt7921.git mediatek
+        cd "$MSM/drivers/net/wireless/"
+        rm -rf mediatek/* 
+        git clone -b mediatek https://github.com/docdry0001/mt7921.git mediatek/
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
@@ -317,7 +317,7 @@ runs:
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
           --module CONFIG_MT7921E \
-          --module CONFIG_MT7921E
+          --module CONFIG_MT7921U
         
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
