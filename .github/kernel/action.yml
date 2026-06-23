@@ -9,6 +9,13 @@ inputs:
     description: 'JSON string containing full device config'
     required: true
     type: string
+  ksu_type:
+    description: 'Select KSU Type'
+    required: true
+    type: choice
+    options:
+      - KSUN
+      - KSU
   ksun_branch_or_hash:
     description: 'KernelSU Next branch or commit hash (empty = auto)'
     required: false
@@ -42,14 +49,25 @@ inputs:
 
 outputs:
   kernel_version:
+    description: 'Full kernel version string'
     value: ${{ steps.save_metadata.outputs.kernel_version }}
   ksu_version:
+    description: 'KernelSU version number'
     value: ${{ steps.save_metadata.outputs.ksu_version }}
+  ksu_type:
+    description: 'KernelSU Variant'
+    value: ${{ steps.save_metadata.outputs.ksu_type }}
   susfs_version:
+    description: 'SUSFS version string'
     value: ${{ steps.save_metadata.outputs.susfs_version }}
+  build_timestamp:
+    description: 'Effective kernel build timestamp used in uname -a'
+    value: ${{ steps.save_metadata.outputs.build_timestamp }}
   image_sha256:
+    description: 'SHA256 hash of kernel Image'
     value: ${{ steps.collect_stats.outputs.image_sha256 }}
   zip_sha256:
+    description: 'SHA256 hash of AnyKernel3 Zip'
     value: ${{ steps.create_zip.outputs.zip_sha256 }}
   warnings:
     value: ${{ steps.collect_stats.outputs.warnings_count }}
