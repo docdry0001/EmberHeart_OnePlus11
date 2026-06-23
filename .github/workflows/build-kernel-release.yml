@@ -206,11 +206,6 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
       - name: Setup Build Environment
         id: setup_env
         uses: ./.github/env_setup
