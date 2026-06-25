@@ -124,8 +124,8 @@ runs:
         sudo apt-get -o Acquire::Retries=3 update -qq
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
           git curl ca-certificates build-essential clang lld flex bison \
-          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool \
-          libxml2-utils rsync unzip dwarves file python3 ccache
+          libelf-dev libssl-dev libncurses-dev zlib1g-dev liblz4-tool mokutil \
+          libxml2-utils rsync unzip dwarves file python3 ccache bc flex dkms 
         sudo apt-get clean
         echo "::endgroup::"
 
@@ -261,6 +261,16 @@ runs:
         cd "$MSM/drivers/net/wireless/"
         rm -rf mediatek/* 
         git clone -b mediatek https://github.com/docdry0001/mt7921.git mediatek/
+
+    - name: Add mt76 modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/realtek/"
+        rm -rf rtlwifi/* 
+        git clone https://github.com/docdry0001/rtl8812au.git rtlwifi/
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
