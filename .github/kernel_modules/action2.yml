@@ -58,3 +58,44 @@ jobs:
         with:
           name: wifi-modules
           path: build_output/
+
+
+
+set -euo pipefail
+
+echo "[*] Installing dependencies..."
+apt update
+apt install -y git build-essential bc bison flex libssl-dev libelf-dev
+
+echo "[*] Cloning RTL8812AU driver..."
+git clone https://github.com/aircrack-ng/rtl8812au.git
+cd rtl8812au
+
+echo "[*] Setting Android GKI build environment..."
+
+export ARCH=arm64
+export CROSS_COMPILE=aarch64-linux-android-
+export KERNEL_DIR="$COMMON_KERNEL_FOLDER"
+
+# IMPORTANT: Android + injection support flags
+export CONFIG_PLATFORM_ANDROID=y
+export CONFIG_IOCTL_CFG80211=y
+export CONFIG_WIFI_MONITOR=y
+
+echo "[*] Cleaning previous builds..."
+make clean
+
+echo "[*] Building kernel module..."
+make -j$(nproc) \
+  ARCH=arm64 \
+  CROSS_COMPILE=aarch64-linux-android- \
+  KSRC=$KERNEL_DIR
+
+echo "[*] Checking output..."
+find . -name "*.ko"
+
+mkdir -p out
+cp *.ko out/
+
+echo "[✓] RTL8812AU MODULE BUILT SUCCESSFULLY"
+echo "[✓] Ready for injection / monitor mode"
