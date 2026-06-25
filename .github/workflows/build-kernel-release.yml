@@ -170,10 +170,35 @@ jobs:
           op_config_json: ${{ toJSON(matrix) }}
           manifest: ${{ inputs.manifest }}
 
+   build-modules:
+     name: Build ${{ matrix.model }} Kernel Modules
+     needs: set-op-model
+     runs-on: ubuntu-latest
+     env:
+       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+       CCACHE_NOHASHDIR: "true"
+       CCACHE_HARDLINK: "true"
+     strategy:
+       fail-fast: false
+       matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
+     steps:
+       - name: Checkout Code
+         uses: actions/checkout@v4
+         with:
+           fetch-depth: 1
+
+       - name: Build Modules
+         uses: ./.github/rtl88xxau 
+         with:
+           op_config_json: ${{ toJSON(matrix) }}
+           manifest: ${{ inputs.manifest }}   
+
   trigger-release:
     needs:
       - build-kernel
       - build-kernel-modules
+      
     runs-on: ubuntu-latest
     if: ${{ inputs.release_type != 'none' }}
     env:
