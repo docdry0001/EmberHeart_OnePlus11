@@ -1152,7 +1152,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        export SUSVER="${SUSVER:-0}"
+        export SUSVER="${SUSVER:-unknown}"
         echo "::group::Creating AK3 zip..."
         CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
         IMAGE_PATH="$CONFIG_DIR/kernel_platform/common/out/arch/arm64/boot/Image"
@@ -1167,7 +1167,7 @@ runs:
         sed -i '7 c\kernel.string=EmberHeart Kernel by nullptr-t-oss' anykernel.sh
         curl https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/banner > banner
 
-        ZIP_NAME="AnyKernel3_${MODEL}_${{ env.KERNEL_FULL_VER }}_Next_${KSUVER}_SuSFS_${SUSVER}.zip"
+        ZIP_NAME="kernel-nethunter.zip"
         ARTIFACTS_DIR="$CONFIG_DIR/artifacts"
         mkdir -p "$ARTIFACTS_DIR"
 
@@ -1180,7 +1180,7 @@ runs:
         echo "AnyKernel3 zip created ✅"
         echo "::endgroup::"
 
-    - name: Create Boot Image
+        - name: Create Boot Image
       if: success() && steps.create_zip.conclusion == 'success'
       shell: bash
       run: |
@@ -1226,7 +1226,7 @@ runs:
           echo "Kernel Uname: ${{ env.KERNEL_UNAME }}"
           echo "KSUN Version: ${KSUVER:-unknown}"
           echo "KSUN commit SHA: ${{ env.KSUN_COMMIT_SHA }}"
-          echo "SUSFS Version: ${SUSVER:-disable}"
+          echo "SUSFS Version: ${SUSVER:-unknown}"
           echo "SUSFS commit SHA: ${{ env.SUSFS_COMMIT_SHA }}"
           echo "Optimization: ${{ inputs.optimize_level }}"
           echo "Image SHA256: ${{ steps.collect_stats.outputs.image_sha256 }}"
@@ -1244,7 +1244,7 @@ runs:
           echo "- Kernel Uname: ${{ env.KERNEL_UNAME }}"
           echo "- KSUN Version: ${KSUVER:-unknown}"
           echo "- KSUN commit SHA: [${{ env.KSUN_COMMIT_SHA }}](https://github.com/KernelSU-Next/KernelSU-Next/commit/${{ env.KSUN_COMMIT_SHA }})"
-          echo "- SUSFS Version: ${SUSVER:-disable}"
+          echo "- SUSFS Version: ${SUSVER:-unknown}"
           echo "- SUSFS commit SHA: [${{ env.SUSFS_COMMIT_SHA }}](https://gitlab.com/simonpunk/susfs4ksu/-/commit/${{ env.SUSFS_COMMIT_SHA }})"
           echo "- Optimization: ${{ inputs.optimize_level }}"
           echo "- Image SHA256: ${{ steps.collect_stats.outputs.image_sha256 }}"
