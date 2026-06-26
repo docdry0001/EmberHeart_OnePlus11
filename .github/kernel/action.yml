@@ -1094,93 +1094,47 @@ runs:
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
 
-    - name: Create Magisk module for backports
+
+    - name: Archive backports modules (flat)
+      if: success()
       shell: bash
       run: |
         set -euo pipefail
-        MODDIR="$GITHUB_WORKSPACE/magisk-mt7921u"
-        KO_DIR="$GITHUB_WORKSPACE/backports-artifacts"
-        ZIPOUT="$GITHUB_WORKSPACE/$CONFIG/artifacts/mt7921u-backports-magisk.zip"
-
-        rm -rf "$MODDIR"
-        mkdir -p "$MODDIR/system/vendor/lib/modules"
-
-        find "$KO_DIR" -type f -name '*.ko' -exec cp {} "$MODDIR/system/vendor/lib/modules/" \;
-
-        cat > "$MODDIR/module.prop" <<'EOF'
-        id=mt7921u_backports
-        name=MT7921U Backports
-        version=1.0
-        versionCode=1
-        author=yourname
-        description=Backports for MT7921U on custom kernel
-        EOF
-
-        cat > "$MODDIR/post-fs-data.sh" <<'EOF'
-        #!/system/bin/sh
-        MODDIR=${0%/*}
-        MODPATH="$MODDIR/system/vendor/lib/modules"
-        for m in compat cfg80211 mac80211 mt76 mt76-usb mt76-connac-lib mt792x-lib mt792x-usb mt7921-common mt7921u; do
-          [ -f "$MODPATH/${m}.ko" ] && insmod "$MODPATH/${m}.ko" 2>/dev/null || true
-        done
-        EOF
-        chmod +x "$MODDIR/post-fs-data.sh"
-
-        cat > "$MODDIR/service.sh" <<'EOF'
-        #!/system/bin/sh
-        sleep 8
-        MODDIR=${0%/*}
-        MODPATH="$MODDIR/system/vendor/lib/modules"
-        for m in compat cfg80211 mac80211 mt76 mt76-usb mt76-connac-lib mt792x-lib mt792x-usb mt7921-common mt7921u; do
-          [ -f "$MODPATH/${m}.ko" ] && insmod "$MODPATH/${m}.ko" 2>/dev/null || true
-        done
-        EOF
-        chmod +x "$MODDIR/service.sh"
-
-        cat > "$MODDIR/customize.sh" <<'EOF'
-        #!/system/bin/sh
-        ui_print "Installing MT7921U backports module"
-        EOF
-        chmod +x "$MODDIR/customize.sh"
-
-        cd "$MODDIR"
-        zip -r "$ZIPOUT" .
-        echo "Magisk module created: $ZIPOUT"
-
-    - name: Create Kernel ZIP
+        if [ ! -d "$GITHUB_WORKSPACE/backports-artifacts" ]; then
+          echo "Backports artifacts not found, skipping archive."
+          exit 0
+        fi
+        mkdir -p /tmp/backports-flat
+        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
+        cd /tmp/backports-flat
+        zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
+        echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
+        
+    - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
       run: |
-        set -euo pipefail
-        export SUSVER="${SUSVER:-unknown}"
-        echo "::group::Creating AK3 zip..."
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        IMAGE_PATH="$CONFIG_DIR/kernel_platform/common/out/arch/arm64/boot/Image"
-        if [ ! -f "$IMAGE_PATH" ]; then
-          echo "ERROR: Built Image not found"
-          exit 1
-        fi
+        cp "$COMMON_KERNEL_FOLDER/out/arch/arm64/boot/Image" "$AK3_FOLDER/"
+        cp "$ARTIFACTS_FOLDER/${OP_MODEL}.txt" "$AK3_FOLDER/"
+        cd "$AK3_FOLDER"
+        ZIP_NAME="AK3_${OP_MODEL}_${KERNEL_FULL_VER}_KSUN_${KSUVER}_SuSFS_${SUSVER}.zip"
+        zip -r "$ZIP_NAME" . -x "*.git*"
+        mv "$ZIP_NAME" "$ARTIFACTS_FOLDER/"
+        ZIP_SHA256=$(sha256sum "$ARTIFACTS_FOLDER/$ZIP_NAME" | awk '{print $1}')
+        echo "zip_sha256=$ZIP_SHA256" >> "$GITHUB_OUTPUT"
+        echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
 
-        cp "$IMAGE_PATH" "$GITHUB_WORKSPACE/AnyKernel3/Image"
-        cd "$GITHUB_WORKSPACE/AnyKernel3"
-
-        sed -i '7 c\kernel.string=EmberHeart Kernel by nullptr-t-oss' anykernel.sh
-        curl https://raw.githubusercontent.com/nullptr-t-oss/kernel_patches/refs/heads/main/banner > banner
-
-        ZIP_NAME="kernel-nethunter.zip"
-        ARTIFACTS_DIR="$CONFIG_DIR/artifacts"
-        mkdir -p "$ARTIFACTS_DIR"
-
-        echo "Creating flashable zip: $ZIP_NAME"
-        ( cd "$GITHUB_WORKSPACE/AnyKernel3" && zip -r "$ARTIFACTS_DIR/$ZIP_NAME" ./* >/dev/null )
-
-        find "$ARTIFACTS_DIR" -maxdepth 1 -type f ! -name "$ZIP_NAME" ! -name "${MODEL}.txt" -delete
-
-        echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
-        echo "AnyKernel3 zip created ✅"
-        echo "::endgroup::"
-
-        - name: Create Boot Image
+    - name: Collect Build Stats
+      id: collect_stats
+      shell: bash
+      run: |
+        IMG="$COMMON_KERNEL_FOLDER/out/arch/arm64/boot/Image"
+        IMG_SHA256=$(sha256sum "$IMG" | awk '{print $1}')
+        WARNINGS_COUNT=$(grep -ci warning "$COMMON_KERNEL_FOLDER/build.log" 2>/dev/null || echo 0)
+        echo "image_sha256=$IMG_SHA256" >> "$GITHUB_OUTPUT"
+        echo "warnings_count=$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
+    
+    - name: Create Boot Image
       if: success() && steps.create_zip.conclusion == 'success'
       shell: bash
       run: |
@@ -1214,58 +1168,12 @@ runs:
         echo "Boot image created ✅"
         echo "::endgroup::"
 
-    - name: Final Build Summary
-      shell: bash
-      run: |
-        set -euo pipefail
-        {
-          echo "Model: ${MODEL}"
-          echo "Android: ${{ env.ANDROID_VER }}"
-          echo "Kernel base: ${{ env.KERNEL_VER }}"
-          echo "Kernel full: ${{ env.KERNEL_FULL_VER }}"
-          echo "Kernel Uname: ${{ env.KERNEL_UNAME }}"
-          echo "KSUN Version: ${KSUVER:-unknown}"
-          echo "KSUN commit SHA: ${{ env.KSUN_COMMIT_SHA }}"
-          echo "SUSFS Version: ${SUSVER:-unknown}"
-          echo "SUSFS commit SHA: ${{ env.SUSFS_COMMIT_SHA }}"
-          echo "Optimization: ${{ inputs.optimize_level }}"
-          echo "Image SHA256: ${{ steps.collect_stats.outputs.image_sha256 }}"
-          echo "Compiler: ${CLANG_VERSION:-unknown}"
-          echo ""
-          echo "CCache Statistics :"
-          echo "$(ccache -s -v)"
-        } | tee summary.txt
-        {
-          echo "### Kernel Build Summary"
-          echo ""
-          echo "- Model: ${{ env.MODEL }}"
-          echo "- Android: ${{ env.ANDROID_VER }}"
-          echo "- Kernel Version: ${{ steps.save_metadata.outputs.kernel_version }}"
-          echo "- Kernel Uname: ${{ env.KERNEL_UNAME }}"
-          echo "- KSUN Version: ${KSUVER:-unknown}"
-          echo "- KSUN commit SHA: [${{ env.KSUN_COMMIT_SHA }}](https://github.com/KernelSU-Next/KernelSU-Next/commit/${{ env.KSUN_COMMIT_SHA }})"
-          echo "- SUSFS Version: ${SUSVER:-unknown}"
-          echo "- SUSFS commit SHA: [${{ env.SUSFS_COMMIT_SHA }}](https://gitlab.com/simonpunk/susfs4ksu/-/commit/${{ env.SUSFS_COMMIT_SHA }})"
-          echo "- Optimization: ${{ inputs.optimize_level }}"
-          echo "- Image SHA256: ${{ steps.collect_stats.outputs.image_sha256 }}"
-          echo ""
-          echo "CCache Statistics :"
-          echo "$(/usr/bin/ccache -s)"
-        } >> "$GITHUB_STEP_SUMMARY"
-
-    - name: Cleanup old ccache
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "Deleting old ccache..."
-        gh cache delete ccache-${{ env.CONFIG }}-kernel-${{ env.KERNEL_FULL_VER }}- || true
-
     - name: Upload Artifacts
-      if: success() && steps.create_zip.conclusion == 'success'
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: kernel-${{ env.CONFIG }}
-        path: |
-          ${{ env.CONFIG }}/artifacts/
-          ${{ github.workspace }}/backports-artifacts/
-          ${{ github.workspace }}/${{ env.CONFIG }}/artifacts/mt7921u-backports-magisk.zip
+       name: kernel-${{ env.CONFIG }}
+       path: |
+        ${{ env.ARTIFACTS_FOLDER }}/AK3_*.zip
+        ${{ env.ARTIFACTS_FOLDER }}/backports-all-modules.zip
+        ${{ env.ARTIFACTS_FOLDER }}/linux-headers-*.deb
