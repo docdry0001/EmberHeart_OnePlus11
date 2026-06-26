@@ -720,6 +720,7 @@ runs:
           --enable CONFIG_USB_SERIAL_FTDI_SIO \
           --enable CONFIG_USB_SERIAL_PL2303
         # add all
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_CFG80211 \
           --enable CONFIG_MAC80211 \
           --enable CONFIG_MAC80211_MESH \
@@ -733,7 +734,7 @@ runs:
         # =========================
         # MODULE SYSTEM (CRITICAL FOR RTL8812AU)
         # =========================
-        ./scripts/config --file $CFG \
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_MODULES \
           --enable CONFIG_MODULE_UNLOAD \
           --enable CONFIG_MODULE_FORCE_LOAD \
@@ -742,7 +743,7 @@ runs:
         # =========================
         # USB ATTACK / GADGET (HID WEAPON)
         # =========================
-        ./scripts/config --file $CFG \
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_USB_GADGET \
           --enable CONFIG_USB_CONFIGFS \
           --enable CONFIG_USB_CONFIGFS_HID \
@@ -756,8 +757,8 @@ runs:
         
         # =========================
         # NETWORK ATTACK SURFACE
-        # =========================
-        ./scripts/config --file $CFG \
+        # ======================
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_NETFILTER \
           --enable CONFIG_NF_TABLES \
           --enable CONFIG_NF_CONNTRACK \
@@ -769,7 +770,7 @@ runs:
         # =========================
         # RESEARCH / EXPLOITATION LAYER
         # =========================
-        ./scripts/config --file $CFG \
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_KPROBES \
           --enable CONFIG_KRETPROBES \
           --enable CONFIG_UPROBES \
@@ -784,7 +785,7 @@ runs:
         # =========================
         # FILESYSTEM + PERSISTENCE
         # =========================
-        ./scripts/config --file $CFG \
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_OVERLAY_FS \
           --enable CONFIG_F2FS_FS \
           --enable CONFIG_FHANDLE \
