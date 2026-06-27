@@ -614,6 +614,28 @@ runs:
           build_external_module "$MODULE"
         done
         
+    - name: Compress and upload full build environment (out/ only)
+      if: always()  # կամ success(), եթե ուզում ես միայն հաջող build-ից հետո
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PLATFORM="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PLATFORM/msm-kernel"
+        OUT="$MSM/out"
+        # Սեղմել out/ թղթապանակը (առանց ավելորդ ժամանակավոր ֆայլերի)
+        tar -czf /tmp/build_env_out.tar.gz -C "$MSM" out/
+        # Կամ եթե ուզում ես ամբողջ kernel_platform-ը (բացառելով .git-ը)
+        # tar -czf /tmp/build_env_full.tar.gz --exclude='.git' -C "$KERNEL_PLATFORM/.." kernel_platform/
+        echo "Compressed build environment size: $(du -h /tmp/build_env_out.tar.gz | cut -f1)"
+
+    - name: Upload build environment artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-environment-${{ env.CONFIG }}
+        path: /tmp/build_env_out.tar.gz
+        retention-days: 7   # կամ ըստ կարիքի
+    
     - name: Filter modules
       shell: bash
       run: |
