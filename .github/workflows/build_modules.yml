@@ -145,7 +145,6 @@ jobs:
   
   trigger-release:
     needs:
-      - build-kernel
       - build-kernel-modules
     runs-on: ubuntu-latest
     if: ${{ inputs.release_type != 'none' }}
