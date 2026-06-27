@@ -5,8 +5,8 @@ set -euo pipefail
 # 200IQ CONFIGURATION PANEL (Փոխարինում է GitHub Inputs/Env-ին)
 # ==============================================================================
 # Լրացրու քո սարքի տվյալները (Այս տվյալները նախկինում գալիս էին op_config_json-ից)
-export MODEL="OnePlus11"          # Քո սարքի մոդելը
-export SOC="kalama"               # SoC անվանումը (օրինակ՝ kalama)
+export MODEL="OnePlus11r"          # Քո սարքի մոդելը
+export SOC="waipio"               # SoC անվանումը (օրինակ՝ kalama)
 export BRANCH="oneplus/sm8475"    # Մանիֆեստի ճյուղը (Branch)
 
 # Inputs (action.yml-ի լոկալ տարբերակները)
@@ -15,7 +15,7 @@ KSUN_BRANCH_OR_HASH="dev"         # KernelSU Next ճյուղը
 SUSFS_COMMIT_HASH_OR_BRANCH="dev" # SUSFS ճյուղը
 OPTIMIZE_LEVEL="O2"               # O2 կամ O3
 KERNEL_UNAME="EmberHeart"         # Կեռնելի անվանումը
-BACKPORTS_RELEASE="backports-6.19" # Backports տարբերակը
+BACKPORTS_RELEASE="backports-6.1.97-1" # Backports տարբերակը
 
 # Միջավայրի հիմնական պանակներ
 export GITHUB_WORKSPACE="$(pwd)"
