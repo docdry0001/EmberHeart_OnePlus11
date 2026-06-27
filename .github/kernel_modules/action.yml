@@ -157,7 +157,7 @@ runs:
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
           "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b oneplus/sm8650 -m temp_manifest.xml --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         else
-          "$REPO" init -u https://github.com/docdry0001/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
+          "$REPO" init -u https://github.com/OnePlusOOS/kernel_manifest.git -b "$BRANCH" -m "$MANIFEST" --repo-rev=v2.16 --depth=1 --no-clone-bundle --no-tags
         fi
         "$REPO" --version
         success=false
@@ -262,15 +262,6 @@ runs:
         rm -rf mediatek/* 
         git clone -b mediatek https://github.com/docdry0001/mt7921.git mediatek/
 
-    - name: Add mt76 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtlwifi/* 
-        git clone https://github.com/docdry0001/rtl8812au.git rtlwifi/
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
@@ -358,7 +349,7 @@ runs:
         fi
     
     - name: FIX vmscan scan_adjusted (waipio)
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'waipiooo'
       shell: bash
       run: |
         set -euo pipefail
@@ -376,7 +367,7 @@ runs:
         grep -n "scan_adjusted" vmscan.c | head -20
 
     - name: FIX thermal kvzalloc kvfree (waipio)
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'waipiooo'
       shell: bash
       run: |
         set -euo pipefail
@@ -417,7 +408,7 @@ runs:
 
     
     - name: FIX binder mmget_still_valid compat (waipio)
-      if: env.SOC == 'waipio'
+      if: env.SOC == 'waipiooo'
       shell: bash
       run: |
         set -euo pipefail
@@ -447,8 +438,8 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/realtek/"
-        rm -rf rtw88
-        git clone https://github.com/lwfinger/rtw88.git
+        #rm -rf rtw88
+        git clone https://github.com/morrownr/8821au-20210708.git
         sed -i 's/$(CONFIG_RTW88)/m/g' Makefile
         sed -i '/^source "drivers\/net\/wireless\/realtek\/rtw88\/Kconfig"$/s/.*/ /' Kconfig
         
