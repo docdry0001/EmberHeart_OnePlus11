@@ -152,7 +152,7 @@ runs:
         mkdir -p "$CONFIG"
         cd "$CONFIG"
         echo "Initializing and syncing kernel source..."
-        if [[ "$SOC" == "waipio" ]]; then
+        if [[ "waipio" == "waipio" ]]; then
           echo "get castom manifest"
           mkdir -p .repo/manifests
           curl --fail --show-error --location --proto '=https' "$MANIFEST" -o .repo/manifests/temp_manifest.xml
