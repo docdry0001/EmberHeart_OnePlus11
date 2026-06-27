@@ -20,7 +20,7 @@ on:
           - OOS15
           - OOS16
           - android12-5.10
-        default: OOSXX
+        default: OOS16
       ksu_options:
         description: 'Enter KernelSU build json'
         required: true
