@@ -1019,7 +1019,7 @@ runs:
         cp ../backports-build.log ../backports-artifacts/
 
 
-    - name: Archive backports modules (flat)
+    - name: Archive backports modules with depmod
       if: success()
       shell: bash
       run: |
@@ -1028,25 +1028,52 @@ runs:
           echo "Backports artifacts not found, skipping archive."
           exit 0
         fi
-        mkdir -p /tmp/backports-flat
-        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
-        cd /tmp/backports-flat
+    
+        KERNEL_OUT="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+        # 1. Ստեղծել աշխատանքային պանակ և պատճենել backports-ի .ko-ները
+        WORKDIR="$(mktemp -d)"
+        MODULES_DIR="$WORKDIR/lib/modules/$(make -C "$KERNEL_OUT" -s kernelrelease)"
+        mkdir -p "$MODULES_DIR/backports"
+        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} "$MODULES_DIR/backports/" \;
+    
+        # 2. Վերցնել kernel-ի Module.symvers-ը (որը պարունակում է in-tree-ի սիմվոլները)
+        if [ -f "$KERNEL_OUT/Module.symvers" ]; then
+          cp "$KERNEL_OUT/Module.symvers" "$MODULES_DIR/"
+        fi
+    
+        # 3. Պատճենել kernel-ի System.map-ը (depmod-ը դրա կարիքն ունի)
+        if [ -f "$KERNEL_OUT/System.map" ]; then
+          cp "$KERNEL_OUT/System.map" "$WORKDIR/"
+        fi
+    
+        # 4. Գործարկել depmod-ը backports-ի համար
+        #    -b "$WORKDIR" – ցույց է տալիս "root" պանակը (որտեղ lib/modules/...-ն է)
+        #    -a – թարմացնել բոլոր մոդուլները
+        #    -F "$WORKDIR/System.map" – ցույց է տալիս System.map-ը
+        #    -e – error-ի դեպքում չդադարեցնել (եթե որոշ modules-ներ missing symbols-ի պատճառով warn անեն)
+        /sbin/depmod -b "$WORKDIR" -a -F "$WORKDIR/System.map" -e 2>/dev/null || true
+    
+        # 5. Պատճենել ամբողջ lib/modules/<version> պարունակությունը (modules.* + backports/)
+        #    Այսպես zip-ի մեջ կլինեն modules.alias, modules.dep, modules.symbols և այլն:
+        cd "$WORKDIR/lib/modules"
         zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
-        echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
+        echo "Backports archive with depmod created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
         
-    - name: Create AnyKernel3 ZIP
+    - name: Create AnyKernel3 ZIP with backports modules
       id: create_zip
       shell: bash
       run: |
         cp "$COMMON_KERNEL_FOLDER/out/arch/arm64/boot/Image" "$AK3_FOLDER/"
         cp "$ARTIFACTS_FOLDER/${OP_MODEL}.txt" "$AK3_FOLDER/"
+        
+        # Ավելացնել backports-ի modules.*-ը AK3-ի /vendor/lib/modules/-ում
+        mkdir -p "$AK3_FOLDER/vendor_ramdisk/lib/modules"
+        unzip -o "$ARTIFACTS_FOLDER/backports-all-modules.zip" -d "$AK3_FOLDER/vendor_ramdisk/lib/modules/"
+        
         cd "$AK3_FOLDER"
         ZIP_NAME="AK3_${OP_MODEL}_${KERNEL_FULL_VER}_KSUN_${KSUVER}_SuSFS_${SUSVER}.zip"
         zip -r "$ZIP_NAME" . -x "*.git*"
         mv "$ZIP_NAME" "$ARTIFACTS_FOLDER/"
-        ZIP_SHA256=$(sha256sum "$ARTIFACTS_FOLDER/$ZIP_NAME" | awk '{print $1}')
-        echo "zip_sha256=$ZIP_SHA256" >> "$GITHUB_OUTPUT"
-        echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
 
     - name: Collect Build Stats
       id: collect_stats
