@@ -903,6 +903,15 @@ runs:
     
         # Full CPTCFG list via printf
         printf '%s\n' \
+          'CPTCFG_USB_NET_DRIVERS=m' \
+          'CPTCFG_USB_USBNET=m' \
+          'CPTCFG_USB_NET_CDCETHER=m' \
+          'CPTCFG_USB_NET_CDC_NCM=m' \
+          'CPTCFG_USB_NET_CDC_MBIM=m' \
+          'CPTCFG_USB_NET_RNDIS_HOST=m' \
+          'CPTCFG_USB_NET_CDC_SUBSET=m' \
+          'CPTCFG_USB_NET_QMI_WWAN=m' \
+          'CPTCFG_USB_SIERRA_NET=m' \
           'CPTCFG_CFG80211=m' \
           'CPTCFG_CFG80211_DEFAULT_PS=y' \
           'CPTCFG_CFG80211_DEBUGFS=y' \
