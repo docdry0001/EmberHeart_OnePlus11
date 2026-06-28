@@ -1029,7 +1029,7 @@ runs:
           exit 0
         fi
     
-        KERNEL_OUT="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/msm-kernel/out"
+        KERNEL_OUT="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
         # 1. Ստեղծել աշխատանքային պանակ և պատճենել backports-ի .ko-ները
         WORKDIR="$(mktemp -d)"
         MODULES_DIR="$WORKDIR/lib/modules/$(make -C "$KERNEL_OUT" -s kernelrelease)"
