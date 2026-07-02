@@ -252,16 +252,6 @@ runs:
         rm "$OUT/.config"
 
 
-    - name: Add mt76 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/mediatek"
-        rm -rf mt76/* 
-        git clone -b openwrt-22.03 https://github.com/docdry0001/mt76.git mt76/
-
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
@@ -302,16 +292,6 @@ runs:
           --module CONFIG_ATH10K \
           --module CONFIG_ATH10K_USB \
           --module CONFIG_ATH11K
-
-        # Mediatek drivers
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-          --module CONFIG_MT7601U \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7921E \
-          --module CONFIG_MT7921U
         
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
