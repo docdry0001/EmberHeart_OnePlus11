@@ -220,7 +220,7 @@ runs:
       run: |
         git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b gki-2.0
         git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git
-        git clone --depth=1 https://github.com/docdry0001/kernel_patches.git my_patches
+        git clone --depth=1 https://github.com/nullptr-t-oss/kernel_patches.git my_patches
         git clone https://gitlab.com/simonpunk/susfs4ksu.git
         cd susfs4ksu
         SUSFS_INPUT="${{ inputs.susfs_commit_hash_or_branch }}"
@@ -635,7 +635,6 @@ runs:
           "$KERNEL_PATCHES_FOLDER/common/reduce_gc_thread_sleep_time.patch" \
           "$KERNEL_PATCHES_FOLDER/common/add_timeout_wakelocks_globally.patch" \
           "$KERNEL_PATCHES_FOLDER/common/f2fs_reduce_congestion.patch" \
-          "$KERNEL_PATCHES_FOLDER/common/add-rtl88xxau-5.6.4.2-drivers.patch" \
           "$KERNEL_PATCHES_FOLDER/common/reduce_freeze_timeout.patch"; do
           patch -p1 --forward < "$patch" || true
         done
@@ -721,10 +720,16 @@ runs:
           --enable CONFIG_USB_SERIAL_FTDI_SIO \
           --enable CONFIG_USB_SERIAL_PL2303
 
+        # Mediatek drivers
+        
+
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_MAC80211_LEDS \
           --enable CONFIG_CAN_SLCAN
+          
+        echo "Nethunter configs applied ✅"
+        echo "::endgroup::"
 
     - name: Add TTL Support
       shell: bash
@@ -904,15 +909,6 @@ runs:
     
         # Full CPTCFG list via printf
         printf '%s\n' \
-          'CPTCFG_USB_NET_DRIVERS=m' \
-          'CPTCFG_USB_USBNET=m' \
-          'CPTCFG_USB_NET_CDCETHER=m' \
-          'CPTCFG_USB_NET_CDC_NCM=m' \
-          'CPTCFG_USB_NET_CDC_MBIM=m' \
-          'CPTCFG_USB_NET_RNDIS_HOST=m' \
-          'CPTCFG_USB_NET_CDC_SUBSET=m' \
-          'CPTCFG_USB_NET_QMI_WWAN=m' \
-          'CPTCFG_USB_SIERRA_NET=m' \
           'CPTCFG_CFG80211=m' \
           'CPTCFG_CFG80211_DEFAULT_PS=y' \
           'CPTCFG_CFG80211_DEBUGFS=y' \
@@ -1028,8 +1024,7 @@ runs:
         cp .config ../backports-artifacts/backports.config
         cp ../backports-build.log ../backports-artifacts/
 
-
-    - name: Archive backports modules with depmod
+    - name: Archive backports modules (flat)
       if: success()
       shell: bash
       run: |
@@ -1038,52 +1033,25 @@ runs:
           echo "Backports artifacts not found, skipping archive."
           exit 0
         fi
-    
-        KERNEL_OUT="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-        # 1. Ստեղծել աշխատանքային պանակ և պատճենել backports-ի .ko-ները
-        WORKDIR="$(mktemp -d)"
-        MODULES_DIR="$WORKDIR/lib/modules/$(make -C "$KERNEL_OUT" -s kernelrelease)"
-        mkdir -p "$MODULES_DIR/backports"
-        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} "$MODULES_DIR/backports/" \;
-    
-        # 2. Վերցնել kernel-ի Module.symvers-ը (որը պարունակում է in-tree-ի սիմվոլները)
-        if [ -f "$KERNEL_OUT/Module.symvers" ]; then
-          cp "$KERNEL_OUT/Module.symvers" "$MODULES_DIR/"
-        fi
-    
-        # 3. Պատճենել kernel-ի System.map-ը (depmod-ը դրա կարիքն ունի)
-        if [ -f "$KERNEL_OUT/System.map" ]; then
-          cp "$KERNEL_OUT/System.map" "$WORKDIR/"
-        fi
-    
-        # 4. Գործարկել depmod-ը backports-ի համար
-        #    -b "$WORKDIR" – ցույց է տալիս "root" պանակը (որտեղ lib/modules/...-ն է)
-        #    -a – թարմացնել բոլոր մոդուլները
-        #    -F "$WORKDIR/System.map" – ցույց է տալիս System.map-ը
-        #    -e – error-ի դեպքում չդադարեցնել (եթե որոշ modules-ներ missing symbols-ի պատճառով warn անեն)
-        /sbin/depmod -b "$WORKDIR" -a -F "$WORKDIR/System.map" -e 2>/dev/null || true
-    
-        # 5. Պատճենել ամբողջ lib/modules/<version> պարունակությունը (modules.* + backports/)
-        #    Այսպես zip-ի մեջ կլինեն modules.alias, modules.dep, modules.symbols և այլն:
-        cd "$WORKDIR/lib/modules"
+        mkdir -p /tmp/backports-flat
+        find "$GITHUB_WORKSPACE/backports-artifacts" -name '*.ko' -exec cp {} /tmp/backports-flat/ \;
+        cd /tmp/backports-flat
         zip -r "$ARTIFACTS_FOLDER/backports-all-modules.zip" .
-        echo "Backports archive with depmod created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
+        echo "Flat archive created: $ARTIFACTS_FOLDER/backports-all-modules.zip"
         
-    - name: Create AnyKernel3 ZIP with backports modules
+    - name: Create AnyKernel3 ZIP
       id: create_zip
       shell: bash
       run: |
         cp "$COMMON_KERNEL_FOLDER/out/arch/arm64/boot/Image" "$AK3_FOLDER/"
         cp "$ARTIFACTS_FOLDER/${OP_MODEL}.txt" "$AK3_FOLDER/"
-        
-        # Ավելացնել backports-ի modules.*-ը AK3-ի /vendor/lib/modules/-ում
-        mkdir -p "$AK3_FOLDER/vendor_ramdisk/lib/modules"
-        unzip -o "$ARTIFACTS_FOLDER/backports-all-modules.zip" -d "$AK3_FOLDER/vendor_ramdisk/lib/modules/"
-        
         cd "$AK3_FOLDER"
         ZIP_NAME="AK3_${OP_MODEL}_${KERNEL_FULL_VER}_KSUN_${KSUVER}_SuSFS_${SUSVER}.zip"
         zip -r "$ZIP_NAME" . -x "*.git*"
         mv "$ZIP_NAME" "$ARTIFACTS_FOLDER/"
+        ZIP_SHA256=$(sha256sum "$ARTIFACTS_FOLDER/$ZIP_NAME" | awk '{print $1}')
+        echo "zip_sha256=$ZIP_SHA256" >> "$GITHUB_OUTPUT"
+        echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
 
     - name: Collect Build Stats
       id: collect_stats
@@ -1094,40 +1062,6 @@ runs:
         WARNINGS_COUNT=$(grep -ci warning "$COMMON_KERNEL_FOLDER/build.log" 2>/dev/null || echo 0)
         echo "image_sha256=$IMG_SHA256" >> "$GITHUB_OUTPUT"
         echo "warnings_count=$WARNINGS_COUNT" >> "$GITHUB_OUTPUT"
-    
-    - name: Create Boot Image
-      if: success() && steps.create_zip.conclusion == 'success'
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Creating boot image..."
-        CONFIG_DIR="$GITHUB_WORKSPACE/$CONFIG"
-        IMAGE="$CONFIG_DIR/kernel_platform/common/out/arch/arm64/boot/Image"
-
-        cd "$GITHUB_WORKSPACE"
-        mkdir -p boot
-        python3 -m pip install --user gdown
-        python3 -m gdown 1DgD6wTSZ-r4zklYzA_x7GYcjwfA9WV0x
-        unzip boot.zip
-        wget https://github.com/magojohnji/magiskboot-linux/raw/refs/heads/main/x86_64/magiskboot
-
-        BOOT=$(ls | grep -E '*.img')
-        MAGISKBOOT="./magiskboot"
-
-        chmod +x $MAGISKBOOT
-
-        echo -n "Unpacking boot image..."
-        $MAGISKBOOT unpack $BOOT
-        echo -n "Adding kernel to boot image..."
-        mv -f $IMAGE kernel
-        echo -n "Repacking boot image..."
-        $MAGISKBOOT repack $BOOT
-
-        mv -f new-boot.img EmberHeart_boot.img
-        cp EmberHeart_boot.img "$CONFIG_DIR/artifacts/"
-
-        echo "Boot image created ✅"
-        echo "::endgroup::"
 
     - name: Upload Artifacts
       if: always()
