@@ -1,6 +1,5 @@
 {
   "model": "OP11R",
-  "config": "OP11R",
   "soc": "waipio",
   "branch": "oneplus/sm8475",
   "manifest_oos14": "oneplus_11r_u.xml",
