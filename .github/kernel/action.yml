@@ -355,10 +355,10 @@ runs:
         echo "✅ KernelSU Next added (commit: ${KSU_COMMIT_SHA:0:8})"
         echo "::endgroup::"
 
-              #if: ${{ env.OP_SUSFS == 'true' }}
     
     - name: Apply SUSFS Patches
       shell: bash
+      if: ${{ env.OP_SUSFS == 'true' }}
       run: |
         set -euo pipefail
         echo "::group::Apply SUSFS patches"
