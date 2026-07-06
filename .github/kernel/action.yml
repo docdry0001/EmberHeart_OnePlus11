@@ -122,30 +122,30 @@ runs:
       run: |
         set -euo pipefail
         echo "::group::Validate inputs"
-        model="$OP_MODEL"
-        soc="$OP_SOC"
-        branch="$OP_BRANCH"
-        manifest="$OP_MANIFEST"
-        android_version="$OP_ANDROID_VERSION"
-        kernel_version="$OP_KERNEL_VERSION"
-        os_version="$OP_OS_VERSION"
-        hmbird="$OP_HMBIRD"
-        susfs="$OP_SUSFS"
-        bbg="$OP_BBG"
-        bbr="$OP_BBR"
-        bbr3="$OP_BBR3"
-        ttl="$OP_TTL"
-        ip_set="$OP_IP_SET"
-        rust_build="$OP_RUST_BUILD"
-        lto="$OP_LTO"
-        uname="$OP_UNAME"
-        unicode="$OP_UNICODE"
-        c_compiler="$OP_C_COMPILER"
-        rust_compiler="$OP_RUST_COMPILER"
-        zyc_compiler="$OP_ZYC_COMPILER"
-        bindgen="$OP_BINDGEN"
-        ds="$OP_DS"
-        ntsync="$OP_NTSYNC"
+        model="$OP_MODEL=="OO11R"
+        soc="$OP_SOC"=="waipio"
+        branch="$OP_BRANCH"=="oneplus/sm8475"
+        manifest="$OP_MANIFEST"=="https://raw.githubusercontent.com/docdry0001/EmberHeart_OnePlus11/refs/heads/main/manifests/oos16/oneplus_11r_b.xml"
+        android_version="$OP_ANDROID_VERSION"=="android12"
+        kernel_version="$OP_KERNEL_VERSION"=="5.10"
+        os_version="$OP_OS_VERSION"=="A16"
+        hmbird="$OP_HMBIRD"=false 
+        susfs="$OP_SUSFS"=true
+        bbg="$OP_BBG"=true
+        bbr="$OP_BBR"=true
+        bbr3="$OP_BBR3"=true
+        ttl="$OP_TTL"=true
+        ip_set="$OP_IP_SET"=true
+        rust_build="$OP_RUST_BUILD"=false
+        lto="$OP_LTO"="thin"
+        uname="$OP_UNAME"=="DocDry"
+        unicode="$OP_UNICODE"=true
+        c_compiler="$OP_C_COMPILER"=="kernel_platform/prebuilts-master/clang/host/linux-x86/clang-r416183c/bin",
+        rust_compiler="$OP_RUST_COMPILER"=false
+        zyc_compiler="$OP_ZYC_COMPILER"=""
+        bindgen="$OP_BINDGEN"=true
+        ds="$OP_DS"=true
+        ntsync="$OP_NTSYNC"=true
         optimize='${{ inputs.optimize_level }}'
         
         errors=()
