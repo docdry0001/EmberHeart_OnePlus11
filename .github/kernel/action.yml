@@ -199,6 +199,8 @@ runs:
       id: add_susfs
       if: ${{ inputs.use_susfs == 'true' }}
       shell: bash
+      env:
+        SUSFS_FOLDER: ${{ github.workspace }}/susfs4ksu
       run: |
         set -euo pipefail
         echo "::group::Add KernelSU Next"
