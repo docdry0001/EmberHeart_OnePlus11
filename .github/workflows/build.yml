@@ -2,8 +2,8 @@ name: Sync and Deploy Kernel Sources
 
 on:
   workflow_dispatch:   # ձեռքով գործարկելու համար
-  push:
-    branches: [ main ]
+  workflow_call:
+  
 
 jobs:
   sync:
