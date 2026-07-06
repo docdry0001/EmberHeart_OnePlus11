@@ -195,8 +195,9 @@ runs:
         rm -f msm-kernel/android/abi_gki_protected_exports_* || true
         df -h
 
-    - name: Add KernelSU Next
-      id: add_ksun
+    - name: Apply SUSFS Patches
+      id: add_susfs
+      if: ${{ inputs.use_susfs == 'true' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -316,22 +317,6 @@ runs:
         
         echo "::endgroup::"
 
-    - name: Patch Ptrace
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::"
-        cd "$COMMON"
-        KERNEL_VERSION="${{ env.KERNEL_VER }}"
-        MIN_VERSION="5.16"
-        if [ "$(printf '%s\n' "$KERNEL_VERSION" "$MIN_VERSION" | sort -V | head -n1)" = "$KERNEL_VERSION" ]; then
-          echo "Patching ptrace!"
-          patch -p1 -F 3 < "$WILD_KERNEL_PATCHES/gki_ptrace.patch"
-        else
-          echo "Kernel >= $MIN_VERSION, skipping ptrace patch"
-        fi
-        echo "::endgroup::"
-
     - name: Add BBG
       shell: bash
       run: |
@@ -390,7 +375,7 @@ runs:
         echo "::endgroup::"
 
     - name: Add my kernel patches to common kernel
-      if: env.SOC == 'waipio' && !contains(env.MANIFEST_NAME, 'CUSTOM') && inputs.use_opt_patches == 'true'
+      if: env.SOC == 'waipio' && inputs.use_opt_patches == 'true'
       shell: bash
       run: |
         set -euo pipefail
