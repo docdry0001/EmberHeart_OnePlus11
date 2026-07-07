@@ -117,10 +117,10 @@ on:
         required: true
         type: choice
         options:
-          - OP11R
+          - OP11r
           - OP11_LOS
           - POCO_F6_LOS
-        default: OP11R
+        default: OP11r
 
 jobs:
   set-op-model:
