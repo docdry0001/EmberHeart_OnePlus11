@@ -173,6 +173,43 @@ runs:
         rm -f $MSM/android/abi_gki_protected_exports_* || true
         df -h
 
+    - name: Merge vendor fragments
+      if: ${{ env.BUILD_TYPE == 'Modules Only' || env.BUILD_TYPE == 'Mixed Build' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        OUT=out
+
+        cd "$MSM"
+        mkdir -p "$OUT"
+
+        CONFIGS=(
+          "arch/arm64/configs/gki_defconfig"
+        )
+
+        if [ -f "arch/arm64/configs/vendor/${SOC}_GKI.config" ]; then
+          CONFIGS+=("arch/arm64/configs/vendor/${SOC}_GKI.config")
+        fi
+
+        if [ -f "arch/arm64/configs/vendor/oplus/${SOC}_GKI.config" ]; then
+          CONFIGS+=("arch/arm64/configs/vendor/oplus/${SOC}_GKI.config")
+        fi
+
+        if [ -f "arch/arm64/configs/vendor/debugfs.config" ]; then
+          CONFIGS+=("arch/arm64/configs/vendor/debugfs.config")
+        fi
+
+        # Merge defconfig fragments
+        ./scripts/kconfig/merge_config.sh -O "$OUT" -m "${CONFIGS[@]}"
+
+        cp "$OUT/.config" arch/arm64/configs/gki_defconfig
+
+        # snapshot the merged defconfig for debugging
+        make ARCH=arm64 O="$OUT" savedefconfig
+        mv "$OUT/defconfig" "$ARTIFACTS_DIR_DEBUG/merged_defconfig"
+
+        rm "$OUT/.config"
+
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -199,15 +236,23 @@ runs:
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --module CONFIG_MT7601U \
+          --module CONFIG_MT76x2E \
+          --module CONFIG_MT76x2U \
+          --module CONFIG_MT76x0U \
+          --module CONFIG_MT76x0E \
           --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_CORE \
-          --module CONFIG_MT76_USB \
-          --module CONFIG_MT76x02_LIB \
           --module CONFIG_MT76x02_USB \
-          --module CONFIG_MT76_CONNAC_LIB \
-          --module CONFIG_MT7603E \
+          --module CONFIG_MT76x02_LIB \
+          --module CONFIG_MT7921U \
+          --module CONFIG_MT7663U \
+          --module CONFIG_MT7663S \
+          --module CONFIG_MT7663_USB_SDIO_COMMON \
+          --module CONFIG_MT76_USB \
           --module CONFIG_MT76x2_COMMON \
           --module CONFIG_MT76x0_COMMON \
+          --module CONFIG_MT76_CONNAC_LIB \
+          --module CONFIG_MT7603E \
+          --module CONFIG_MT7615E \
           --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7915E \
           --module CONFIG_MT7921E
@@ -331,25 +376,7 @@ runs:
         DTB_TYPES="$MSM_ARCH-overlays-"
 
         mkdir -p "$OUT"
-
-        # Merge defconfig fragments
-        CONFIGS=(
-          "gki_defconfig"
-        )
-
-        if [ -f "arch/arm64/configs/vendor/${SOC}_GKI.config" ]; then
-          CONFIGS+=("vendor/${SOC}_GKI.config")
-        fi
-
-        if [ -f "arch/arm64/configs/vendor/oplus/${SOC}_GKI.config" ]; then
-          CONFIGS+=("vendor/oplus/${SOC}_GKI.config")
-        fi
-
-        if [ -f "arch/arm64/configs/vendor/debugfs.config" ]; then
-          CONFIGS+=("vendor/debugfs.config")
-        fi
-
-        make "${MAKE_FLAGS[@]}" O="$OUT" "${CONFIGS[@]}"
+        make "${MAKE_FLAGS[@]}" O="$OUT" gki_defconfig
 
         SECONDS=0
 
@@ -415,6 +442,7 @@ runs:
 
         # QCOM ext modules
         EXT_QCOM+=(
+            ../vendor/oss/tsunami-v3
             ../vendor/qcom/opensource/mmrm-driver
             ../vendor/qcom/opensource/mm-drivers/hw_fence
             ../vendor/qcom/opensource/mm-drivers/sync_fence
@@ -484,6 +512,14 @@ runs:
 
         # To be used for preparing modules.order in create_vendor_dlkm step
         EXT_MODULES=("${EXT_OPLUS[@]#../}" "${EXT_QCOM[@]#../}") >> "$GITHUB_ENV"
+
+        cp "$OUT/Module.symvers" "$ARTIFACTS_DIR_DEBUG" || true
+        cp "$OUT/.config" "$ARTIFACTS_DIR_DEBUG/config" || true
+        cp "$OUT/include/config/auto.conf" "$ARTIFACTS_DIR_DEBUG/auto.conf" || true
+
+        # snapshot the final defconfig for debugging
+        make "${MAKE_FLAGS[@]}" O="$OUT" savedefconfig
+        mv "$OUT/defconfig" "$ARTIFACTS_DIR_DEBUG/final_defconfig"
 
     - name: Create dtb.img
       id: create_dtb
