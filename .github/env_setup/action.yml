@@ -19,7 +19,7 @@ inputs:
     description: 'KernelSU Next branch or commit hash (empty = auto)'
     required: false
     type: string
-    default: ""
+    default: "dev"
   susfs_commit_hash_or_branch:
     description: 'SUSFS branch or commit hash (empty = auto-detect by kernel version)'
     required: false
