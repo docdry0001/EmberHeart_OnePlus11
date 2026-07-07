@@ -377,6 +377,7 @@ runs:
             patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
             echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
             patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
+            
             if [ "$KSUVER" -le 33095 ]; then
               echo "Patching Multi-manager Support for SusFS kernel!"
               patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/multi_manager.patch"
@@ -396,7 +397,6 @@ runs:
                 patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/multi_sepolicy_fix.patch"
             fi
             ;;
-          *)
             echo "::error::Unsupported SUSFS version: $susfs_version"
             exit 1
             ;;
@@ -496,7 +496,6 @@ runs:
               echo "vma_pages Line found. Revert Fake Patching!"
               sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
             fi
-
             if ! grep -qxF '#include <linux/swap_slots.h>' ./mm/memory.c; then
               echo "#include <linux/swap_slots.h> Line not found. Adding missing header"
               sed -i '/#include <linux\/vmalloc.h>/a #include <linux\/swap_slots.h>' ./mm/memory.c
