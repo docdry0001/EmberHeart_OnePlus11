@@ -15,7 +15,7 @@ inputs:
     default: OOS16
   use_custom_repo_parser:
     description: 'Do you want to use custom repo parser?'
-    required: true
+    required: false
     type: string
     default: 'false'
   clang_version:
