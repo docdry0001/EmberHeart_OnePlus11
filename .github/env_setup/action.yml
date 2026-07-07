@@ -12,7 +12,7 @@ inputs:
   manifest:
     required: true
     type: string
-    default: OOS15
+    default: OOS16
   use_custom_repo_parser:
     description: 'Do you want to use custom repo parser?'
     required: true
