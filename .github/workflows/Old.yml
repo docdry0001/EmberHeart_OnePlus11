@@ -8,11 +8,6 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION:
-        description: 'for node 20'
-        required: true
-        type: string
-        default: dev
       release_type:
         description: 'Select type of Github release?'
         required: true
@@ -47,7 +42,7 @@ on:
       kernel_uname:
         description: 'Kernel uname'
         type: string
-        default: 'EmberHeart'
+        default: DocDry'
       susfs_branch_or_commit:
         description: 'Enter SusFS Branch or commit hash'
         type: string
@@ -279,7 +274,7 @@ jobs:
           
           ### Features
           - [+] KernelSU-Next / WildKSU Manager Support
-          - [+] SUSFS v2.1.0
+          - [+] SUSFS v2.2.0
           - [+] Wireguard Support
           - [+] Magic Mount Support
           - [+] Ptrace message leak fix for kernels < 5.16
