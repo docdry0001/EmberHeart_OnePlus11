@@ -614,24 +614,21 @@ runs:
         
         echo "::endgroup::"
         
-    - name: Add BBG
-      uses: actions/checkout@v4
-      env:
-        ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      shell: bash
-      run: |
-        set -euo pipefail
-        echo "::group::Adding BBG"
-        cd "$KERNEL_PLATFORM"
-        echo "Adding BBG..."
-        if ! wget -q -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash -s main; then
-          echo "::warning::BBG setup script failed, continuing anyway"
-        fi
-        cd "$COMMON"
-        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_BBG
-        sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
-        echo "BBG LSM added ✅"
-        echo "::endgroup::"
+    # - name: Add BBG
+    #   shell: bash
+    #   run: |
+    #     set -euo pipefail
+    #     echo "::group::Adding BBG"
+    #     cd "$KERNEL_PLATFORM"
+    #     echo "Adding BBG..."
+    #     if ! wget -q -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash -s main; then
+    #       echo "::warning::BBG setup script failed, continuing anyway"
+    #     fi
+    #     cd "$COMMON"
+    #     ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_BBG
+    #     sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
+    #     echo "BBG LSM added ✅"
+    #     echo "::endgroup::"
 
     - name: Add Oneplus BBR
       shell: bash
