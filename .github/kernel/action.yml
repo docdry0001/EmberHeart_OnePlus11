@@ -614,38 +614,23 @@ runs:
         
         echo "::endgroup::"
         
-    # - name: Add BBG
-    #   shell: bash
-    #   run: |
-    #     set -euo pipefail
-    #     echo "::group::Adding BBG"
-    #     cd "$KERNEL_PLATFORM"
-    #     echo "Adding BBG..."
-    #     if ! wget -q -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash -s main; then
-    #       echo "::warning::BBG setup script failed, continuing anyway"
-    #     fi
-    #     cd "$COMMON"
-    #     ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_BBG
-    #     sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
-    #     echo "BBG LSM added ✅"
-    #     echo "::endgroup::"
-
-    - name: Add Oneplus BBR
+    - name: Add BBG
       shell: bash
       run: |
         set -euo pipefail
-        echo "::group::Adding Oneplus BBR"
+        echo "::group::Adding BBG"
+        cd "$KERNEL_PLATFORM"
+        echo "Adding BBG..."
+        if ! wget -q -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash -s main; then
+          echo "::warning::BBG setup script failed, continuing anyway"
+        fi
         cd "$COMMON"
-
-        ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --enable CONFIG_TCP_CONG_ADVANCED \
-          --enable CONFIG_TCP_CONG_BBR \
-          --enable CONFIG_TCP_CONG_BBR3 \
-          --enable CONFIG_NET_SCH_FQ \
-          --enable CONFIG_NET_SCH_FQ_CODEL
-
-        echo "OnePlus BBR added ✅"
+        ./scripts/config --file arch/arm64/configs/gki_defconfig --enable CONFIG_BBG
+        sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
+        echo "BBG LSM added ✅"
         echo "::endgroup::"
+
+
         
     - name: Apply Common Optimizations
       shell: bash
