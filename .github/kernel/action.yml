@@ -381,7 +381,6 @@ runs:
             fi
             ;;
           "v2.2.0")
-            if [ "${{ inputs.ksu_type }}" = "KSUN" ]; then
             cd ./KernelSU-Next
             cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
             
@@ -394,10 +393,6 @@ runs:
               patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
               echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
               patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
-            else
-              cd "$KSU_FOLDER"
-              patch -p1 --forward < "$SUSFS_FOLDER/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
-            fi
             ;;
           *)
             echo "::error::Unsupported SUSFS version: $susfs_version"
