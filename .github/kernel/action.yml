@@ -325,12 +325,6 @@ runs:
           [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$1" ]
         }
 
-        if version_lte "${susfs_version:1}" "1.5.12"; then
-          echo "NEED_HOOKS=true" >> $GITHUB_ENV
-        else
-          echo "NEED_HOOKS=false" >> $GITHUB_ENV
-        fi
-
         case "$susfs_version" in
           "v2.2.0")
             cd ./KernelSU-Next
@@ -430,6 +424,7 @@ runs:
               sed -i -e '/unsigned int nr_subpages \= __PAGE_SIZE \/ PAGE_SIZE;/d' -e '/pagemap_entry_t \*res = NULL;/d' ./fs/proc/task_mmu.c
             fi
           fi
+          
           if [ "${{ env.ANDROID_RELEASE }}" = "android12" ] && [ "${{ env.KERNEL_VER }}" = "5.10" ]; then
             if grep -qxF $'\t\t\tgoto show_pad;' ./fs/proc/task_mmu.c; then
               echo "vma_pages Line found. Revert Fake Patching!"
@@ -441,7 +436,6 @@ runs:
               echo "vma_pages Line found. Revert Fake Patching!"
               sed -i -e 's/goto show_pad;/return 0;/' ./fs/proc/task_mmu.c
             fi
-
             if ! grep -qxF '#include <linux/swap_slots.h>' ./mm/memory.c; then
               echo "#include <linux/swap_slots.h> Line not found. Adding missing header"
               sed -i '/#include <linux\/vmalloc.h>/a #include <linux\/swap_slots.h>' ./mm/memory.c
