@@ -324,23 +324,17 @@ runs:
         version_lte() {
           [ "$(printf '%s\n' "$2" "$1" | sort -V | head -n1)" = "$1" ]
         }
-
-        case "$susfs_version" in
-          "v2.2.0")
-            cd ./KernelSU-Next
-            cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
-             patch -p1 --forward < "../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
-              for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
-                echo "Patching file: $file with fix_$file.patch"
-                patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/v2.2.0/fix*.patch"
-              done
-              echo "Patching Hook Mode!"
-              patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
-              echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
-              patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
-           *)
-            ;;
-        esac
+        cd ./KernelSU-Next
+        cp ../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./
+        patch -p1 --forward < "../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
+        for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+          echo "Patching file: $file with fix_$file.patch"
+          patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/v2.2.0/fix*.patch"
+        done
+        echo "Patching Hook Mode!"
+        patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
+        echo "Patching KSU_TOOLKIT Support for SusFS kernel!"
+        patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
         cd $COMMON
         if [ "${{ env.ANDROID_RELEASE }}" = "android15" ] && [ "${{ env.KERNEL_VER }}" = "6.6" ]; then
           if ! grep -qxF '#include <trace/hooks/fs.h>' ./fs/namespace.c; then
