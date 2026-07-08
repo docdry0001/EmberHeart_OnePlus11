@@ -329,7 +329,12 @@ runs:
         patch -p1 --forward < "../../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" || true
         for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
           echo "Patching file: $file with fix_$file.patch"
-          patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/v2.2.0/fix*.patch"
+          patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/fix_Kbuild.patch"
+          patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/fix_init.c.patch"
+          patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/fix_kernel_umount.c.patch"
+          patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/fix_setuid_hook.c.patch"
+          patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/fix_sucompat.c.patch"
+          patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/fix_supercall.c.patch"
         done
         echo "Patching Hook Mode!"
         patch -p1 --forward < "$WILD_KERNEL_PATCHES/next/susfs_fix_patches/$susfs_version/overwrite_hook_mode.patch"
