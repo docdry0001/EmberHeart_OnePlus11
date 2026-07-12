@@ -1,9 +1,8 @@
-name: Build and Release old
+name: OnePlus EmberHeart Kernel and Kernel Modules
 
 permissions:
   contents: write
   actions: write
-
 
 on:
   workflow_dispatch:
@@ -26,7 +25,6 @@ on:
           - OOS15
           - FAST_BUILD_OOS15
           - OOS16
-          - OOS16_CUSTOM
         default: OOS16
       ksun_branch:
         description: 'Enter KernelSU Next Branch or commit hash (blank for stable tag)'
@@ -42,7 +40,7 @@ on:
       kernel_uname:
         description: 'Kernel uname'
         type: string
-        default: DocDry'
+        default: 'EmberHeart'
       susfs_branch_or_commit:
         description: 'Enter SusFS Branch or commit hash'
         type: string
@@ -52,6 +50,7 @@ on:
         required: true
         type: choice
         options:
+          - OP11
           - OP11R
         default: OP11R
 
@@ -152,7 +151,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
+          
+      - name: Fix missing Oplus modules list
+        run: |
+          mkdir -p OP11R/kernel_platform/oplus/config
+          touch OP11R/kernel_platform/oplus/config/modules.ext.5.10.oplus
+          echo "Fixed missing modules.ext.5.10.oplus"
+          
       - name: Build Kernel Modules
         uses: ./.github/kernel_modules
         with:
