@@ -24,6 +24,7 @@ on:
           - OOS14
           - OOS15
           - FAST_BUILD_OOS15
+          - A16
           - OOS16
         default: OOS16
       ksun_branch:
