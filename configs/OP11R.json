@@ -10,5 +10,16 @@
   "manifest_oos16_modules": "oneplus_11r_b.xml",
   "android_version": "android12",
   "kernel_version": "5.10",
-  "hmbird": false
+  "manifest": "oneplus_11r_b.xml",
+  "lto": "thin",
+  "susfs": true,
+  "opt": true,
+  "ds": true,
+  "bbg": true,
+  "bbr": true,
+  "bbr3": true,
+  "ttl": true,
+  "ip_set": true,
+  "unicode": true,
+  "ntsync": true,
 }
