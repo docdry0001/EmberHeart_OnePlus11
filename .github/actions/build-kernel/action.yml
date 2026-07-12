@@ -334,13 +334,13 @@ runs:
         git config --global core.fsmonitor true
         git config --global pack.sparse true
 
-    # - name: Sync Kernel Source
-    #   id: sync-kernel-source
-    #   uses: ./action-source/.github/actions/kernel-source-sync
-    #   with:
-    #     source_location: ${{ env.CONFIG }}
-    #     github_token: ${{ inputs.github_token }}
-    #     debug: ${{ inputs.debug }}
+    - name: Sync Kernel Source
+      id: sync-kernel-source
+      uses: ./action-source/.github/actions/kernel-source-sync
+      with:
+        source_location: ${{ env.CONFIG }}
+        github_token: ${{ inputs.github_token }}
+        debug: ${{ inputs.debug }}
 
     - name: Set Dir Paths
       shell: bash
