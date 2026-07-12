@@ -376,13 +376,13 @@ runs:
         DEBUG_ZIP_NAME="debug_${OP_MODEL}_${OP_OS_VERSION}.zip"
         echo "DEBUG_ZIP_NAME=$DEBUG_ZIP_NAME" >> "$GITHUB_ENV"
 
-    # - name: Set Kernel build-tools to Path
-    #   shell: bash
-    #   run: |
-    #     # Set Kernel build-tools to Path
-    #     set -euo pipefail
-    #     echo "${KERNEL_PLATFORM_FOLDER}/prebuilts/kernel-build-tools/linux-x86/bin/" >> $GITHUB_PATH
-    #     echo "${KERNEL_PLATFORM_FOLDER}/prebuilts/kernel-build-tools/linux_musl-x86/bin/" >> $GITHUB_PATH
+    - name: Set Kernel build-tools to Path
+      shell: bash
+      run: |
+        # Set Kernel build-tools to Path
+        set -euo pipefail
+        echo "${KERNEL_PLATFORM_FOLDER}/prebuilts/kernel-build-tools/linux-x86/bin/" >> $GITHUB_PATH
+        echo "${KERNEL_PLATFORM_FOLDER}/prebuilts/kernel-build-tools/linux_musl-x86/bin/" >> $GITHUB_PATH
 
     - name: Get Kernel Version Info
       shell: bash
