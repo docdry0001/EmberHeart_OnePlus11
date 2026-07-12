@@ -255,8 +255,6 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
         
         # Realtek drivers
@@ -274,7 +272,22 @@ runs:
           --module CONFIG_ATH10K \
           --module CONFIG_ATH10K_USB \
           --module CONFIG_ATH11K
-
+        # Ralink drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_RALINK \
+          --module CONFIG_RT2X00 \
+          --module CONFIG_RT2X00_LIB \
+          --enable CONFIG_RT2X00_LIB_FIRMWARE \
+          --module CONFIG_RT2X00_USB \
+          --module CONFIG_RT2X00_PCI \
+          --module CONFIG_RT2800LIB \
+          --module CONFIG_RT2800USB \
+          --enable CONFIG_RT2800USB_RT33XX \
+          --enable CONFIG_RT2800USB_RT35XX \
+          --enable CONFIG_RT2800USB_RT3573 \
+          --enable CONFIG_RT2800USB_RT53XX \
+          --enable CONFIG_RT2800USB_RT55XX \
+          --enable CONFIG_RT2800USB_UNKNOWN
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
@@ -294,8 +307,9 @@ runs:
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
-          --module CONFIG_MAC80211_LEDS \
+          --enable CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
+
 
     - name: Add my kernel patches to msm kernel
       if: env.SOC == 'waipio'
