@@ -38,8 +38,8 @@ runs:
         cd "$GITHUB_WORKSPACE"
         
         TAG_NAME="${{ inputs.cache_bucket }}"
-        BASE_URL="https://github.com/WildKernels/OnePlus_KernelSU_SUSFS/releases/download/$TAG_NAME"
-        ASSETS_URL="https://github.com/WildKernels/OnePlus_KernelSU_SUSFS/releases/expanded_assets/$TAG_NAME"
+        BASE_URL="https://github.com/WildKernels/OnePlus_KernelSU_SUSFS/releaseOnePlus_KernelSU_SUSFS-2.2.0-r2.zip"
+        ASSETS_URL="https://github.com/WildKernels/OnePlus_KernelSU_SUSFS/releases/expanded_assets/OnePlus_KernelSU_SUSFS-2.2.0-r2.zip"
         
         ARIA2_OPTS=(
           "-x16" "-s16" "-k1M" "-j5" "--file-allocation=none"
