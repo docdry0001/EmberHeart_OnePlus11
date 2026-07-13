@@ -33,7 +33,7 @@ on:
         description: 'Enter KernelSU build json'
         required: true
         type: string
-        default: '[{"type":"ksun","hash":"dev"}]'
+        default: '[{"type":"ksun","hash":"d1754d8c"}]'
       optimize_level:
         description: "Compiler optimization level"
         required: true
@@ -577,8 +577,8 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.set-op-model.outputs.matrix) }}
     outputs:
-      ksun_ver: ${{ steps.build-stat.outputs.ksu_version }}
-      ksu_ver: ${{ steps.build-stat.outputs.ksu_version }}
+      ksun_ver: "33215"
+      #ksu_ver: ${{ steps.build-stat.outputs.ksu_version }}
     steps:
       - name: 📥 Checkout Code
         uses: actions/checkout@v6
@@ -683,7 +683,7 @@ jobs:
         with:
           op_config_json: ${{ steps.prepare_config.outputs.config_json }}
           ksu_type: ${{ matrix.ksu_type }}
-          ksu_branch_or_hash: ${{ matrix.ksu_resolved_hash }}=="d1754d8cc12f05e18406171cbd1bc32cc2930d1b"
+          ksu_branch_or_hash: ${{ matrix.ksu_resolved_hash }}
           susfs_commit_hash_or_branch: ${{ matrix.susfs_resolved_hash }}
           optimize_level: ${{ inputs.optimize_level }}
           build_timestamp: ${{ inputs.build_timestamp }}
