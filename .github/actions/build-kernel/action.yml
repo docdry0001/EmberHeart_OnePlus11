@@ -11,7 +11,6 @@ inputs:
     type: choice
     options:
       - KSUN
-      - KSU
   ksu_branch_or_hash:
     description: 'KSU branch or commit hash (empty = auto-detect by ksu_type)'
     required: false
