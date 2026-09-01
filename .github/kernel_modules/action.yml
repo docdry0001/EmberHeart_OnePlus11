@@ -250,7 +250,17 @@ runs:
 
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
-
+        
+    - name: Add mt7921u modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/mediatek/"
+        rm -rf mt76/*
+        git clone -b openwrt-22.03 https://github.com/openwrt/mt76.git
+        
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
