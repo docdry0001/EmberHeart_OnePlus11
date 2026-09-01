@@ -301,7 +301,7 @@ runs:
           --enable CONFIG_RT2800USB_RT53XX \
           --enable CONFIG_RT2800USB_RT55XX \
           --enable CONFIG_RT2800USB_UNKNOWN
-        Mediatek drivers
+        # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_MEDIATEK \
           --module CONFIG_MT7601U \
