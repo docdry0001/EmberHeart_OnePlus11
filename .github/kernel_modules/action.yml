@@ -626,7 +626,7 @@ runs:
         cd "$MSM"
         git clone https://github.com/morrownr/mt76.git
         cd mt76
-        ./install-driver.sh
+        sudo ./install-driver.sh
         
     - name: Filter modules
       shell: bash
