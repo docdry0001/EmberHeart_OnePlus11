@@ -250,8 +250,17 @@ runs:
 
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
-        
-    
+
+    - name: Add mt7921u modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/drivers/net/wireless/mdiatek/"
+        rm -rf mt76/*
+        git clone https://github.com/morrownr/mt76.git
+
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
@@ -292,24 +301,20 @@ runs:
           --enable CONFIG_RT2800USB_RT53XX \
           --enable CONFIG_RT2800USB_RT55XX \
           --enable CONFIG_RT2800USB_UNKNOWN
-        # Mediatek drivers
-        # ./scripts/config --file arch/arm64/configs/gki_defconfig \
-        #   --enable CONFIG_WLAN_VENDOR_MEDIATEK \
-        #   --module CONFIG_MT7601U \
-        #   --module CONFIG_MT76_CORE \
-        #   --module CONFIG_MT76_CORE \
-        #   --module CONFIG_MT76_USB \
+        Mediatek drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_MEDIATEK \
+          --module CONFIG_MT7601U \
+          --module CONFIG_MT76_CORE \
+          --module CONFIG_MT76_USB \
+          --module CONFIG_MT76_CONNAC_LIB \
         #   --module CONFIG_MT76x02_LIB \
         #   --module CONFIG_MT76x02_USB \
-        #   --module CONFIG_MT76_CONNAC_LIB \
-        #   --module CONFIG_MT7603E \
         #   --module CONFIG_MT76x2_COMMON \
         #   --module CONFIG_MT76x0_COMMON \
         #   --module CONFIG_MT7615_COMMON \
-        #   --module CONFIG_MT7921_COMMON \
-        #   --module CONFIG_MT7915E \
-        #   --module CONFIG_MT7921E \
-        #   --module CONFIG_MT7921U
+          --module CONFIG_MT7921_COMMON \
+          --module CONFIG_MT7921U
 
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
@@ -617,16 +622,6 @@ runs:
         done
 
         
-    - name: Add mt7921u modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM"
-        git clone https://github.com/morrownr/mt76.git
-        cd mt76
-        sudo ./install-driver.sh
         
     - name: Filter modules
       shell: bash
