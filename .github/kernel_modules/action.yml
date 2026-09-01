@@ -259,7 +259,7 @@ runs:
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM/drivers/net/wireless/mediatek/"
         rm -rf mt76/*
-        git clone https://github.com/morrownr/mt76.git
+        git clone -b next https://github.com/akabul0us/mt76.git
 
         
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
