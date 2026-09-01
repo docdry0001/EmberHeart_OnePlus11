@@ -269,11 +269,9 @@ runs:
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
         cd "$MSM"
-        
         # Realtek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK
-
         # ATH drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_ATH \
@@ -308,20 +306,13 @@ runs:
           --module CONFIG_MT76_CORE \
           --module CONFIG_MT76_USB \
           --module CONFIG_MT76_CONNAC_LIB \
-        #   --module CONFIG_MT76x02_LIB \
-        #   --module CONFIG_MT76x02_USB \
-        #   --module CONFIG_MT76x2_COMMON \
-        #   --module CONFIG_MT76x0_COMMON \
-        #   --module CONFIG_MT7615_COMMON \
           --module CONFIG_MT7921_COMMON \
           --module CONFIG_MT7921U
-
         # Other configs
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_MAC80211_LEDS \
           --module CONFIG_CAN_SLCAN
-
-
+          #end
     - name: Add my kernel patches to msm kernel
       if: env.SOC == 'waipio'
       shell: bash
