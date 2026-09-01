@@ -257,7 +257,7 @@ runs:
         set -euo pipefail
         KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
         MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/mdiatek/"
+        cd "$MSM/drivers/net/wireless/mediatek/"
         rm -rf mt76/*
         git clone https://github.com/morrownr/mt76.git
 
