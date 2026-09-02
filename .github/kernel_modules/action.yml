@@ -250,7 +250,16 @@ runs:
 
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
-
+        
+    - name: Add mt7921u modules
+      shell: bash
+      run: |
+        set -euo pipefail
+        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
+        MSM="$KERNEL_PATH/msm-kernel"
+        cd "$MSM/include/linux/soc/airoha/"
+        wget https://github.com/docdry0001/mt76/blob/master/airoha_offload.h
+    
     - name: Add mt7921u modules
       shell: bash
       run: |
