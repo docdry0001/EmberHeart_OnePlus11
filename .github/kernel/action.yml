@@ -434,19 +434,86 @@ runs:
     - name: Build Kernel
       shell: bash
       run: |
-        export LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
-        export CROSS_COMPILE=aarch64-linux-gnu- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
+        set -euo pipefail
+
+        export LLVM=1
+        export LLVM_IAS=1
+        export ARCH=arm64
+        export SUBARCH=arm64
+
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        export LD=ld.lld
+        export AR=llvm-ar
+        export NM=llvm-nm
+        export OBJCOPY=llvm-objcopy
+        export OBJDUMP=llvm-objdump
+        export STRIP=llvm-strip
+
         export PATH="/usr/lib/ccache:${CLANG_BIN_PATH}:$PATH"
-        export CC="ccache clang" HOSTCC="ccache clang" HOSTCXX="ccache clang++"
+
+        export CC="ccache clang"
+        export HOSTCC="ccache clang"
+        export HOSTCXX="ccache clang++"
+
         cd "$COMMON_KERNEL_FOLDER"
+
         : > .scmversion
-        OUT=out
+
+        OUT="$COMMON_KERNEL_FOLDER/out"
+
         mkdir -p "$OUT"
+
+        echo "=========================================="
+        echo "Kernel configuration"
+        echo "=========================================="
+
         make O="$OUT" gki_defconfig
-        ./scripts/config --file "$OUT/.config" --set-str LOCALVERSION "-${ANDROID_VER}-${{ inputs.kernel_uname }}"
+
+        ./scripts/config \
+          --file "$OUT/.config" \
+          --set-str LOCALVERSION "-${ANDROID_VER}-${{ inputs.kernel_uname }}"
+
         make O="$OUT" olddefconfig
-        make -j$(nproc --all) O="$OUT" modules_prepare
-        make -j$(nproc --all) O="$OUT" Image || { echo "Kernel build failed"; exit 1; }
+
+        echo "=========================================="
+        echo "Preparing kernel"
+        echo "=========================================="
+
+        make -j"$(nproc --all)" \
+          O="$OUT" \
+          modules_prepare
+
+        echo "=========================================="
+        echo "Building kernel"
+        echo "=========================================="
+
+        make -j"$(nproc --all)" \
+          O="$OUT" \
+          Image
+
+        echo "=========================================="
+        echo "Verifying kernel build outputs"
+        echo "=========================================="
+
+        test -f "$OUT/arch/arm64/boot/Image" || {
+          echo "ERROR: Image was not generated"
+          exit 1
+        }
+
+        test -f "$OUT/.config" || {
+          echo "ERROR: .config was not generated"
+          exit 1
+        }
+
+        if [ -f "$OUT/Module.symvers" ]; then
+          echo "Module.symvers found:"
+          ls -lh "$OUT/Module.symvers"
+        else
+          echo "WARNING: Module.symvers was not generated."
+          echo "External modules may fail with CONFIG_MODVERSIONS."
+        fi
+
+        echo "Kernel build completed successfully."
     
     - name: Build Linux Headers .deb Package
       if: success()
@@ -489,37 +556,141 @@ runs:
         mv "linux-headers-${KERNELRELEASE}.deb" "$ARTIFACTS_FOLDER/"
         echo "✅ Headers .deb created: $ARTIFACTS_FOLDER/linux-headers-${KERNELRELEASE}.deb"
 
-    - name: Build Backports rtl88xxau (Full Wi-Fi driver set)
+    - name: Build RTL88XXAU external Wi-Fi module
       shell: bash
       run: |
         set -euo pipefail
-        KERNEL_BUILD="$GITHUB_WORKSPACE/$CONFIG/kernel_platform/common/out"
-    
-        if [ -n "${CLANG_BIN_PATH:-}" ] && [ -x "${CLANG_BIN_PATH}/clang" ]; then
-          export PATH="${CLANG_BIN_PATH}:$PATH"
-        fi
-        export PATH="/usr/lib/ccache:$PATH"
-    
-        MAKE_FLAGS=(
-          LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64
-          CLANG_TRIPLE=aarch64-linux-gnu-
-          CROSS_COMPILE=aarch64-linux-gnu-
-          CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
-          LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm
-          OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump
-          DEPMOD=depmod DTC=dtc STRIP=llvm-strip
-          HOSTCC=clang HOSTCXX=clang++ CC=clang
-        )
-        
-        cd "$GITHUB_WORKSPACE"
-        git clone https://github.com/aircrack-ng/rtl8812au.git
-        cd rtl8812au/
-        # Patch 
-        sed -i 's/CONFIG_PLATFORM_I386_PC = y/CONFIG_PLATFORM_I386_PC = n/g' Makefile
-        sed -i 's/CONFIG_PLATFORM_ARM64_RPI = n/CONFIG_PLATFORM_ARM64_RPI = y/g' Makefile
-        make "${MAKE_FLAGS[@]}" 
-        sudo make install 
 
+        KERNEL_SRC="$COMMON_KERNEL_FOLDER"
+        KERNEL_OUT="$COMMON_KERNEL_FOLDER/out"
+        DRIVER_DIR="$GITHUB_WORKSPACE/rtl8812au"
+
+        echo "=========================================="
+        echo "RTL88XXAU external module build"
+        echo "=========================================="
+
+        echo "Kernel source : $KERNEL_SRC"
+        echo "Kernel output : $KERNEL_OUT"
+        echo "Driver        : $DRIVER_DIR"
+
+        # ------------------------------------------------------------
+        # Verify kernel build tree
+        # ------------------------------------------------------------
+
+        test -f "$KERNEL_OUT/.config" || {
+          echo "ERROR: kernel .config not found"
+          exit 1
+        }
+
+        test -f "$KERNEL_OUT/Makefile" || {
+          echo "ERROR: kernel build tree is invalid"
+          exit 1
+        }
+
+        # Module.symvers is important when CONFIG_MODVERSIONS=y
+        if [ ! -f "$KERNEL_OUT/Module.symvers" ]; then
+          echo "WARNING: Module.symvers not found"
+        fi
+
+        # ------------------------------------------------------------
+        # Toolchain
+        # ------------------------------------------------------------
+
+        export LLVM=1
+        export LLVM_IAS=1
+        export ARCH=arm64
+        export SUBARCH=arm64
+
+        export CROSS_COMPILE=aarch64-linux-gnu-
+
+        export LD=ld.lld
+        export AR=llvm-ar
+        export NM=llvm-nm
+        export OBJCOPY=llvm-objcopy
+        export OBJDUMP=llvm-objdump
+        export STRIP=llvm-strip
+
+        export PATH="/usr/lib/ccache:${CLANG_BIN_PATH}:$PATH"
+
+        export CC="ccache clang"
+        export HOSTCC="ccache clang"
+        export HOSTCXX="ccache clang++"
+
+        command -v clang
+        command -v ld.lld
+
+        echo "Clang:"
+        clang --version | head -n 1
+
+        # ------------------------------------------------------------
+        # Clone driver
+        # ------------------------------------------------------------
+
+        cd "$GITHUB_WORKSPACE"
+
+        if [ ! -d "$DRIVER_DIR" ]; then
+          git clone --depth=1 \
+            https://github.com/aircrack-ng/rtl8812au.git \
+            "$DRIVER_DIR"
+        fi
+
+        cd "$DRIVER_DIR"
+
+        # ------------------------------------------------------------
+        # Clean previous build
+        # ------------------------------------------------------------
+
+        make clean || true
+
+        # ------------------------------------------------------------
+        # Build external module against Android kernel
+        # ------------------------------------------------------------
+
+        make \
+          -C "$KERNEL_SRC" \
+          O="$KERNEL_OUT" \
+          M="$DRIVER_DIR" \
+          ARCH=arm64 \
+          LLVM=1 \
+          LLVM_IAS=1 \
+          modules
+
+        # ------------------------------------------------------------
+        # Find generated modules
+        # ------------------------------------------------------------
+
+        echo "=========================================="
+        echo "Generated kernel modules"
+        echo "=========================================="
+
+        find "$DRIVER_DIR" \
+          -type f \
+          -name "*.ko" \
+          -print
+
+        MODULES="$(find "$DRIVER_DIR" -type f -name "*.ko")"
+
+        if [ -z "$MODULES" ]; then
+          echo "ERROR: RTL88XXAU module was not generated."
+          exit 1
+        fi
+
+        # ------------------------------------------------------------
+        # Prepare module output
+        # ------------------------------------------------------------
+
+        mkdir -p "$GITHUB_WORKSPACE/modules"
+
+        while IFS= read -r module; do
+          cp "$module" "$GITHUB_WORKSPACE/modules/"
+        done <<< "$MODULES"
+
+        echo "=========================================="
+        echo "Final RTL88XXAU modules"
+        echo "=========================================="
+
+        ls -lah "$GITHUB_WORKSPACE/modules/"
+        
     # - name: Build Backports 6.1.97-1 (Full Wi-Fi driver set)
     #   shell: bash
     #   run: |
