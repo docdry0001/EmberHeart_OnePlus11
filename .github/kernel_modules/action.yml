@@ -251,16 +251,6 @@ runs:
         cp "$OUT/.config" arch/arm64/configs/gki_defconfig
         rm "$OUT/.config"
         
-    - name: Add mt76 modules
-      shell: bash
-      run: |
-        set -euo pipefail
-        KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG/kernel_platform"
-        MSM="$KERNEL_PATH/msm-kernel"
-        cd "$MSM/drivers/net/wireless/mediatek/"
-        rm -rf mt76
-        git clone -b next https://github.com/akabul0us/mt76.git
-        
     - name: Add nethunter specfic drivers already present in kernel to be built as modules
       shell: bash
       run: |
@@ -273,17 +263,17 @@ runs:
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
           --enable CONFIG_WLAN_VENDOR_REALTEK
 
-        # # ATH drivers
-        # ./scripts/config --file arch/arm64/configs/gki_defconfig \
-        #   --enable CONFIG_WLAN_VENDOR_ATH \
-        #   --module CONFIG_ATH_COMMON \
-        #   --module CONFIG_ATH9K \
-        #   --module CONFIG_ATH9K_HW \
-        #   --module CONFIG_ATH9K_HTC \
-        #   --module CONFIG_ATH9K_COMMON \
-        #   --module CONFIG_ATH10K \
-        #   --module CONFIG_ATH10K_USB \
-        #   --module CONFIG_ATH11K
+        # ATH drivers
+        ./scripts/config --file arch/arm64/configs/gki_defconfig \
+          --enable CONFIG_WLAN_VENDOR_ATH \
+          --module CONFIG_ATH_COMMON \
+          --module CONFIG_ATH9K \
+          --module CONFIG_ATH9K_HW \
+          --module CONFIG_ATH9K_HTC \
+          --module CONFIG_ATH9K_COMMON \
+          --module CONFIG_ATH10K \
+          --module CONFIG_ATH10K_USB \
+          --module CONFIG_ATH11K
 
         # Mediatek drivers
         ./scripts/config --file arch/arm64/configs/gki_defconfig \
